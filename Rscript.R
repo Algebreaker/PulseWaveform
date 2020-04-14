@@ -18,12 +18,15 @@ FNTBioRadioPulse<-function(input)
 {
 }
 
-#attaching log events
+#attaching log events              # not immediately relevent - this flags up events live which are then available in the csv 
 AddLogEvent<-function(constFString, LogMessage)
 {
 }
 
-#Debug draw 
+# Ignore public functions for now
+# Ignore RestoreState for now
+
+#Debug draw                       # helps with live visualisation
 Draw<-function()
 {
 
@@ -38,9 +41,9 @@ Draw<-function()
 DownSample <- function(input)   #Clarify TraceCount and SampleModulo
 {
 list<-rle(data$PPG.PulseOx1)
-realrepeats<-rep(list$lengths > 4,times = list$lengths)
+realrepeats<-rep(list$lengths > 4,times = list$lengths)        # could do stepwise rather than live removal of duplicates
 
-datarepeats<-cbind(data,realrepeats)
+datarepeats<-cbind(data,realrepeats)                           # Likely will be able to downsample both Pulse and Resp data at same time
   
 }
 
@@ -51,7 +54,7 @@ datarepeats<-cbind(data,realrepeats)
 # Individual pulse events are more comprehensible if the detrending is not used, so this function 
 # removes it by inverting the above function. 
 
-Undetrend <- function(Input, PrevInput, PrevOutput)
+Undetrend <- function(Input, PrevInput, PrevOutput).   # can simply reverse the equatino as in the c++ script. 
 {
   
 }
@@ -60,18 +63,26 @@ Undetrend <- function(Input, PrevInput, PrevOutput)
 # Detect when the input signal indicates device removal.  If the un-detrended data is a constant,
 # the PPG device has probably been removed.
 
-VerifySignal <- function()
+VerifySignal <- function().      # likely not needed, more useful in live setting 
 {
   
 }
 
 
-#UpdatePPGanalysis
+#FindNewBeat
 
-UpdatePPGanalysis <- function()
+FindNewBeat <- function()
 {
-        #Enter calibration mode if the current interval between beats is too long.
-        #Validate peak of last beat if sufficient time has passed
+       ## This is where splines are first fitted 
+	
+       # Sense rapid increase as a possible beat                                         # 
+       # Empirical checks of whether the current increase in the trace value looks
+       # like a beat profile.  There should be a resolvable peak in the gradient,
+	     # or else we should wait for more context.  The residual should have
+	     # increased, so we don't double count activity from a previous beat.
+       
+       # If the same beat is already in the history, it will be processed elsewhere.
+       # Attempt to match the beat profile to the empirical template.
   
   }
 
@@ -80,6 +91,7 @@ UpdatePPGanalysis <- function()
 # Beats are added to record keeping once the first peak is detected, but some
 # analysis is delayed until the third peak can be detected, or a subsequent
 # beat prevents the tail of the beat being observed.
+
 
 RefitBeats <- function()
  {
@@ -95,20 +107,16 @@ RefitBeats <- function()
  }
 
 
-#FindNewBeat
+#UpdatePPGanalysis
 
-FindNewBeat <- function()
+UpdatePPGanalysis <- function(). 
 {
-       # Sense rapid increase as a possible beat
-       # Empirical checks of whether the current increase in the trace value looks
-       # like a beat profile.  There should be a resolvable peak in the gradient,
-	     # or else we should wait for more context.  The residual should have
-	     # increased, so we don't double count activity from a previous beat.
-       
-       # If the same beat is already in the history, it will be processed elsewhere.
-       # Attempt to match the beat profile to the empirical template.
+        #Enter calibration mode if the current interval between beats is too long.
+        #Validate peak of last beat if sufficient time has passed
   
   }
+
+
 
 
 #CalcMaxGradient
@@ -195,7 +203,7 @@ TestArea <- function()
 # a secondary component which (may) be added to this with its own echo.
 #Once each component is located, substract it from the trace to make it easier to find the components
 FitBeat <- function(FNTBeatParams, io_Beat)
-{
+{                                                   
   
   }
 
