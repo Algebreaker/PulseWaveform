@@ -62,6 +62,84 @@ VerifySignal <- function()
 }
 
 
+
+
+
+
+
+TestArea <- function()
+{
+  
+  }
+
+# Accept that we have found a new beat if we can adequately fit it with the following basic model; 
+# there exists a primary peak of a certain shape, whose echo will follow a certain time later. There is aslo
+# a secondary component which (may) be added to this with its own echo.
+#Once each component is located, substract it from the trace to make it easier to find the components
+FitBeat <- function(FNTBeatParams, io_Beat)
+{
+  
+  }
+
+FindStartIndex <- function(i_PeakIndex)
+{
+  
+  }
+
+#inputs for this not sure about in R
+FitPeaks <- function(i_argW, i_val0, i_start, i_end, TOptional<FVector2D> (o_Peaks)[FitBeatConst::NUM_PEAKS]) 
+{
+  
+  }
+
+SplineFitting <- function(io_Beat)
+{
+  
+  }
+
+TranscribeTrace <- function(o_SplineData, i_Start, i_Length, i_Offset)
+{
+  
+  }
+
+#Try to find events for the current pulse, based on Elgendi, Liang & Ward (2018)
+# Events are intended to be unambiguous features in the PPG trace or its derivatives
+CalculateEvents <- function(io_Beat)
+{
+  
+  }
+
+#PPG traces must be aligned and scaled if they are to be averaged.  Defining
+# 'W' as time of steepest increase as the beat starts, 'U' and 'V' correspond
+# to the time when the gradient is half as steep (the gradient may not go to
+# zero in a consistent manner).  Assigning 'U' a value of zero, and 'V' a value
+# of one (the y scale and offset may vary between beats), the time at which the
+# scaled trace has a value of one half is used for time alignment.
+FindReferenceTime <- function(Spline)
+{
+  
+  }
+
+# Look for 'O' and 'S' - the beginning and end of the main increase
+FindEventsTrace <- function(io_Beat, Spline)
+{
+  
+  }
+
+#Main peak in the first derivative corresponds to the onset of the beat, powered
+# by the contraction of the left ventricle
+FindEvents1Dev <- function(io_Beat, Spline)
+{
+  
+  }
+
+
+#Look for a series of three maxima and two minima in the second derivative of the trace
+#If we find too many, reject the smallest ones to try and get to the 'obvious' peaks
+# If we find too few, loosen definition and look for inflections 
+FindEvents2Dev <- function(io_Beat, Spline)
+
+ 
 ###more functions...
 
 
