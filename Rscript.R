@@ -62,9 +62,123 @@ VerifySignal <- function()
 }
 
 
+#UpdatePPGanalysis
+
+UpdatePPGanalysis <- function()
+{
+        #Enter calibration mode if the current interval between beats is too long.
+        #Validate peak of last beat if sufficient time has passed
+  
+  }
 
 
+#Refitbeats
+# Beats are added to record keeping once the first peak is detected, but some
+# analysis is delayed until the third peak can be detected, or a subsequent
+# beat prevents the tail of the beat being observed.
 
+RefitBeats <- function()
+ {
+       # Try to fit fourth peak
+       # For all unconfirmed beats in the history, attempt to refit with current trace data.
+       # Do not attempt to fit later profiles; We might incorrectly accept a secondary peak.
+       # Find valid beats and exclude false positives to an acceptable degree.  The beat must
+       # be of sufficient amplitude and enough time must have passed since the previous beat, 
+       # but there is some subtlety in combining these two requirements.
+       # The fourth peak is added quite late, as the beat is generally accepted once the third 
+       # peak is resolved.  Thus, the residual needs to be updated specifically.  The other 
+       # peaks are handled during ConfirmBeat.
+ }
+
+
+#FindNewBeat
+
+FindNewBeat <- function()
+{
+       # Sense rapid increase as a possible beat
+       # Empirical checks of whether the current increase in the trace value looks
+       # like a beat profile.  There should be a resolvable peak in the gradient,
+	     # or else we should wait for more context.  The residual should have
+	     # increased, so we don't double count activity from a previous beat.
+       
+       # If the same beat is already in the history, it will be processed elsewhere.
+       # Attempt to match the beat profile to the empirical template.
+  
+  }
+
+
+#CalcMaxGradient
+
+CalcMaxGradient <- function(i_amplitude, i_HasSkippedBeat, io_Interval)
+{
+  
+  }
+
+#TestMergeBeats
+# Check whether the last beat in the history should be confirmed on the basis
+# of timings, or a confirmed beat should be replaced with this new beat.
+
+TestMergeBeats <- function()
+ {
+  
+  }
+
+#TestSkippedBeat
+# Sometimes, in some individuals, a fraction of heart beats are 'skipped'.
+# Physiologically this is probably because the heart tries to beat too early,
+# so there's no pressure wave to propagate out to the PPG.  If we assume the
+# existence of this skipped beat, the overall heart rate is nearly unaffected.
+# We therefore need to detect skipped beats to keep meaningful statistical
+# measures, which themselves are used to detect subsequent beats.
+
+TestSkippedBeat <- function()
+{
+    # Multiple skipped beats may indicate that we've just got the wrong rate...
+  }
+
+
+#UndoBeat
+# Reject a beat assignment;
+# * Recalculate the residue after subtracting all beats from the trace
+# * Recalculate the Bayesian model for the P50 statistic.
+
+UndoBeat <- function()
+{
+  
+  }
+
+#UpdateAverageBeat 
+
+UpdateAverageBeat <- function()
+{
+  
+  }
+
+#CalibrateBeat
+# Method to find pulse 
+
+CalibrateBeat <- function()
+{
+  
+  }
+
+#FindPeak
+
+FindPeak <- funtion()
+{
+    # Look for a well-defined peak
+    # If there's no definite maximum, look for a maximum in the first
+	  # derivative.  Sometimes the 'secondary' peak rises from the 'primary'
+	  # without the gradient decreasing to zero.
+  
+  }
+
+#HasCalibrationData
+
+HasCalibrationData <- function()
+{
+  
+  }
 
 
 TestArea <- function()
