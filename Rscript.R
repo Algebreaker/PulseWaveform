@@ -40,7 +40,7 @@ DownSample <- function(input)   #Clarify TraceCount and SampleModulo
 list<-rle(data$PPG.PulseOx1)
 realrepeats<-rep(list$lengths > 4,times = list$lengths)
 
-cbind(data,realrepeats)
+datarepeats<-cbind(data,realrepeats)
   
 }
 
