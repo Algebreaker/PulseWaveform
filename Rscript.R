@@ -37,6 +37,10 @@ Draw<-function()
 
 DownSample <- function(input)   #Clarify TraceCount and SampleModulo
 {
+list<-rle(data$PPG.PulseOx1)
+realrepeats<-rep(list$lengths > 4,times = list$lengths)
+
+cbind(data,realrepeats)
   
 }
 
@@ -248,17 +252,93 @@ FindEvents1Dev <- function(io_Beat, Spline)
   }
 
 
-#Look for a series of three maxima and two minima in the second derivative of the trace
-#If we find too many, reject the smallest ones to try and get to the 'obvious' peaks
-# If we find too few, loosen definition and look for inflections 
-FindEvents2Dev <- function(io_Beat, Spline)
-
  
-###more functions...
+
+#PPG traces must be aligned and scaled if they are to be averaged.  Defining
+#'W' as time of steepest increase as the beat starts, 'U' and 'V' correspond
+#to the time when the gradient is half as steep (the gradient may not go to
+#zero in a consistent manner).  Assigning 'U' a value of zero, and 'V' a value
+#of one (the y scale and offset may vary between beats), the time at which the
+#scaled trace has a value of one half is used for time alignment.
+FindReferenceTime  <- function(FNTSpline, Spline)
+{
+}
+
+#Look for 'O' and 'S' - essentially the start and end of the main increase.
+FindEventsTrace <- function(FNTBeatParams, io_Beat, const FNTSplin, Spline)
+{
+}
+
+#Main peak in the first derivative corresponds to the onset of the beat - powered
+#by the contraction of the left ventricle.
+FindEvents1Dev <- function(FNTBeatParams, io_Beat, const FNTSpline, Spline) 
+{
+	}
+
+#Look for a series of three maxima (and two minima) in the second derivative
+#of the PPG trace.
+#If we found too many, reject the smallest ones to try to get to what by eye
+#are the `obvious' peaks
+#If we found too few, loosen our definition.  Look for inflections, 
+FindEvents2Dev<- function(FNTBeatParams, io_Beat, FNTSpline, Spline) 
+{
+	}
 
 
+#Having labelled a maximum in the first derivative as 'Z', we expect to find
+#the notch ('N') before it, and the diastolic peak ('D') after it.  Many
+#people do not have the peak, or it is only sometimes apparent.  In these
+#cases, we equate N, Z, and D.
 
-list<-rle(data$PPG.PulseOx1)
-realrepeats<-rep(list$lengths > 4,times = list$lengths)
+#Typically the first derivative has two minima exist between its main peak
+#('W') and Z; these we call 'X' and 'Y'.  Often there's only one real minimum.
+#If this is skewed early in the interval, it's probably X, if it's skewed
+#late, it's probably Y.  We might be able to label the other event based on
+#less strong criteria.
+FindEventsNotch<-function(FNTBeatParams, io_Beat, FNTSpline, Spline)
+	{
+	}
 
-cbind(data,realrepeats)
+FindZ<-function(FNTSpline, i_Spline, i_argXY, float i_rangeMax)
+	{
+	}
+
+#Generate a spline for the beat, with various protections
+#Spline x-coordinate will be time in units of seconds,
+#with zero value at 'W', the maximum first derivative.
+#'Truncated' means that we'd use more of the PPG buffer if we had it
+GetBeatSpline<-function(FNTBeatParams, i_Beat, FNTSpline, o_Spline) 
+	{
+	}
+
+GetBeatSpline<-function(FNTBeatParams, i_Beat, FNTSpline, o_Spline, i_AllowTruncation, o_truncated) 
+	{
+	}
+
+HasEventPeaks<-function(FNTBeatParams, i_Beat)
+	{
+	}
+
+Stats<-function(i_SampleSize, PublicStats, o_Stats, PrivateStats, o_Private)
+	{
+	}
+
+CalculateResidual<-function(i_Index)
+	{
+	}
+
+SubtractBeat<-function(FNTBeatParams, i_Beat)
+	{
+	}
+
+TestClamp<-function(FNTSpline, i_Spline, Start, MaxFirstDerivative)
+	{
+	}
+
+SubtractSine<function(io_Data, Count, Peak, Amplitude, Width, io_Fit)
+{
+	}
+
+SinePeak<function(DeltaTime, Amplitude, Width)
+	{
+	}
