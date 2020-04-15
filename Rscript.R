@@ -36,6 +36,7 @@ realrepeats<-rep(list$lengths > 4,times = list$lengths)        # could do stepwi
 
 datarepeats<-cbind(data,realrepeats)                           # Likely will be able to downsample both Pulse and Resp data at same time
   
+ifelse(datarepeats$realrepeats==FALSE, datarepeats<-datarepeats[!duplicated(datarepeats$PPG.PulseOx1), ],datarepeats<-datarepeats)
 }
 
 #Undetrend
