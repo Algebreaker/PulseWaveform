@@ -38,6 +38,24 @@ datarepeats<-cbind(data,realrepeats)                           # Likely will be 
   
 }
 
+# DownSample 
+ID <- rep(1:length(list$values), times = list$lengths)     
+data2 <- cbind(pulse_full, ID)                                  # Cbind a numbered column rather than true/false
+
+data_downsampled <-c()                                          # Create empty vector
+
+for (i in 1:max(ID)){                                           
+  
+  sub.data <- filter(data2, ID == i)                            # Isolate rows with all the same value as a subset
+  
+  if(nrow(sub.data) <= 4){                                      # If the subset has 4 rows or less, add the first row to the empty vector
+    
+    data_downsampled <- rbind(data_downsampled, sub.data[1,])   
+    
+  }else if(nrow(sub.data) > 4 ){data_downsampled <- rbind(data_downsampled, sub.data[1,], sub.data[5,])}  #If the data has more than four rows, add the first and fifth
+  
+}          # This may need to be adjusted if we have datasets where true values are repeated more than twice
+
 #Undetrend
 # Analysis of device output indicates that the PPG signal is detrended by application of the following
 # formula: OUT[i] = 80 + (OUT[i-1]-80) * 0.96875 + (IN[i] - [IN[i-1]), where the constance 0.96875 is
