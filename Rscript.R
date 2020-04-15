@@ -75,6 +75,9 @@ FindNewBeat <- function()
 {
        ## This is where splines are first fitted 
 	
+	splined_data <- spline(1:200, undetrended_data[1:200])    # extend subset as required, replace 1:200 with time data?
+	plot(splined_data)                                        
+	
        # Sense rapid increase as a possible beat                                         # 
        # Empirical checks of whether the current increase in the trace value looks
        # like a beat profile.  There should be a resolvable peak in the gradient,
