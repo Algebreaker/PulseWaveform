@@ -18,19 +18,10 @@ FNTBioRadioPulse<-function(input)
 {
 }
 
-#attaching log events              # not immediately relevent - this flags up events live which are then available in the csv 
-AddLogEvent<-function(constFString, LogMessage)
-{
-}
 
 # Ignore public functions for now
 # Ignore RestoreState for now
 
-#Debug draw                       # helps with live visualisation
-Draw<-function()
-{
-
-}
 
 #Downsample
 # The BioRadio device provides 250 samples per second, but the PPG is only sampled 75 times per second, 
@@ -57,15 +48,6 @@ datarepeats<-cbind(data,realrepeats)                           # Likely will be 
 Undetrend <- function(Input, PrevInput, PrevOutput).   # can simply reverse the equatino as in the c++ script. 
 {
   (Input-80) - (PrevInput-80) * 0.96875 + PrevOutput
-}
-
-#VerifySignal
-# Detect when the input signal indicates device removal.  If the un-detrended data is a constant,
-# the PPG device has probably been removed.
-
-VerifySignal <- function().      # likely not needed, more useful in live setting 
-{
-  
 }
 
 
