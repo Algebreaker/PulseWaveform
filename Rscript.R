@@ -56,7 +56,7 @@ datarepeats<-cbind(data,realrepeats)                           # Likely will be 
 
 Undetrend <- function(Input, PrevInput, PrevOutput).   # can simply reverse the equatino as in the c++ script. 
 {
-  
+  (Input-80) - (PrevInput-80) * 0.96875 + PrevOutput
 }
 
 #VerifySignal
