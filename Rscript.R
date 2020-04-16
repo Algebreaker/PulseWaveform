@@ -29,33 +29,24 @@ FNTBioRadioPulse<-function(input)
 # unique values, with an effort to be robust against variation in the repeat pattern and also against 
 # genuine repeated values.
 
-DownSample <- function(input)   #Clarify TraceCount and SampleModulo
-{
-list<-rle(data$PPG.PulseOx1)
-realrepeats<-rep(list$lengths > 4,times = list$lengths)        # could do stepwise rather than live removal of duplicates
-
-datarepeats<-cbind(data,realrepeats)                           # Likely will be able to downsample both Pulse and Resp data at same time
-  
-ifelse(datarepeats$realrepeats==FALSE, datarepeats<-datarepeats[!duplicated(datarepeats$PPG.PulseOx1), ],datarepeats<-datarepeats)
-}
 
 # DownSample 
-ID <- rep(1:length(list$values), times = list$lengths)     
-data2 <- cbind(pulse_full, ID)                                  # Cbind a numbered column rather than true/false
 
-data_downsampled <-c()                                          # Create empty vector
+list<-rle(data$PPG.PulseOx1)
 
-for (i in 1:max(ID)){                                           
-  
-  sub.data <- filter(data2, ID == i)                            # Isolate rows with all the same value as a subset
-  
-  if(nrow(sub.data) <= 4){                                      # If the subset has 4 rows or less, add the first row to the empty vector
-    
-    data_downsampled <- rbind(data_downsampled, sub.data[1,])   
-    
-  }else if(nrow(sub.data) > 4 ){data_downsampled <- rbind(data_downsampled, sub.data[1,], sub.data[5,])}  #If the data has more than four rows, add the first and fifth
-  
-}          # This may need to be adjusted if we have datasets where true values are repeated more than twice
+ID <- rep(1:length(list$values), times = list$lengths)
+data2 <- cbind(pulse_full, ID)       # Cbind a numbered column rather than true/false
+
+data_downsampled <-c().              # Create empty vector
+
+for (i in 1:max(ID)){
+  sub.data <- filter(data2, ID == i) # Isolate rows with all the same value as a subset
+  if(nrow(sub.data) <= 4){           # If the subset has 4 rows or less, add the first row to the empty vector
+    data_downsampled <- rbind(data_downsampled, sub.data[1,])
+  }else if(nrow(sub.data) > 4 ){data_downsampled <- rbind(data_downsampled, sub.data[1,], sub.data[5,])} #If the data has more than four rows, add the first and fifth
+}
+  # This may need to be adjusted if we have datasets where true values are repeated more than twice
+
 
 #Undetrend
 # Analysis of device output indicates that the PPG signal is detrended by application of the following
