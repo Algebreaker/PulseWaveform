@@ -54,11 +54,14 @@ for (i in 1:max(ID)){
 # an approximation fitted to the data.
 # Individual pulse events are more comprehensible if the detrending is not used, so this function 
 # removes it by inverting the above function. 
-
-Undetrend <- function(Input, PrevInput, PrevOutput).   # can simply reverse the equatino as in the c++ script. 
+   # can simply reverse the equatino as in the c++ script. 
+undetrended <-c()    
+for (i in 2:length(data_downsampled$PPG.PulseOx1)+2)   
 {
-  (Input-80) - (PrevInput-80) * 0.96875 + PrevOutput
+  undetrended[i-1]<-((data_downsampled$PPG.PulseOx1[i]-80) - ((data_downsampled$PPG.PulseOx1[i-1]-80) * 0.96875) + (data_downsampled$PPG.PulseOx1[i-1]))
 }
+undetrended_data<-cbind(data_downsampled,undetrended)
+
 
 
 #FindNewBeat
@@ -67,7 +70,7 @@ FindNewBeat <- function()
 {
        ## This is where splines are first fitted 
 	
-	spline <- spline(1:100, data_downsampled$PPG.PulseOx1[1:100])  # (in this case to first 100 values)
+	spline <- spline(1:100, undetrended_data$PPG.PulseOx1[1:100])  # (in this case to first 100 values)
 	
        # Sense rapid increase as a possible beat                                         
        # Empirical checks of whether the current increase in the trace value looks
