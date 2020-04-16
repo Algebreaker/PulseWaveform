@@ -35,7 +35,7 @@ FNTBioRadioPulse<-function(input)
 list<-rle(data$PPG.PulseOx1)
 
 ID <- rep(1:length(list$values), times = list$lengths)
-data2 <- cbind(pulse_full, ID)       # Cbind a numbered column rather than true/false
+data2 <- cbind(data, ID)       # Cbind a numbered column rather than true/false
 
 data_downsampled <-c()              # Create empty vector
 
