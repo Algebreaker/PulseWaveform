@@ -358,10 +358,10 @@ TestClamp<-function(FNTSpline, i_Spline, Start, MaxFirstDerivative)
 	{
 	}
 
-SubtractSine<function(io_Data, Count, Peak, Amplitude, Width, io_Fit)
+SubtractSine<-function(io_Data, Count, Peak, Amplitude, Width, io_Fit)
 {
 	}
 
-SinePeak<function(DeltaTime, Amplitude, Width)
+SinePeak<-function(DeltaTime, Amplitude, Width)
 	{
 	}
