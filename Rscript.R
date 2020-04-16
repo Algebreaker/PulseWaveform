@@ -1,6 +1,6 @@
 setwd("/home/johanna/Documents/Ninja theory/PulseAnalysis/Data/Craig")
 data <- read.table("Source.csv", header=T, sep=",") #first line of the csv file needs to be deleted
-library()
+library(tidyverse)                                  #Have tidyverse packages installed and call tidyverse in library()
 
 min_beats_per_minute <- 30
 max_beats_per_minute <- 240
