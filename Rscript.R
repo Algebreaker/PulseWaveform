@@ -37,7 +37,7 @@ list<-rle(data$PPG.PulseOx1)
 ID <- rep(1:length(list$values), times = list$lengths)
 data2 <- cbind(pulse_full, ID)       # Cbind a numbered column rather than true/false
 
-data_downsampled <-c().              # Create empty vector
+data_downsampled <-c()              # Create empty vector
 
 for (i in 1:max(ID)){
   sub.data <- filter(data2, ID == i) # Isolate rows with all the same value as a subset
