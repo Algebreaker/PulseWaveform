@@ -1,6 +1,6 @@
 setwd("/home/johanna/Documents/Ninja theory/PulseAnalysis/Data/Craig")
 data <- read.table("Source.csv", header=T, sep=",") #first line of the csv file needs to be deleted
-library()
+library(tidyverse)                                  #Have tidyverse packages installed and call tidyverse in library()
 
 min_beats_per_minute <- 30
 max_beats_per_minute <- 240
@@ -18,19 +18,10 @@ FNTBioRadioPulse<-function(input)
 {
 }
 
-#attaching log events              # not immediately relevent - this flags up events live which are then available in the csv 
-AddLogEvent<-function(constFString, LogMessage)
-{
-}
 
 # Ignore public functions for now
 # Ignore RestoreState for now
 
-#Debug draw                       # helps with live visualisation
-Draw<-function()
-{
-
-}
 
 #Downsample
 # The BioRadio device provides 250 samples per second, but the PPG is only sampled 75 times per second, 
@@ -38,14 +29,42 @@ Draw<-function()
 # unique values, with an effort to be robust against variation in the repeat pattern and also against 
 # genuine repeated values.
 
-DownSample <- function(input)   #Clarify TraceCount and SampleModulo
-{
-list<-rle(data$PPG.PulseOx1)
-realrepeats<-rep(list$lengths > 4,times = list$lengths)        # could do stepwise rather than live removal of duplicates
 
-datarepeats<-cbind(data,realrepeats)                           # Likely will be able to downsample both Pulse and Resp data at same time
-  
+# DownSample 
+
+list<-rle(data$PPG.PulseOx1)
+
+ID <- rep(1:length(list$values), times = list$lengths)
+data2 <- cbind(data, ID)       # Cbind a numbered column rather than true/false
+
+data_downsampled <-c()              # Create empty vector
+
+for (i in 1:max(ID)){
+  sub.data <- filter(data2, ID == i) # Isolate rows with all the same value as a subset
+  if(nrow(sub.data) <= 4){           # If the subset has 4 rows or less, add the first row to the empty vector
+    data_downsampled <- rbind(data_downsampled, sub.data[1,])
+  }else if(nrow(sub.data) > 4 ){data_downsampled <- rbind(data_downsampled, sub.data[1,], sub.data[5,])} #If the data has more than four rows, add the first and fifth
 }
+  # This may need to be adjusted if we have datasets where true values are repeated more than twice
+
+
+# DownSample 
+ID <- rep(1:length(list$values), times = list$lengths)     
+data2 <- cbind(pulse_full, ID)                                  # Cbind a numbered column rather than true/false
+
+data_downsampled <-c()                                          # Create empty vector
+
+for (i in 1:max(ID)){                                           
+  
+  sub.data <- filter(data2, ID == i)                            # Isolate rows with all the same value as a subset
+  
+  if(nrow(sub.data) <= 4){                                      # If the subset has 4 rows or less, add the first row to the empty vector
+    
+    data_downsampled <- rbind(data_downsampled, sub.data[1,])   
+    
+  }else if(nrow(sub.data) > 4 ){data_downsampled <- rbind(data_downsampled, sub.data[1,], sub.data[5,])}  #If the data has more than four rows, add the first and fifth
+  
+}          # This may need to be adjusted if we have datasets where true values are repeated more than twice
 
 #Undetrend
 # Analysis of device output indicates that the PPG signal is detrended by application of the following
@@ -53,20 +72,14 @@ datarepeats<-cbind(data,realrepeats)                           # Likely will be 
 # an approximation fitted to the data.
 # Individual pulse events are more comprehensible if the detrending is not used, so this function 
 # removes it by inverting the above function. 
-
-Undetrend <- function(Input, PrevInput, PrevOutput).   # can simply reverse the equatino as in the c++ script. 
+   # can simply reverse the equatino as in the c++ script. 
+undetrended <-c()    
+for (i in 2:length(data_downsampled$PPG.PulseOx1)+2)   
 {
-  (Input-80) - (PrevInput-80) * 0.96875 + PrevOutput
+  undetrended[i-1]<-((data_downsampled$PPG.PulseOx1[i]-80) - ((data_downsampled$PPG.PulseOx1[i-1]-80) * 0.96875) + (data_downsampled$PPG.PulseOx1[i-1]))
 }
+undetrended_data<-cbind(data_downsampled,undetrended)
 
-#VerifySignal
-# Detect when the input signal indicates device removal.  If the un-detrended data is a constant,
-# the PPG device has probably been removed.
-
-VerifySignal <- function().      # likely not needed, more useful in live setting 
-{
-  
-}
 
 
 #FindNewBeat
@@ -79,6 +92,11 @@ FindNewBeat <- function()
 	plot(splined_data)                                        
 	
        # Sense rapid increase as a possible beat                                         # 
+
+	spline <- spline(1:100, undetrended_data$PPG.PulseOx1[1:100])  # (in this case to first 100 values)
+	
+       # Sense rapid increase as a possible beat                                         
+
        # Empirical checks of whether the current increase in the trace value looks
        # like a beat profile.  There should be a resolvable peak in the gradient,
 	     # or else we should wait for more context.  The residual should have
@@ -346,10 +364,10 @@ TestClamp<-function(FNTSpline, i_Spline, Start, MaxFirstDerivative)
 	{
 	}
 
-SubtractSine<function(io_Data, Count, Peak, Amplitude, Width, io_Fit)
+SubtractSine<-function(io_Data, Count, Peak, Amplitude, Width, io_Fit)
 {
 	}
 
-SinePeak<function(DeltaTime, Amplitude, Width)
+SinePeak<-function(DeltaTime, Amplitude, Width)
 	{
 	}
