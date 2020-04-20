@@ -1,6 +1,8 @@
 setwd("/home/johanna/Documents/Ninja theory/PulseAnalysis/Data/Craig")
 data <- read.table("Source.csv", header=T, sep=",") #first line of the csv file needs to be deleted
 library(tidyverse)                                  #Have tidyverse packages installed and call tidyverse in library()
+library(TeachingDemos)
+library(splines2)
 
 min_beats_per_minute <- 30
 max_beats_per_minute <- 240
@@ -74,7 +76,7 @@ for (i in 1:max(ID)){
 # removes it by inverting the above function. 
    # can simply reverse the equatino as in the c++ script. 
 undetrended <-c()    
-for (i in 2:length(data_downsampled$PPG.PulseOx1)+2)   
+for (i in 2:length(data_downsampled$PPG.PulseOx1)+1)   
 {
   undetrended[i-1]<-((data_downsampled$PPG.PulseOx1[i]-80) - ((data_downsampled$PPG.PulseOx1[i-1]-80) * 0.96875) + (data_downsampled$PPG.PulseOx1[i-1]))
 }
@@ -236,6 +238,29 @@ FindStartIndex <- function(i_PeakIndex)
 #inputs for this not sure about in R
 FitPeaks <- function(i_argW, i_val0, i_start, i_end, TOptional<FVector2D> (o_Peaks)[FitBeatConst::NUM_PEAKS]) 
 {
+  f_of_x <- splinefun(1:100, undetrended_data$PPG.PulseOx1[1:100])
+  deriv1<-f_of_x(1:100, deriv = 1) #first derivative of the spline function
+  plot(deriv1, type="l")
+  #plot(spline, type="l")
+  
+  ### The following functions smoothes its input vie LOESS and returns the local maxima and minima coordinates in [i]
+  argmax <- function(x, y, w=1, ...) {
+    require(zoo)
+    n <- length(y)
+    y.smooth <- loess(y ~ x, ...)$fitted
+    y.max <- rollapply(zoo(y.smooth), 2*w+1, max, align="center")
+    delta <- y.max - y.smooth[-c(1:w, n+1-1:w)]
+    i.max <- which(delta <= 0) + w
+    list(x=x[i.max], i=i.max, y.hat=y.smooth)
+  }
+  
+  maxima<-argmax(deriv1, 1:100, w=1) #find local maxima and minima of the first derivative, specify w to change the width of the search window, defaults to 1
+  
+  
+  ###This is just an application for fun to visualise the derivs:
+  splinevectorx<-as.numeric(unlist(spline[1]))
+  splinevectory<-as.numeric(unlist(spline[2]))
+  TkSpline(x=splinevectorx, y=splinevectory)
   
   }
 
