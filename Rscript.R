@@ -3,6 +3,7 @@ data <- read.table("Source.csv", header=T, sep=",") #first line of the csv file 
 library(tidyverse)                                  #Have tidyverse packages installed and call tidyverse in library()
 library(TeachingDemos)
 library(splines2)
+library(pracma)
 
 min_beats_per_minute <- 30
 max_beats_per_minute <- 240
@@ -73,7 +74,7 @@ for (i in 1:max(ID)){
 # formula: OUT[i] = 80 + (OUT[i-1]-80) * 0.96875 + (IN[i] - [IN[i-1]), where the constance 0.96875 is
 # an approximation fitted to the data.
 # Individual pulse events are more comprehensible if the detrending is not used, so this function 
-# removes it by inverting the above function. 
+#removes it by inverting the above function. 
    # can simply reverse the equatino as in the c++ script. 
 undetrended <-c()    
 for (i in 2:length(data_downsampled$PPG.PulseOx1)+1)   
@@ -95,9 +96,24 @@ FindNewBeat <- function()
 	
        # Sense rapid increase as a possible beat                                         # 
 
-	spline <- spline(1:100, undetrended_data$PPG.PulseOx1[1:100])  # (in this case to first 100 values)
+	spline <- spline(1:500, undetrended_data$PPG.PulseOx1[1:500])  # (in this case to first 100 values)
+	plot(spline, type='l')
+	  #plot(deriv1, type='l')
+	xcoord<-as.vector(spline$x)
+	closestsplines <-c()    #gives you the index of the closes x-coordinate in the spline for each peak
+	for (i in 1:length(peakindex))
+	{
+	  closestsplines[i]<-which(abs(xcoord-(peakindex[i]))==min(abs(xcoord-(peakindex[i]))))
+	}
+	ycoord<-spline$y
+	peakycoord<-ycoord[closestsplines]
+	points(spline$x[c(closestsplines)], spline$y[c(closestsplines)], col = 'red', pch = 19)
+   
 	
-       # Sense rapid increase as a possible beat                                         
+	#Fitting a sine curve   
+
+	
+	# Sense rapid increase as a possible beat                                         
 
        # Empirical checks of whether the current increase in the trace value looks
        # like a beat profile.  There should be a resolvable peak in the gradient,
@@ -190,7 +206,7 @@ UpdateAverageBeat <- function()
   }
 
 #CalibrateBeat
-# Method to find pulse 
+#Method to find pulse 
 
 CalibrateBeat <- function()
 {
@@ -238,29 +254,19 @@ FindStartIndex <- function(i_PeakIndex)
 #inputs for this not sure about in R
 FitPeaks <- function(i_argW, i_val0, i_start, i_end, TOptional<FVector2D> (o_Peaks)[FitBeatConst::NUM_PEAKS]) 
 {
-  f_of_x <- splinefun(1:100, undetrended_data$PPG.PulseOx1[1:100])
-  deriv1<-f_of_x(1:100, deriv = 1) #first derivative of the spline function
+ sfunction<- splinefun(1:500, undetrended_data$PPG.PulseOx1[1:500], method="natural")
+  deriv1<-sfunction(1:500, deriv = 1) #first derivative of the spline function
   plot(deriv1, type="l")
-  #plot(spline, type="l")
-  
-  ### The following functions smoothes its input vie LOESS and returns the local maxima and minima coordinates in [i]
-  argmax <- function(x, y, w=1, ...) {
-    require(zoo)
-    n <- length(y)
-    y.smooth <- loess(y ~ x, ...)$fitted
-    y.max <- rollapply(zoo(y.smooth), 2*w+1, max, align="center")
-    delta <- y.max - y.smooth[-c(1:w, n+1-1:w)]
-    i.max <- which(delta <= 0) + w
-    list(x=x[i.max], i=i.max, y.hat=y.smooth)
+  p<-findpeaks(deriv1, nups = 6, minpeakdistance = 40) #finding maximum of first derivative
+    plot(deriv1, type = 'l')
+        points(p[,2], p[,1], col = 'red', pch = 19)
+      peakindex<-p[,2]
+
   }
-  
-  maxima<-argmax(deriv1, 1:100, w=1) #find local maxima and minima of the first derivative, specify w to change the width of the search window, defaults to 1
-  
-  
   ###This is just an application for fun to visualise the derivs:
-  splinevectorx<-as.numeric(unlist(spline[1]))
-  splinevectory<-as.numeric(unlist(spline[2]))
-  TkSpline(x=splinevectorx, y=splinevectory)
+  #splinevectorx<-as.numeric(unlist(spline[1]))
+  #splinevectory<-as.numeric(unlist(spline[2]))
+  #TkSpline(x=splinevectorx, y=splinevectory)
   
   }
 
