@@ -84,6 +84,70 @@ for (i in 2:length(data_downsampled$PPG.PulseOx1)+1)
 undetrended_data<-cbind(data_downsampled,undetrended)
 
 
+## create spline + derivatives 
+sfunction <- splinefun(1:1000, undetrended_data$undetrended[1:1000], method = "natural")
+spline <- sfunction(seq(1, 1000, 0.1), deriv = 0)
+deriv1 <- sfunction(seq(1, 1000, 0.1), deriv = 1)
+deriv2 <- sfunction(seq(1, 1000, 0.1), deriv = 2)
+
+# Finding peaks of the first derivative
+pd1 <-findpeaks(deriv1, nups = 70, minpeakdistance = 10)     # this will need to be fine tuned
+
+# Plot points of peaks on first derivative
+plot(deriv1, type = "l")
+points(pd1[,2], pd1[,1], col = 'red', pch = 19)
+
+# Create vector of all x axis coordinates of peaks of first derivative
+pd1index <- pd1[, 2]
+
+# Plot deriv1 peaks on original spline
+plot(spline, type = "l")
+points(pd1index, spline[pd1index], col = 'red', pch = 19)
+
+
+#Finding inflexion points
+
+posneginflexionpoints <- c()
+
+for(i in 1:(length(deriv1)-1)){
+  if  (deriv1[i] > 0){
+    if (deriv1[i+1] < 0){
+      newvector <- c(deriv1[i], deriv1[i+1])
+      if ((which(abs(0-newvector) == min(abs(0 - newvector)))) == 1){
+        posneginflexionpoints <- c(posneginflexionpoints, i)
+      }else {
+        posneginflexionpoints <- c(posneginflexionpoints, i+1)
+      }
+    }
+  }else if(deriv1[i] < 0){
+    if(deriv1[i+1] > 0){
+      newvector <- c(deriv1[i], deriv1[i+1])
+      if ((which(abs(0-newvector) == min(abs(0 - newvector)))) == 1){
+        posneginflexionpoints <- c(posneginflexionpoints, i)
+      }else {
+        posneginflexionpoints <- c(posneginflexionpoints, i+1)
+      }
+    }
+  }
+}
+
+# Plot inflection points on first derivative
+plot(deriv1, type = "l")
+points(posneginflexionpoints, deriv1[posneginflexionpoints], col = 'red', pch = 19) # plots inflexion points on 1st deriv
+
+# Plot inflection points on original spline
+plot(spline[1:10000], type = "l")
+points(posneginflexionpoints, spline[posneginflexionpoints], col = 'red', pch = 19)
+
+
+
+
+
+
+
+
+
+
 
 #FindNewBeat
 
