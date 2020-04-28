@@ -142,6 +142,52 @@ points(posneginflexionpoints, spline[posneginflexionpoints], col = 'red', pch = 
 
 
 
+###### Chopping up and plotting all waveforms   
+  
+# Putting 1st derivative peak x-coordinates in order
+orderedpd1index <- pd1index[order(pd1index)]
+
+# Create a data frame and fill it with all the chopped waveforms
+pulse <- data.frame(1:551)
+
+for(i in 1:length(orderedpd1index)){
+  
+pulse <- cbind(pulse, spline[(orderedpd1index[i] - 50):(orderedpd1index[i] + 500)])
+
+colnames(pulse)[i+1] <- paste("wave", i, sep = "_") 
+}
+
+colnames(pulse)[1] <- "x"
+
+# At this point all the waves will be lined up on the x-axis, but not the y-axis. 
+
+# Find the differences between the waves on the y axis (relative to the first waves w)
+
+for(i in 1:length(orderedpd1index)) {
+  
+  y_axis_differences[i] <- spline[orderedpd1index[1]] - spline[orderedpd1index[i]]
+  
+}
+
+# Update dataframe with y-adjusted values 
+
+for(i in 2:ncol(pulse)){
+  
+  pulse[, i] <- pulse[, i] + y_axis_differences[i-1]
+  
+}
+
+# stack the data frame
+
+pulse_stacked <- gather(pulse, key = "wave_ID", value = "values", -c("x"))
+
+# Plot and overlay the waveforms
+
+ggplot(data = pulse_stacked, aes(x = pulse_stacked$x, y = pulse_stacked$values, col = pulse_stacked$wave_ID)) +
+    geom_line(size = 1.5)
+
+########
+
 
 
 
