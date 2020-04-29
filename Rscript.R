@@ -147,6 +147,8 @@ colnames(pulse)[1] <- "x"
 
 # Find the differences between the waves on the y axis (relative to the first waves w)
 
+y_axis_differences <- c()
+
 for(i in 1:length(orderedpd1index)) {
   
   y_axis_differences[i] <- spline[orderedpd1index[1]] - spline[orderedpd1index[i]]
