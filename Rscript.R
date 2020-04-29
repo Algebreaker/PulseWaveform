@@ -58,13 +58,12 @@ for (i in 1:max(ID)){
 # Individual pulse events are more comprehensible if the detrending is not used, so this function 
 #removes it by inverting the above function. 
    # can simply reverse the equatino as in the c++ script. 
-undetrended <-replicate(length(data_downsampled$PPG.PulseOx1), 0) 
+undetrended <-replicate(length(data_downsampled$PPG.PulseOx1)-1, 0) 
+undetrended<-c(data_downsampled$PPG.PulseOx1[1],undetrended) #add first detrended value to vector
 for (i in 2:length(data_downsampled$PPG.PulseOx1))   
 {
   undetrended[i]<-((data_downsampled$PPG.PulseOx1[i]-80) - ((data_downsampled$PPG.PulseOx1[i-1]-80) * 0.96875) + (undetrended[i-1]))
 }
-undetrended = undetrended[-1] #delete first entry which should be a zero
-undetrended<-c(data_downsampled$PPG.PulseOx1[1],undetrended) #add first value from detrended data as first value
 undetrended_data<-cbind(data_downsampled,undetrended)
 
 ## create spline + derivatives 
