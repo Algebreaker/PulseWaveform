@@ -59,13 +59,11 @@ for (i in 1:max(ID)){
 #removes it by inverting the above function. 
    # can simply reverse the equatino as in the c++ script. 
 undetrended <-replicate(length(data_downsampled$PPG.PulseOx1)-1, 0) 
-undetrended<-c(data_downsampled$PPG.PulseOx1[1],undetrended)
+undetrended<-c(data_downsampled$PPG.PulseOx1[1],undetrended) #add first detrended value to vector
 for (i in 2:length(data_downsampled$PPG.PulseOx1))   
 {
   undetrended[i]<-((data_downsampled$PPG.PulseOx1[i]-80) - ((data_downsampled$PPG.PulseOx1[i-1]-80) * 0.96875) + (undetrended[i-1]))
 }
-#undetrended = undetrended[-1] #delete first entry which should be a zero
-#undetrended<-c(data_downsampled$PPG.PulseOx1[1],undetrended) #add first value from detrended data as first value
 undetrended_data<-cbind(data_downsampled,undetrended)
 
 ## create spline + derivatives 
@@ -174,6 +172,12 @@ ggplot(data = pulse_stacked, aes(x = pulse_stacked$x, y = pulse_stacked$values, 
 
 ########
 
+#Plot average trace
+averagetrace<-rowMeans(pulse[-1])
+means <- data.frame(id=1:length(averagetrace), av=averagetrace)
+ggplot(data = pulse_stacked, aes(x = pulse_stacked$x, y = pulse_stacked$values, col = pulse_stacked$wave_ID)) +
+  geom_line(size = 1.5)+
+  geom_line(data=means, aes(x=id, y=av), color="black")
 
 
 
