@@ -32,24 +32,17 @@ FNTBioRadioPulse<-function(input)
 # unique values, with an effort to be robust against variation in the repeat pattern and also against 
 # genuine repeated values.
 
-# DownSample 
 list<-rle(data$PPG.PulseOx1)
-ID <- rep(1:length(list$values), times = list$lengths)     
-data2 <- cbind(data, ID)                                 # Cbind a numbered column rather than true/false
+ID <- rep(1:length(list$values), times = list$lengths)
+data2 <- cbind(data, ID)
+data_downsampled <-c()
 
-data_downsampled <-c()                                          # Create empty vector
-
-for (i in 1:max(ID)){                                           
-  
-  sub.data <- filter(data2, ID == i)                            # Isolate rows with all the same value as a subset
-  
-  if(nrow(sub.data) <= 4){                                      # If the subset has 4 rows or less, add the first row to the empty vector
-    
-    data_downsampled <- rbind(data_downsampled, sub.data[1,])   
-    
-  }else if(nrow(sub.data) > 4 ){data_downsampled <- rbind(data_downsampled, sub.data[1,], sub.data[5,])}  #If the data has more than four rows, add the first and fifth
-  
-}          # This may need to be adjusted if we have datasets where true values are repeated more than twice
+for (i in 1:max(ID)){
+  sub.data <- filter(data2, ID == i)
+  if(nrow(sub.data) <= 4){
+    data_downsampled <- rbind(data_downsampled, sub.data[1,])
+  }else if(nrow(sub.data) > 4 ){data_downsampled <- rbind(data_downsampled, sub.data[1,], sub.data[5,])}
+}
 
 #Undetrend
 # Analysis of device output indicates that the PPG signal is detrended by application of the following
@@ -124,32 +117,120 @@ points(posneginflexionpoints, spline[posneginflexionpoints], col = 'red', pch = 
 
 
 
-###### Chopping up and plotting all waveforms   
+###### Chopping up and plotting all waveforms ########
+#(make sure to have correctly found deriv1 peaks before running)
+  
   
 # Putting 1st derivative peak x-coordinates in order
 orderedpd1index <- pd1index[order(pd1index)]
 
 # Create a data frame and fill it with all the chopped waveforms
 pulse <- data.frame(1:551)
+for(i in 1:length(orderedpd1index)){
+    pulse <- cbind(pulse, spline[(orderedpd1index[i] - 50):(orderedpd1index[i] + 500)])
+    colnames(pulse)[i+1] <- paste("wave", i, sep = "_") 
+}
+colnames(pulse)[1] <- "x"
+
+
+
+####### Run this section if normalizing #########
+
+## Find half the height of w (on derivative y-axis)
+
+w_peaks <- pd1[, 1]                             # create vector of w y-coordinates
+w_peaks_ordered <- w_peaks[order(pd1index)]     
+w_half_height <- w_peaks_ordered/2              # create vector of half w heights
+
+
+## Find u 
+
+u <- c()
+
+u_index <- c()
 
 for(i in 1:length(orderedpd1index)){
   
-pulse <- cbind(pulse, spline[(orderedpd1index[i] - 50):(orderedpd1index[i] + 500)])
-
-colnames(pulse)[i+1] <- paste("wave", i, sep = "_") 
+  # find the element of deriv1 to start searching for u from
+  i_minus_50 <- orderedpd1index[i] - 50            
+  
+  # find the element of i-50:i that is closest to u
+  u_precursor <- which(abs(w_half_height[i] - deriv1[i_minus_50: orderedpd1index[i]]) ==  min(abs(w_half_height[i] - deriv1[i_minus_50: orderedpd1index[i]])))   
+  
+  # find the element of deriv1 corresponding to u
+  u_index[i] <- i_minus_50 + u_precursor - 1        
+  
+  # find the point on the y axis of deriv1 corresponding to u
+  u[i] <- deriv1[i_minus_50 + u_precursor - 1]      
+  
 }
 
-colnames(pulse)[1] <- "x"
+## Find v
+
+v <- c()
+
+v_index <- c()
+
+for(i in 1:length(orderedpd1index)){
+  
+  i_plus_50 <- orderedpd1index[i] + 50   
+  
+  v_precursor <- which(abs(w_half_height[i] - deriv1[orderedpd1index[i]:i_plus_50]) ==  min(abs(w_half_height[i] - deriv1[orderedpd1index[i]:i_plus_50])))   
+  
+  v_index[i] <- orderedpd1index[i] + v_precursor - 1      
+  
+  v[i] <- deriv1[orderedpd1index[i] + v_precursor - 1]     
+  
+}
+
+## Plot u and v on deriv1 
+plot(deriv1, type = "l")
+points(u_index, u, col = "red", pch = 19)      # Note that u-v pairs are not exactly the same height, 
+points(v_index, v, col = "red", pch = 19)      # this is a limitation of the discrete nature of the data. 
+
+# Plot u and v on original spline
+plot(spline, type = "l")
+points(u_index, spline[u_index], col = "red", pch = 19)
+points(v_index, spline[v_index], col = "red", pch = 19)
+
+
+## Scale all waveforms such that the difference (v - u) on spline y-axis is equal to 1 
+
+# Find difference for all waves
+
+u_v_differences <- c()
+
+for(i in 1:length(orderedpd1index)){
+  
+  u_v_differences[i] <- spline[v_index[i]] - spline[u_index[i]]     
+  
+}
+
+# Scale such that difference (v-u) = 1
+
+scale_u_v <- u_v_differences/1      
+
+
+for(i in 2:ncol(pulse)){                           
+  
+  pulse[, i] <- pulse[, i]/scale_u_v[i-1]        
+  
+}
+
+
+######### End of normalizing section ##########
+
 
 # At this point all the waves will be lined up on the x-axis, but not the y-axis. 
-
-# Find the differences between the waves on the y axis (relative to the first waves w)
+# Adjust y axis values so that all w's are same value (this will be element 51 on every wave)
 
 y_axis_differences <- c()
 
-for(i in 1:length(orderedpd1index)) {
+for(i in 2:ncol(pulse)) {
   
-  y_axis_differences[i] <- spline[orderedpd1index[1]] - spline[orderedpd1index[i]]
+  wave <- pulse[, i]
+  
+  y_axis_differences[i-1] <- pulse$wave_1[51] - wave[51]   # finds the difference between w points and wave 1's w points
   
 }
 
@@ -157,18 +238,33 @@ for(i in 1:length(orderedpd1index)) {
 
 for(i in 2:ncol(pulse)){
   
-  pulse[, i] <- pulse[, i] + y_axis_differences[i-1]
+  pulse[, i] <- pulse[, i] + y_axis_differences[i-1]   # adds the differences so that all waves have the same y value for w
   
 }
 
-# stack the data frame
+
+# Adjust such that u = 0, v = 1, w = 0.5
+
+pulse[, 2:ncol(pulse)] <- pulse[, 2:ncol(pulse)] - pulse$wave_1[51] + 0.5
+
+
+# Subset dataframe here if you need to remove columns / waves  
+
+# Stack the data frame
 
 pulse_stacked <- gather(pulse, key = "wave_ID", value = "values", -c("x"))
 
 # Plot and overlay the waveforms
 
-ggplot(data = pulse_stacked, aes(x = pulse_stacked$x, y = pulse_stacked$values, col = pulse_stacked$wave_ID)) +
-    geom_line(size = 1.5)
+ggplot(data = pulse_stacked, aes(x = pulse_stacked$x, y = pulse_stacked$values, col = pulse_stacked$wave_ID)) + geom_line(size = 1.5) # + ylim(-0.25, 1.25) for source.csv
+
+#########
+
+
+
+
+
+
 
 ########
 
