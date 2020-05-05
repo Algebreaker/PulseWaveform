@@ -66,11 +66,22 @@ deriv1 <- sfunction(seq(1, 1000, 0.1), deriv = 1)
 deriv2 <- sfunction(seq(1, 1000, 0.1), deriv = 2)
 
 # Finding peaks of the first derivative
-pd1 <-findpeaks(deriv1, nups = 70, minpeakdistance = 10)     # this will need to be fine tuned
+pd1 <-findpeaks(deriv1, , threshold=0.8)     # this will need to be fine tuned
 
 # Plot points of peaks on first derivative
 plot(deriv1, type = "l")
 points(pd1[,2], pd1[,1], col = 'red', pch = 19)
+
+# Finding second peaks of the first derivative (point "s") by first finding both w and s
+pd2 <-findpeaks(deriv1, threshold=0.3)     # this will need to be fine tuned
+# Plot points of peaks on first derivative
+plot(deriv1, type = "l")
+points(pd2[,2], pd2[,1], col = 'red', pch = 19)
+#now find S by cancelling out W
+if (pd1[1]==pd2[1]){pd3 = pd2[seq(2, nrow(pd2), 2), ]# keep all even numbered elements in pd2 if the first value in the two vectors is the same (i.e. a w point)
+}else { #else keep all odd numbered elements
+  pd3 = pd2[seq(1, nrow(pd2), 2), ]
+}
 
 # Create vector of all x axis coordinates of peaks of first derivative
 pd1index <- pd1[, 2]
