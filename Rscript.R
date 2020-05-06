@@ -4,6 +4,7 @@ library(tidyverse)                                  #Have tidyverse packages ins
 library(TeachingDemos)
 library(splines2)
 library(pracma)
+library(SplinesUtils)
 
 min_beats_per_minute <- 30
 max_beats_per_minute <- 240
@@ -60,10 +61,15 @@ for (i in 2:length(data_downsampled$PPG.PulseOx1))
 undetrended_data<-cbind(data_downsampled,undetrended)
 
 ## create spline + derivatives 
+#to get y value from x value just use sfunction(x)
 sfunction <- splinefun(1:1000, undetrended_data$undetrended[1:1000], method = "natural")
 spline <- sfunction(seq(1, 1000, 0.1), deriv = 0)
 deriv1 <- sfunction(seq(1, 1000, 0.1), deriv = 1)
 deriv2 <- sfunction(seq(1, 1000, 0.1), deriv = 2)
+
+spl<-CubicInterpSplineAsPiecePoly(1:1000, undetrended_data$undetrended[1:1000], "natural")
+yval <- solve(spl, b = 2.85) #returns a vector with all equations of piecewise polynomials that yield this y-value (=b)
+
 
 # Finding peaks of the first derivative
 pd1 <-findpeaks(deriv1, , threshold=0.8)     # this will need to be fine tuned
