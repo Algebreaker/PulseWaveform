@@ -60,6 +60,7 @@ for (i in 2:length(data_downsampled$PPG.PulseOx1))
 }
 undetrended_data<-cbind(data_downsampled,undetrended)
 
+
 ## create spline + derivatives 
 #to get y value from x value just use sfunction(x)
 sfunction <- splinefun(1:1000, undetrended_data$undetrended[1:1000], method = "natural")
@@ -67,12 +68,19 @@ spline <- sfunction(seq(1, 1000, 0.1), deriv = 0)
 deriv1 <- sfunction(seq(1, 1000, 0.1), deriv = 1)
 deriv2 <- sfunction(seq(1, 1000, 0.1), deriv = 2)
 
-spl<-CubicInterpSplineAsPiecePoly(1:1000, undetrended_data$undetrended[1:1000], "natural")
-yval <- solve(spl, b = 2.85) #returns a vector with all equations of piecewise polynomials that yield this y-value (=b)
+spl<-CubicInterpSplineAsPiecePoly(1:50, undetrended_data$undetrended[1:50], "natural")
+yval <- solve(spl, b = 78) #returns a vector with all equations of piecewise polynomials that yield this y-value (2.85 in this case)
 
+
+###find peak values for individual thresholding
+hdat<-hist(deriv1)
+quantiles<-quantile(deriv1,probs=c(.025,.95))
+threshold<-quantiles[2]
+#as density plot
+plot(density(deriv1))
 
 # Finding peaks of the first derivative
-pd1 <-findpeaks(deriv1, , threshold=0.8)     # this will need to be fine tuned
+pd1 <-findpeaks(deriv1, threshold=threshold)     # this will need to be fine tuned
 
 # Plot points of peaks on first derivative
 plot(deriv1, type = "l")
@@ -83,7 +91,7 @@ pd2 <-findpeaks(deriv1, threshold=0.3)     # this will need to be fine tuned
 # Plot points of peaks on first derivative
 plot(deriv1, type = "l")
 points(pd2[,2], pd2[,1], col = 'red', pch = 19)
-#now find S by cancelling out W
+#now find Z by cancelling out W
 if (pd1[1]==pd2[1]){pd3 = pd2[seq(2, nrow(pd2), 2), ]# keep all even numbered elements in pd2 if the first value in the two vectors is the same (i.e. a w point)
 }else { #else keep all odd numbered elements
   pd3 = pd2[seq(1, nrow(pd2), 2), ]
@@ -131,8 +139,16 @@ points(posneginflexionpoints, deriv1[posneginflexionpoints], col = 'red', pch = 
 plot(spline[1:10000], type = "l")
 points(posneginflexionpoints, spline[posneginflexionpoints], col = 'red', pch = 19)
 
-
-
+###lucie
+subspline <- data.frame(spline[1:80])
+subspline$x <- seq.int(nrow(subspline))
+plot(subspline$x, subspline$spline.1.80., type = 'l')
+points(posneginflexionpoints, subspline$spline.1.80.[posneginflexionpoints], col = 'red', pch = 19)
+b <- 2*pi/(abs(4*(posneginflexionpoints[1]-posneginflexionpoints[2])))
+indx <- posneginflexionpoints[2]
+amp <- subspline$spline.1.80.[indx]
+y <- amp*sin(b*(subspline$x)+10)
+lines(subspline$x, y)
 
 ###### Chopping up and plotting all waveforms ########
 #(make sure to have correctly found deriv1 peaks before running)
