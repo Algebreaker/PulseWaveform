@@ -340,6 +340,25 @@ FindNewBeat <- function()
    
 	
 	#Fitting a sine curve   
+	
+	#create a subset of data 
+	
+subspline <- data.frame(spline[1:80]) 
+subspline$x <- seq.int(nrow(subspline))
+
+#plot the subset with the inflexion points 
+plot(subspline$x, subspline$spline.1.80., type = 'l')
+points(posneginflexionpoints, subspline$spline.1.80.[posneginflexionpoints], col = 'red', pch = 19)
+
+#identify the different variables to be entered into the sine eq
+b <- (2*pi)/(abs(2*(posneginflexionpoints[1]-posneginflexionpoints[2])))
+s_indx <- posneginflexionpoints[2]
+o_indx <- posneginflexionpoints[1]
+amp <- (subspline$spline.1.80.[s_indx]-subspline$spline.1.80.[o_indx])/2
+
+#specify sine and plot
+y <- amp*sin(b*(subspline$x)+3.4444)+(84-amp)
+lines(subspline$x, y)
 
 	
 	# Sense rapid increase as a possible beat                                         
