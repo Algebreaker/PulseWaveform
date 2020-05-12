@@ -330,27 +330,42 @@ FindNewBeat <- function()
 	peakycoord<-ycoord[closestsplines]
 	points(spline$x[c(closestsplines)], spline$y[c(closestsplines)], col = 'red', pch = 19)
    
+ 
+#Fitting a sine curve badly
 	
-	#Fitting a sine curve   
+#create a subset of data 
 	
-	#create a subset of data 
-	
-subspline <- data.frame(spline[1:80]) 
+subspline <- data.frame(spline[1:551]) 
 subspline$x <- seq.int(nrow(subspline))
 
 #plot the subset with the inflexion points 
-plot(subspline$x, subspline$spline.1.80., type = 'l')
-points(posneginflexionpoints, subspline$spline.1.80.[posneginflexionpoints], col = 'red', pch = 19)
+plot(subspline$x, subspline$spline.1.551., type = 'l')
+points(posneginflexionpoints, subspline$spline.1.551.[posneginflexionpoints], col = 'red', pch = 19)
 
-#identify the different variables to be entered into the sine eq
-b <- (2*pi)/(abs(2*(posneginflexionpoints[1]-posneginflexionpoints[2])))
+#identify the different systolic variables to be entered into the sine eq
+syst_b <- (2*pi)/(abs(2*(posneginflexionpoints[1]-posneginflexionpoints[2])))
 s_indx <- posneginflexionpoints[2]
 o_indx <- posneginflexionpoints[1]
-amp <- (subspline$spline.1.80.[s_indx]-subspline$spline.1.80.[o_indx])/2
+s_amp <- (subspline$spline.1.551.[s_indx]-subspline$spline.1.551.[o_indx])/2
 
-#specify sine and plot
-y <- amp*sin(b*(subspline$x)+3.4444)+(84-amp)
-lines(subspline$x, y)
+#specifysystolic peak
+syst_y <- s_amp*sin(syst_b*(subspline$x)+3.744)+(84-amp)
+
+#identify the different disatolic variables 
+d_indx <- posneginflexionpoints[4]
+d_amp <- (subspline$spline.1.551.[d_indx]-subspline$spline.1.551.[o_indx])/2
+
+#specify diastolic peak
+d_y <- d_amp*sin(syst_b*(subspline$x)-7.144)+(82-d_amp)
+
+# Really awkardly take the data that we want to use and nothing else
+syst_y[300:551]<-NA
+d_y[0:200]<-NA
+d_y[480:551] <- NA
+
+#plot resulting sines on waveform
+lines(subspline$x, syst_y, col='red')
+lines(subspline$x, d_y, col='blue')
 
 	
 	# Sense rapid increase as a possible beat                                         
