@@ -1,10 +1,13 @@
 setwd("/home/johanna/Documents/Ninja theory/PulseAnalysis/Data/Craig")
-data <- read.table("Source.csv", header=T, sep=",") #first line of the csv file needs to be deleted
+data <- read.table("Source2.csv", header=T, sep=",") #first line of the csv file needs to be deleted
+
 library(tidyverse)                                  #Have tidyverse packages installed and call tidyverse in library()
 library(TeachingDemos)
 library(splines2)
 library(pracma)
 library(SplinesUtils)
+
+data<-data[!(data$PPG.PulseOx1=='NaN'),]
 
 min_beats_per_minute <- 30
 max_beats_per_minute <- 240
@@ -33,7 +36,7 @@ FNTBioRadioPulse<-function(input)
 # unique values, with an effort to be robust against variation in the repeat pattern and also against 
 # genuine repeated values.
 
-list<-rle(data$PPG.PulseOx1)
+list<-rle(data)
 ID <- rep(1:length(list$values), times = list$lengths)
 data2 <- cbind(data, ID)
 data_downsampled <-c()
