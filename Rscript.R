@@ -142,17 +142,6 @@ points(posneginflexionpoints, deriv1[posneginflexionpoints], col = 'red', pch = 
 plot(spline[1:10000], type = "l")
 points(posneginflexionpoints, spline[posneginflexionpoints], col = 'red', pch = 19)
 
-###lucie
-subspline <- data.frame(spline[1:80])
-subspline$x <- seq.int(nrow(subspline))
-plot(subspline$x, subspline$spline.1.80., type = 'l')
-points(posneginflexionpoints, subspline$spline.1.80.[posneginflexionpoints], col = 'red', pch = 19)
-b <- 2*pi/(abs(4*(posneginflexionpoints[1]-posneginflexionpoints[2])))
-indx <- posneginflexionpoints[2]
-amp <- subspline$spline.1.80.[indx]
-y <- amp*sin(b*(subspline$x)+10)
-lines(subspline$x, y)
-
 ###### Chopping up and plotting all waveforms ########
 #(make sure to have correctly found deriv1 peaks before running)
   
