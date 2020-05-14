@@ -158,6 +158,22 @@ for(i in 1:length(orderedpd1index)){
 colnames(pulse)[1] <- "x"
 
 
+# Create a data frame and fill it with all the chopped 1st derivs
+deriv1_lucie <- data.frame(1:551)
+for(i in 1:length(orderedpd1index)){
+    deriv1_lucie <- cbind(deriv1_lucie, deriv1[(orderedpd1index[i] - 50):(orderedpd1index[i] + 500)])
+    colnames(deriv1_lucie)[i+1] <- paste("wave", i, sep = "_") 
+}
+colnames(deriv1_lucie)[1] <- "x"
+
+#find the peaks of the chopped up 1st derivs
+pd1_l <- c() 
+
+for(i in 2:length((orderedpd1index)+1)){
+x <- findpeaks(deriv1_lucie[,i], threshold=threshold)
+pd1_l[i-1] <- x[,2]
+}
+
 
 ####### Run this section if normalizing #########
 
@@ -300,37 +316,32 @@ ggplot(data = pulse_stacked, aes(x = pulse_stacked$x, y = pulse_stacked$values, 
   geom_line(size = 1.5)+
   geom_line(data=means, aes(x=id, y=av), color="black")
 
-
-
-
-
-
-
-#FindNewBeat
-
-FindNewBeat <- function()
-{
-       ## This is where splines are first fitted 
 	
-	splined_data <- spline(1:200, undetrended_data[1:200])    # extend subset as required, replace 1:200 with time data?
-	plot(splined_data)                                        
-	
-       # Sense rapid increase as a possible beat                                         # 
+#estimating S values for data without clear systolic peaks
+# S value is estimated as W + 2*(V-W)
+s_index <- c()
 
-	spline <- spline(1:500, undetrended_data$PPG.PulseOx1[1:500])  # (in this case to first 100 values)
-	plot(spline, type='l')
-	  #plot(deriv1, type='l')
-	xcoord<-as.vector(spline$x)
-	closestsplines <-c()    #gives you the index of the closes x-coordinate in the spline for each peak
-	for (i in 1:length(peakindex))
-	{
-	  closestsplines[i]<-which(abs(xcoord-(peakindex[i]))==min(abs(xcoord-(peakindex[i]))))
-	}
-	ycoord<-spline$y
-	peakycoord<-ycoord[closestsplines]
-	points(spline$x[c(closestsplines)], spline$y[c(closestsplines)], col = 'red', pch = 19)
-   
- 
+for(i in 1:length(pd1index)){
+s_index[i] <- pd1index[i] + (2*(v_index[i]-pd1index[i]))
+}
+	
+#estimating O values 
+#O is estimated as U - (W-U)
+o_index <- c()
+
+for(i in 1:length(u_index)){
+o_index[i] <- u_index[i] - (pd1index[i]-u_index[i])
+}
+
+#plotting estimted S and O values on original spline
+
+plot(spline, type = "l")
+points(u_index, spline[u_index], col = "red", pch = 19)
+points(v_index, spline[v_index], col = "red", pch = 19)
+points(pd1index, spline[pd1index], col = 'blue', pch = 19)
+points(s_index, spline[s_index], col="green", pch=19)
+points(o_index, spline[o_index], col="green", pch=19)
+
 #Fitting a sine curve badly
 	
 #create a subset of data 
