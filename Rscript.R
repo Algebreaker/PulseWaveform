@@ -108,200 +108,175 @@ plot(spline, type = "l")
 points(pd1index, spline[pd1index], col = 'red', pch = 19)
 
 
-#Finding inflexion points
 
-posneginflexionpoints <- c()
+########## 
 
-for(i in 1:(length(deriv1)-1)){
-  if  (deriv1[i] > 0){
-    if (deriv1[i+1] < 0){
-      newvector <- c(deriv1[i], deriv1[i+1])
-      if ((which(abs(0-newvector) == min(abs(0 - newvector)))) == 1){
-        posneginflexionpoints <- c(posneginflexionpoints, i)
-      }else {
-        posneginflexionpoints <- c(posneginflexionpoints, i+1)
-      }
-    }
-  }else if(deriv1[i] < 0){
-    if(deriv1[i+1] > 0){
-      newvector <- c(deriv1[i], deriv1[i+1])
-      if ((which(abs(0-newvector) == min(abs(0 - newvector)))) == 1){
-        posneginflexionpoints <- c(posneginflexionpoints, i)
-      }else {
-        posneginflexionpoints <- c(posneginflexionpoints, i+1)
-      }
-    }
-  }
+# Turning the undetrended data into a piece-wise polynomial spline (non-discrete): 
+spline_poly <-CubicInterpSplineAsPiecePoly(1:1000, undetrended_data$undetrended[1:1000], "natural")
+
+## Finding W
+
+# Finding inflexion points on deriv1 requires redefining 1st deriv as a piece-meal spline
+deriv1_poly <- CubicInterpSplineAsPiecePoly(1:1000, deriv1, "natural") 
+# Find inflexion points on deriv1_poly
+inflexion_points_deriv1 <- solve(deriv1_poly, b = 0, deriv = 1)
+inflexion_points_deriv1_yval <- predict(deriv1_poly, inflexion_points_deriv1)
+plot(deriv1_poly)
+points(inflexion_points_deriv1, inflexion_points_deriv1_yval, pch = 19)
+# Find correct threshold using histogram
+# hdat<-hist(deriv1)
+quantiles<-quantile(deriv1,probs=c(.025,.95))
+threshold<-quantiles[2]
+# Identifying peaks of deriv1_poly:
+w_poly_peaks <- predict(deriv1_poly, inflexion_points_deriv1)
+w_poly_peaks <- which(w_poly_peaks > threshold)     
+w_poly_peaks <- inflexion_points_deriv1[w_poly_peaks]
+# Plot on deriv1_poly
+plot(deriv1_poly)
+w_poly_peaks_yval <- predict(deriv1_poly, w_poly_peaks)
+points(w_poly_peaks, w_poly_peaks_yval, pch = 19)
+# Plot back on spline_poly:
+plot(spline_poly)
+w_poly_peaks_yval <- predict(spline_poly, w_poly_peaks)
+points(w_poly_peaks, w_poly_peaks_yval, pch = 19)
+
+##Finding U and V
+
+# Find half the height of w (on derivative y-axis)
+w_half_height <- predict(deriv1_poly, w_poly_peaks)/2
+# Find u and v:
+half_heights <- c()
+half_heights_yval <- c()
+for(i in 1:length(w_half_height)){
+  deriv1_poly_peak_subset <- CubicInterpSplineAsPiecePoly((w_poly_peaks[i]-10):(w_poly_peaks[i]+10), deriv1[(w_poly_peaks[i]-10):(w_poly_peaks[i]+10)], "natural") 
+  half_heights_precursor <- solve(deriv1_poly_peak_subset, b = w_half_height[i])
+  half_heights[c((2*(i)-1), (2*(i)))] <- half_heights_precursor
+  half_heights_yval[c((2*(i)-1), (2*(i)))] <- predict(deriv1_poly_peak_subset, half_heights[c((2*(i)-1), (2*(i)))])
 }
+# Plot u's and v's on deriv1_poly
+plot(deriv1_poly)
+points(half_heights, half_heights_yval, pch = 19)
+# Find u and v 
+u <- half_heights[seq_along(half_heights) %%2 != 0] 
+v <- half_heights[seq_along(half_heights) %%2 == 0]   
+# Find u and v y-values for spline_poly
+u_v_yval <- c()
+for(i in 1:length(w_poly_peaks)){
+  spline_poly_peak_subset <- CubicInterpSplineAsPiecePoly((w_poly_peaks[i]-10):(w_poly_peaks[i]+10), spline[(w_poly_peaks[i]-10):(w_poly_peaks[i]+10)], "natural") 
+  u_v_yval[c((2*(i)-1), (2*(i)))] <- predict(spline_poly_peak_subset, half_heights[c((2*(i)-1), (2*(i)))])
+}
+# Plot u's and v's on spline_poly
+plot(spline_poly)
+points(half_heights, u_v_yval, pch = 19)
 
-# Plot inflection points on first derivative
-plot(deriv1, type = "l")
-points(posneginflexionpoints, deriv1[posneginflexionpoints], col = 'red', pch = 19) # plots inflexion points on 1st deriv
 
-# Plot inflection points on original spline
-plot(spline[1:10000], type = "l")
-points(posneginflexionpoints, spline[posneginflexionpoints], col = 'red', pch = 19)
+## Finding a scalar for each wave:
+# Find individual u and v y-values 
+u_yval <- u_v_yval[seq_along(u_v_yval) %%2 != 0] 
+v_yval <- u_v_yval[seq_along(u_v_yval) %%2 == 0]   
+# Find v-u differences
+v_minus_u <- v_yval - u_yval
 
-###### Chopping up and plotting all waveforms ########
-#(make sure to have correctly found deriv1 peaks before running)
-  
-  
-# Putting 1st derivative peak x-coordinates in order
-orderedpd1index <- pd1index[order(pd1index)]
 
-# Create a data frame and fill it with all the chopped waveforms
-pulse <- data.frame(1:551)
-for(i in 1:length(orderedpd1index)){
-    pulse <- cbind(pulse, spline[(orderedpd1index[i] - 50):(orderedpd1index[i] + 500)])
+## Chopping up the original data_undetrended into individual waves:
+sourcedata <- undetrended_data$undetrended[1:1000]
+pulse <- data.frame(1:91)
+for(i in 1:length(w_poly_peaks)){
+  if(i == 1){
+    pulse <- cbind(pulse, sourcedata[1:91])     # Special case for first wave needed as you cannot specify elements further back than 0
+    }
+  else 
+    pulse <- cbind(pulse, sourcedata[(round(w_poly_peaks[i]) - 15):(round(w_poly_peaks[i]) + 75)])
     colnames(pulse)[i+1] <- paste("wave", i, sep = "_") 
 }
 colnames(pulse)[1] <- "x"
-
-
-# Create a data frame and fill it with all the chopped 1st derivs
-deriv1_lucie <- data.frame(1:551)
-for(i in 1:length(orderedpd1index)){
-    deriv1_lucie <- cbind(deriv1_lucie, deriv1[(orderedpd1index[i] - 50):(orderedpd1index[i] + 500)])
-    colnames(deriv1_lucie)[i+1] <- paste("wave", i, sep = "_") 
-}
-colnames(deriv1_lucie)[1] <- "x"
-
-#find the peaks of the chopped up 1st derivs
-pd1_l <- c() 
-
-for(i in 2:length((orderedpd1index)+1)){
-x <- findpeaks(deriv1_lucie[,i], threshold=threshold)
-pd1_l[i-1] <- x[,2]
-}
-
-
-####### Run this section if normalizing #########
-
-## Find half the height of w (on derivative y-axis)
-
-w_peaks <- pd1[, 1]                             # create vector of w y-coordinates
-w_peaks_ordered <- w_peaks[order(pd1index)]     
-w_half_height <- w_peaks_ordered/2              # create vector of half w heights
-
-
-## Find u 
-
-u <- c()
-
-u_index <- c()
-
-for(i in 1:length(orderedpd1index)){
-  
-  # find the element of deriv1 to start searching for u from
-  i_minus_50 <- orderedpd1index[i] - 50            
-  
-  # find the element of i-50:i that is closest to u
-  u_precursor <- which(abs(w_half_height[i] - deriv1[i_minus_50: orderedpd1index[i]]) ==  min(abs(w_half_height[i] - deriv1[i_minus_50: orderedpd1index[i]])))   
-  
-  # find the element of deriv1 corresponding to u
-  u_index[i] <- i_minus_50 + u_precursor - 1        
-  
-  # find the point on the y axis of deriv1 corresponding to u
-  u[i] <- deriv1[i_minus_50 + u_precursor - 1]      
-  
-}
-
-## Find v
-
-v <- c()
-
-v_index <- c()
-
-for(i in 1:length(orderedpd1index)){
-  
-  i_plus_50 <- orderedpd1index[i] + 50   
-  
-  v_precursor <- which(abs(w_half_height[i] - deriv1[orderedpd1index[i]:i_plus_50]) ==  min(abs(w_half_height[i] - deriv1[orderedpd1index[i]:i_plus_50])))   
-  
-  v_index[i] <- orderedpd1index[i] + v_precursor - 1      
-  
-  v[i] <- deriv1[orderedpd1index[i] + v_precursor - 1]     
-  
-}
-
-## Plot u and v on deriv1 
-plot(deriv1, type = "l")
-points(u_index, u, col = "red", pch = 19)      # Note that u-v pairs are not exactly the same height, 
-points(v_index, v, col = "red", pch = 19)      # this is a limitation of the discrete nature of the data. 
-
-# Plot u and v on original spline
-plot(spline, type = "l")
-points(u_index, spline[u_index], col = "red", pch = 19)
-points(v_index, spline[v_index], col = "red", pch = 19)
-
-
-## Scale all waveforms such that the difference (v - u) on spline y-axis is equal to 1 
-
-# Find difference for all waves
-
-u_v_differences <- c()
-
-for(i in 1:length(orderedpd1index)){
-  
-  u_v_differences[i] <- spline[v_index[i]] - spline[u_index[i]]     
-  
-}
-
-# Scale such that difference (v-u) = 1
-
-scale_u_v <- u_v_differences/1      
-
-
-for(i in 2:ncol(pulse)){                           
-  
-  pulse[, i] <- pulse[, i]/scale_u_v[i-1]        
-  
-}
-
-
-######### End of normalizing section ##########
-
-
-# At this point all the waves will be lined up on the x-axis, but not the y-axis. 
-# Adjust y axis values so that all w's are same value (this will be element 51 on every wave)
-
-y_axis_differences <- c()
-
-for(i in 2:ncol(pulse)) {
-  
+# Find the minimum of each chopped waveset within first 30 elements (should be approximately* o), 
+# and then take the y values down by that much such that o is zero. 
+precurser_o <- c()
+for(i in 2:ncol(pulse)){
   wave <- pulse[, i]
-  
-  y_axis_differences[i-1] <- pulse$wave_1[51] - wave[51]   # finds the difference between w points and wave 1's w points
-  
+  wave30 <- wave[1:30]
+  precurser_o[i-1] <- min(wave30)
+}
+for(i in 2:ncol(pulse)){
+  pulse[, i] <- pulse[, i] - precurser_o[i-1]
 }
 
-# Update dataframe with y-adjusted values 
+
+## Scale each wave by its own scalar
+for(i in 2:ncol(pulse)){                                  
+  pulse[, i] <- pulse[, i]/v_minus_u[i-1]        
+}
+
+
+## Now that data is scaled and y-axis normalized*, create a new polynomial spline for each wave
+poly_wave <- list()
+for(i in 2:ncol(pulse)){
+  poly_wave[[i-1]] <-CubicInterpSplineAsPiecePoly(1:length(pulse[, i]), pulse[, i], "natural")
+}
+
+
+## Find U, V, W, O, S, N, D on the new polynomial splines:
+osnd <- list()
 
 for(i in 2:ncol(pulse)){
   
-  pulse[, i] <- pulse[, i] + y_axis_differences[i-1]   # adds the differences so that all waves have the same y value for w
+  sfunction2 <- splinefun(1:91, pulse[, i], method = "natural")
+  deriv1_wave <- sfunction2(seq(1, 91), deriv = 1)
+  deriv1_wave_poly <- CubicInterpSplineAsPiecePoly(1:91, deriv1_wave, "natural") 
+  
+  # Find inflexion points on deriv1_wave_poly
+  inflexion_points_deriv1_wave_poly <- solve(deriv1_wave_poly, b = 0, deriv = 1)
+  inflexion_points_deriv1_wave_poly_yval <- predict(deriv1_wave_poly, inflexion_points_deriv1_wave_poly)
+  # plot(deriv1_wave_poly)
+  # points(inflexion_points_deriv1_wave_poly, inflexion_points_deriv1_wave_poly_yval, pch = 19)
+  
+  # Find correct threshold using histogram
+  # hdat<-hist(deriv1_wave)
+  quantiles<-quantile(deriv1_wave, probs=c(.025,.95))
+  threshold<-quantiles[2]
+  
+  # Identifying peaks of deriv1_poly:
+  w_poly_peaks_wave <- predict(deriv1_wave_poly, inflexion_points_deriv1_wave_poly)
+  w_poly_peaks_wave <- which(w_poly_peaks_wave > threshold)     
+  w_poly_peaks_wave <- inflexion_points_deriv1_wave_poly[w_poly_peaks_wave]
+  
+  # Plot on deriv1_wave_poly
+  # plot(deriv1_wave_poly)
+  # w_poly_peaks_yval <- predict(deriv1_wave_poly, w_poly_peaks_wave)
+  # points(w_poly_peaks_wave, w_poly_peaks_yval, pch = 19)
+  
+  #Find U and V
+  
+  # Find half the height of w (on derivative y-axis)
+  w_half_height_wave <- predict(deriv1_wave_poly, w_poly_peaks_wave[1])/2
+  # Find u and v for derivative:
+  half_heights_wave_new <- solve(deriv1_wave_poly, b = w_half_height_wave[1])
+  half_heights_wave_new_yval <- predict(deriv1_wave_poly, half_heights_wave_new)
+  u <- half_heights_wave_new[1]
+  v <- half_heights_wave_new[2]
+  # Find u and v y-values for original wave:
+  u_v_yval_wave <- predict(poly_wave[[i-1]], half_heights_wave_new)
+  u_yval <- u_v_yval_wave[1]
+  v_yval <- u_v_yval_wave[2]
+
+  
+  # Find OSND
+  inflexion_points_new <- solve(poly_wave[[i-1]], b = 0, deriv = 1)
+  #Find the four inflexion points that are 1 to the left and 3 to the right of W
+  o <- max(which(inflexion_points_new < w_poly_peaks_wave[1]))
+  inflexion_points_new_yval <- predict(poly_wave[[i-1]], inflexion_points_new)
+  osnd[[i-1]] <- inflexion_points_new_yval[o:(o+3)]
+  osnd[[i-1]] <- osnd[[i-1]] - inflexion_points_new_yval[o]
+  
+  # Plot back on poly_wave[[i]]:
+  plot(poly_wave[[i-1]])
+  w_poly_peaks_yval <- predict(poly_wave[[i-1]], w_poly_peaks_wave)
+  points(w_poly_peaks_wave[1], w_poly_peaks_yval[1], pch = 19)
+  points(inflexion_points_new, inflexion_points_new_yval, pch = 19)
+  points(half_heights_wave_new, u_v_yval_wave, pch = 19)
   
 }
-
-
-# Adjust such that u = 0, v = 1, w = 0.5
-
-pulse[, 2:ncol(pulse)] <- pulse[, 2:ncol(pulse)] - pulse$wave_1[51] + 0.5
-
-
-# Subset dataframe here if you need to remove columns / waves  
-
-# Stack the data frame
-
-pulse_stacked <- gather(pulse, key = "wave_ID", value = "values", -c("x"))
-
-# Plot and overlay the waveforms
-
-ggplot(data = pulse_stacked, aes(x = pulse_stacked$x, y = pulse_stacked$values, col = pulse_stacked$wave_ID)) + geom_line(size = 1.5) # + ylim(-0.25, 1.25) for source.csv
-
-#########
-
-
 
 
 
