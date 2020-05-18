@@ -249,7 +249,7 @@ for(i in 2:ncol(pulse)){
   points(w_poly_peaks_wave[1], w_poly_peaks_yval[1], pch = 19)
   points(inflexion_points_new, inflexion_points_new_yval, pch = 19)
   points(half_heights_wave_new, u_v_yval_wave, pch = 19)
-  
+  points(notch, notch_poly_yval, pch = 19)
 }
 
 
