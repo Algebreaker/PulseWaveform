@@ -210,6 +210,15 @@ for(i in 2:ncol(pulse)){
   # plot(deriv1_wave_poly)
   # w_poly_peaks_yval <- predict(deriv1_wave_poly, w_poly_peaks_wave)
   # points(w_poly_peaks_wave, w_poly_peaks_yval, pch = 19)
+	
+  #Identifying 'notch' of deriv1_poly (for use on non-canonical waveforms):
+  # take minimum inflection point and then find the next one
+  notch <- inflexion_points_deriv1_wave_poly[(which(inflexion_points_deriv1_wave_poly_yval == min(inflexion_points_deriv1_wave_poly_yval)))+1]
+  notch_yval <- inflexion_points_deriv1_wave_poly_yval[(which(inflexion_points_deriv1_wave_poly_yval == min(inflexion_points_deriv1_wave_poly_yval)))+1]
+  plot(deriv1_wave_poly)
+  points(notch, notch_yval, pch = 19)
+  #Find corresponding y value on poly_wave
+  notch_poly_yval <- predict(poly_wave[[i-1]], notch)
   
   #Find U and V
   
