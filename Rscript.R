@@ -67,47 +67,12 @@ undetrended_data<-cbind(data_downsampled,undetrended)
 ## create spline + derivatives 
 #to get y value from x value just use sfunction(x)
 sfunction <- splinefun(1:1000, undetrended_data$undetrended[1:1000], method = "natural")
-spline <- sfunction(seq(1, 1000, 0.1), deriv = 0)
-deriv1 <- sfunction(seq(1, 1000, 0.1), deriv = 1)
-deriv2 <- sfunction(seq(1, 1000, 0.1), deriv = 2)
+spline <- sfunction(seq(1, 1000), deriv = 0)
+deriv1 <- sfunction(seq(1, 1000), deriv = 1)
+deriv2 <- sfunction(seq(1, 1000), deriv = 2)
 
 spl<-CubicInterpSplineAsPiecePoly(1:50, undetrended_data$undetrended[1:50], "natural")
 yval <- solve(spl, b = 78) #returns a vector with all equations of piecewise polynomials that yield this y-value (2.85 in this case)
-
-
-###find peak values for individual thresholding
-hdat<-hist(deriv1)
-quantiles<-quantile(deriv1,probs=c(.025,.95))
-threshold<-quantiles[2]
-#as density plot
-plot(density(deriv1))
-
-# Finding peaks of the first derivative
-pd1 <-findpeaks(deriv1, threshold=threshold)     # this will need to be fine tuned
-
-# Plot points of peaks on first derivative
-plot(deriv1, type = "l")
-points(pd1[,2], pd1[,1], col = 'red', pch = 19)
-
-# Finding second peaks of the first derivative (point "s") by first finding both w and s
-pd2 <-findpeaks(deriv1, threshold=0.3)     # this will need to be fine tuned
-# Plot points of peaks on first derivative
-plot(deriv1, type = "l")
-points(pd2[,2], pd2[,1], col = 'red', pch = 19)
-#now find Z by cancelling out W
-if (pd1[1]==pd2[1]){pd3 = pd2[seq(2, nrow(pd2), 2), ]# keep all even numbered elements in pd2 if the first value in the two vectors is the same (i.e. a w point)
-}else { #else keep all odd numbered elements
-  pd3 = pd2[seq(1, nrow(pd2), 2), ]
-}
-
-# Create vector of all x axis coordinates of peaks of first derivative
-pd1index <- pd1[, 2]
-
-# Plot deriv1 peaks on original spline
-plot(spline, type = "l")
-points(pd1index, spline[pd1index], col = 'red', pch = 19)
-
-
 
 ########## 
 
