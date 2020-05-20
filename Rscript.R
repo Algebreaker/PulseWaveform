@@ -183,77 +183,102 @@ for(i in 2:ncol(pulse)){
 
 ## Find U, V, W, O, S, N, D on the new polynomial splines:
 osnd <- list()
+s <- c()
+s_yval <- c()
+x_osnd <- list()
 
-for(i in 2:ncol(pulse)){
+
+for(i in 3:ncol(pulse)){
   
   sfunction2 <- splinefun(1:91, pulse[, i], method = "natural")
   deriv1_wave <- sfunction2(seq(1, 91), deriv = 1)
   deriv1_wave_poly <- CubicInterpSplineAsPiecePoly(1:91, deriv1_wave, "natural") 
   
-  # Find inflexion points on deriv1_wave_poly
+# Find inflexion points on deriv1_wave_poly
   inflexion_points_deriv1_wave_poly <- solve(deriv1_wave_poly, b = 0, deriv = 1)
   inflexion_points_deriv1_wave_poly_yval <- predict(deriv1_wave_poly, inflexion_points_deriv1_wave_poly)
-  # plot(deriv1_wave_poly)
-  # points(inflexion_points_deriv1_wave_poly, inflexion_points_deriv1_wave_poly_yval, pch = 19)
+    plot(deriv1_wave_poly) 
+    points(inflexion_points_deriv1_wave_poly, inflexion_points_deriv1_wave_poly_yval, pch = 19)
   
-  # Find correct threshold using histogram
-  # hdat<-hist(deriv1_wave)
-  quantiles<-quantile(deriv1_wave, probs=c(.025,.95))
-  threshold<-quantiles[2]
+# Find correct threshold using histogram
+  hdat_2<-hist(deriv1_wave)
+  quantiles_2<-quantile(deriv1_wave, probs=c(.025,.95))
+  threshold_2<-quantiles_2[2]
   
-  # Identifying peaks of deriv1_poly:
+# Identifying peaks of deriv1_poly:
   w_poly_peaks_wave <- predict(deriv1_wave_poly, inflexion_points_deriv1_wave_poly)
-  w_poly_peaks_wave <- which(w_poly_peaks_wave > threshold)     
+  w_poly_peaks_wave <- which(w_poly_peaks_wave > threshold_2)     
   w_poly_peaks_wave <- inflexion_points_deriv1_wave_poly[w_poly_peaks_wave]
   
-  # Plot on deriv1_wave_poly
-  # plot(deriv1_wave_poly)
-  # w_poly_peaks_yval <- predict(deriv1_wave_poly, w_poly_peaks_wave)
-  # points(w_poly_peaks_wave, w_poly_peaks_yval, pch = 19)
-	
-  #Identifying 'notch' of deriv1_poly (for use on non-canonical waveforms):
-  # take minimum inflection point and then find the next one
-  notch <- inflexion_points_deriv1_wave_poly[(which(inflexion_points_deriv1_wave_poly_yval == min(inflexion_points_deriv1_wave_poly_yval)))+1]
-  notch_yval <- inflexion_points_deriv1_wave_poly_yval[(which(inflexion_points_deriv1_wave_poly_yval == min(inflexion_points_deriv1_wave_poly_yval)))+1]
-  plot(deriv1_wave_poly)
-  points(notch, notch_yval, pch = 19)
-  #Find corresponding y value on poly_wave
-  notch_poly_yval <- predict(poly_wave[[i-1]], notch)
+# Plot on deriv1_wave_poly
+# plot(deriv1_wave_poly)
+# w_poly_peaks_yval <- predict(deriv1_wave_poly, w_poly_peaks_wave)
+# points(w_poly_peaks_wave, w_poly_peaks_yval, pch = 19)
   
-  #Find U and V
+#Find U and V
   
-  # Find half the height of w (on derivative y-axis)
+# Find half the height of w (on derivative y-axis)
   w_half_height_wave <- predict(deriv1_wave_poly, w_poly_peaks_wave[1])/2
-  # Find u and v for derivative:
+# Find u and v for derivative:
   half_heights_wave_new <- solve(deriv1_wave_poly, b = w_half_height_wave[1])
   half_heights_wave_new_yval <- predict(deriv1_wave_poly, half_heights_wave_new)
   u <- half_heights_wave_new[1]
   v <- half_heights_wave_new[2]
-  # Find u and v y-values for original wave:
+# Find u and v y-values for original wave:
   u_v_yval_wave <- predict(poly_wave[[i-1]], half_heights_wave_new)
   u_yval <- u_v_yval_wave[1]
   v_yval <- u_v_yval_wave[2]
 
   
-  # Find OSND
+# Find OSND
   inflexion_points_new <- solve(poly_wave[[i-1]], b = 0, deriv = 1)
-  #Find the four inflexion points that are 1 to the left and 3 to the right of W
+#Find the four inflexion points that are 1 to the left and 3 to the right of W
   o <- max(which(inflexion_points_new < w_poly_peaks_wave[1]))
   inflexion_points_new_yval <- predict(poly_wave[[i-1]], inflexion_points_new)
+  x_osnd[[i-1]] <- inflexion_points_new[o:(o+3)]
   osnd[[i-1]] <- inflexion_points_new_yval[o:(o+3)]
   osnd[[i-1]] <- osnd[[i-1]] - inflexion_points_new_yval[o]
   
-  # Plot back on poly_wave[[i]]:
+#Alternative S calculation for waveforms with undefined peaks
+  
+  s[i-1] <- w_poly_peaks_wave + (2*(v - w_poly_peaks_wave))
+  s_yval[i-1] <- predict(poly_wave[[i-1]], s[i-1])
+  
+  if((inflexion_points_new[o+1] - w_poly_peaks_wave) > (s[i-1] - w_poly_peaks_wave)){
+  osnd[[c(i-1,2)]] <- s_yval[i-1]
+  }
+   
+# Plot back on poly_wave[[i]]:
   plot(poly_wave[[i-1]])
   w_poly_peaks_yval <- predict(poly_wave[[i-1]], w_poly_peaks_wave)
   points(w_poly_peaks_wave[1], w_poly_peaks_yval[1], pch = 19)
   points(inflexion_points_new, inflexion_points_new_yval, pch = 19)
-  points(half_heights_wave_new, u_v_yval_wave, pch = 19)
-  points(notch, notch_poly_yval, pch = 19)
+  points(s[i-1], s_yval[i-1], pch=19, col='red')
+# points(half_heights_wave_new, u_v_yval_wave, pch = 19)
+  
 }
 
 
+###sines sines sines 
 
+plot(pulse$x, pulse$wave_3, type = 'l')
+
+#identify the different systolic variables to be entered into the sine eq
+#b is defined as 2pi/2*O-S
+syst_b <- (2*pi)/(abs(2*(x_osnd[[c(3,1)]]-x_osnd[[c(3,2)]])))
+s_indx <- x_osnd[[c(3,2)]]
+o_indx <- x_osnd[[c(3,1)]]
+s_amp <- (pulse$wave_3[s_indx]-pulse$wave_3[o_indx])/2
+
+#specify systolic peak
+###I DON'T KNOW HOW TO SPECIFY THE PHASE
+syst_y <- s_amp*sin(syst_b*(pulse$x)+0)+(osnd[[c(3,2)]]-s_amp)
+
+twice_s_o <- 2*(s_indx-o_indx)
+syst_y[0:o_indx]<-0
+syst_y[twice_s_o:length(syst_y)] <- 0 
+
+lines(pulse$x, syst_y, col='red')
 
 
 ########
