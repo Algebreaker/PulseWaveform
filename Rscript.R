@@ -9,26 +9,6 @@ library(SplinesUtils)
 
 data<-data[!(data$PPG.PulseOx1=='NaN'),]
 
-min_beats_per_minute <- 30
-max_beats_per_minute <- 240
-min_interval <- 0.25
-max_interval <- 4
-min_amplitude <- 0.5
-min_frac_amplitude <- 0.2
-sample_rate <- 75
-peak_interval <- 9
-peak_width <- 2.7   # Should peak width be an array of differing widths per peak?
-skipped_beat_fraction <- 1.75
-
-#main function
-FNTBioRadioPulse<-function(input)
-{
-}
-
-
-# Ignore public functions for now
-# Ignore RestoreState for now
-
 
 #Downsample
 # The BioRadio device provides 250 samples per second, but the PPG is only sampled 75 times per second, 
