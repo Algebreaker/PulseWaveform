@@ -462,24 +462,45 @@ for(i in 1:length(osnd)){
 
 ###sines sines sines 
 
-plot(pulse$x, pulse$wave_3, type = 'l')
 
-#identify the different systolic variables to be entered into the sine eq
-#b is defined as 2pi/2*O-S
-syst_b <- (2*pi)/(abs(2*(x_osnd[[c(3,1)]]-x_osnd[[c(3,2)]])))
-s_indx <- x_osnd[[c(3,2)]]
-o_indx <- x_osnd[[c(3,1)]]
-s_amp <- (pulse$wave_3[s_indx]-pulse$wave_3[o_indx])/2
+pre_phase_test <- list()
+post_phase_test <- list()
 
-#specify systolic peak
-###I DON'T KNOW HOW TO SPECIFY THE PHASE
-syst_y <- s_amp*sin(syst_b*(pulse$x)+0)+(osnd[[c(3,2)]]-s_amp)
 
-twice_s_o <- 2*(s_indx-o_indx)
-syst_y[0:o_indx]<-0
-syst_y[twice_s_o:length(syst_y)] <- 0 
+for(i in 2:((ncol(pulse))-1)){
 
-lines(pulse$x, syst_y, col='red')
+  
+  plot(pulse[,1], pulse[,i], type = 'l')
+
+  #identify the different systolic variables to be entered into the sine eq
+  #b is defined as 2*O-S
+  syst_b <- (2*pi)/abs(2*(x_osnd[[i]][1]-x_osnd[[i]][2]))
+  s_indx <- x_osnd[[i]][2]
+  o_indx <- x_osnd[[i]][1]
+  s_amp <- (pulse[,i][s_indx] - pulse[,i][o_indx])/2
+  
+  syst_y <- s_amp*sin(syst_b*(pulse[,1])+0)+(osnd[[i]][2]-s_amp)
+  pre_phase_test[[i-1]] <- syst_y
+  
+  lines(pulse[,1], syst_y, col='red')
+
+  
+  #estimate phase from the sine wave
+  #this DOESN'T WORK AND I DON'T KNOW WHY
+  syst_y_peak <- findpeaks(syst_y) 
+  xval <- approx(x=syst_y, y = pulse[,1], xout = syst_y_peak[2])$y
+  
+  #phase estimation - 360 * time delay / period
+  phase_est <- (360*(x_osnd[[i]][2]-xval))/((2*pi)/syst_b)
+  
+  syst_y_phase <- s_amp*sin(syst_b*(pulse[,1])+phase_est)+(osnd[[i]][2]-s_amp)
+  post_phase_test[[i-1]] <- syst_y_phase
+  
+  lines(pulse[,1], syst_y_phase, col = 'green')
+  
+
+}
+
 
 
 ########
@@ -490,68 +511,6 @@ means <- data.frame(id=1:length(averagetrace), av=averagetrace)
 ggplot(data = pulse_stacked, aes(x = pulse_stacked$x, y = pulse_stacked$values, col = pulse_stacked$wave_ID)) +
   geom_line(size = 1.5)+
   geom_line(data=means, aes(x=id, y=av), color="black")
-
-	
-#estimating S values for data without clear systolic peaks
-# S value is estimated as W + 2*(V-W)
-s_index <- c()
-
-for(i in 1:length(pd1index)){
-s_index[i] <- pd1index[i] + (2*(v_index[i]-pd1index[i]))
-}
-	
-#estimating O values 
-#O is estimated as U - (W-U)
-o_index <- c()
-
-for(i in 1:length(u_index)){
-o_index[i] <- u_index[i] - (pd1index[i]-u_index[i])
-}
-
-#plotting estimted S and O values on original spline
-
-plot(spline, type = "l")
-points(u_index, spline[u_index], col = "red", pch = 19)
-points(v_index, spline[v_index], col = "red", pch = 19)
-points(pd1index, spline[pd1index], col = 'blue', pch = 19)
-points(s_index, spline[s_index], col="green", pch=19)
-points(o_index, spline[o_index], col="green", pch=19)
-
-#Fitting a sine curve badly
-	
-#create a subset of data 
-	
-subspline <- data.frame(spline[1:551]) 
-subspline$x <- seq.int(nrow(subspline))
-
-#plot the subset with the inflexion points 
-plot(subspline$x, subspline$spline.1.551., type = 'l')
-points(posneginflexionpoints, subspline$spline.1.551.[posneginflexionpoints], col = 'red', pch = 19)
-
-#identify the different systolic variables to be entered into the sine eq
-syst_b <- (2*pi)/(abs(2*(posneginflexionpoints[1]-posneginflexionpoints[2])))
-s_indx <- posneginflexionpoints[2]
-o_indx <- posneginflexionpoints[1]
-s_amp <- (subspline$spline.1.551.[s_indx]-subspline$spline.1.551.[o_indx])/2
-
-#specifysystolic peak
-syst_y <- s_amp*sin(syst_b*(subspline$x)+3.744)+(84-amp)
-
-#identify the different disatolic variables 
-d_indx <- posneginflexionpoints[4]
-d_amp <- (subspline$spline.1.551.[d_indx]-subspline$spline.1.551.[o_indx])/2
-
-#specify diastolic peak
-d_y <- d_amp*sin(syst_b*(subspline$x)-7.144)+(82-d_amp)
-
-# Really awkardly take the data that we want to use and nothing else
-syst_y[300:551]<-NA
-d_y[0:200]<-NA
-d_y[480:551] <- NA
-
-#plot resulting sines on waveform
-lines(subspline$x, syst_y, col='red')
-lines(subspline$x, d_y, col='blue')
 
 	
 	# Sense rapid increase as a possible beat                                         
