@@ -258,6 +258,7 @@ s <- c()
 s_yval <- c()
 next_o <- c()
 next_o_yval <- c()
+x <- c(0:35)
 
 for(i in 2:(ncol(pulse))){     # start from 3 for source 2 data, start from 2 for source data
   
@@ -380,6 +381,8 @@ for(i in 2:(ncol(pulse))){     # start from 3 for source 2 data, start from 2 fo
   next_o[i-1] <- inflexion_points_new[(which(abs(inflexion_points_new_yval[-c(1:3)]) == min(abs(inflexion_points_new_yval[-c(1:3)])))) + 3]
   next_o_yval[i-1] <- inflexion_points_new_yval[which(abs(inflexion_points_new_yval[-c(1:3)]) == min(abs(inflexion_points_new_yval[-c(1:3)]))) + 3]
 
+  # Finding first Sine
+  y <- ((osnd[[c(i-1, 2)]] -  osnd[[c(i-1, 1)]])/2) * sin(((2*pi)/((x_osnd[[c(i-1, 2)]] -  x_osnd[[c(i-1, 1)]])*2))  * (x - xval_width[1])) + (osnd[[c(i-1, 2)]]/2)
   
   # Plot back on poly_wave[[i]]:
   plot(poly_wave[[i-1]])
@@ -389,6 +392,7 @@ for(i in 2:(ncol(pulse))){     # start from 3 for source 2 data, start from 2 fo
   if(length(inflexion_points_new) > 3){
   points(next_o[i-1], next_o_yval[i-1], pch = 19)
   }
+  lines(x, y, col = 'red')
   #points(half_heights_wave_new, u_v_yval_wave, pch = 19)
   #points(notch, notch_poly_yval, pch = 19)
   
