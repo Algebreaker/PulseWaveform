@@ -259,8 +259,9 @@ s_yval <- c()
 next_o <- c()
 next_o_yval <- c()
 x <- c(0:35)
+s_sine <- list()
 
-for(i in 2:(ncol(pulse))){     # start from 3 for source 2 data, start from 2 for source data
+for(i in 3:(ncol(pulse))){     # start from 3 for source 2 data, start from 2 for source data
   
   sfunction2 <- splinefun(1:source_data_column_length, pulse[, i], method = "natural")
   deriv1_wave <- sfunction2(seq(1, source_data_column_length), deriv = 1)
@@ -375,14 +376,21 @@ for(i in 2:(ncol(pulse))){     # start from 3 for source 2 data, start from 2 fo
   xval_width <- solve(poly_wave[[i-1]], b = half_amp)
   # Calculate width from the first two x-values:
   pulse_width[i-1] <- xval_width[2] - xval_width[1]
+
   
   # Find the next o_point
   
   next_o[i-1] <- inflexion_points_new[(which(abs(inflexion_points_new_yval[-c(1:3)]) == min(abs(inflexion_points_new_yval[-c(1:3)])))) + 3]
   next_o_yval[i-1] <- inflexion_points_new_yval[which(abs(inflexion_points_new_yval[-c(1:3)]) == min(abs(inflexion_points_new_yval[-c(1:3)]))) + 3]
+  
 
   # Finding first Sine
   y <- ((osnd[[c(i-1, 2)]] -  osnd[[c(i-1, 1)]])/2) * sin(((2*pi)/((x_osnd[[c(i-1, 2)]] -  x_osnd[[c(i-1, 1)]])*2))  * (x - xval_width[1])) + (osnd[[c(i-1, 2)]]/2)
+  
+  y[0:x_osnd[[c(i-1,1)]]]<-0
+  
+
+  
   
   # Plot back on poly_wave[[i]]:
   plot(poly_wave[[i-1]])
@@ -396,6 +404,10 @@ for(i in 2:(ncol(pulse))){     # start from 3 for source 2 data, start from 2 fo
   #points(half_heights_wave_new, u_v_yval_wave, pch = 19)
   #points(notch, notch_poly_yval, pch = 19)
   
+  y[37:(nrow(pulse))] <-0
+  s_sine[[i-2]] <- y 
+  
+  
 }
 
 #Print all osnd's
@@ -404,6 +416,21 @@ for(i in 1:length(osnd)){
   osnd_correction <- osnd_correction - osnd_correction[1]
   osnd[[i]] <- osnd_correction
   print(osnd[[i]])
+}
+
+
+resid_test <- list()
+
+for(i in 2:(ncol(pulse))){
+  
+  resid_test[[i-1]] <- pulse[,i]-s_sine[[i-1]]
+  
+  plot(pulse$x, pulse[,i], type = 'l')
+  lines(1:(nrow(pulse)), s_sine[[i-1]], col = 'red')
+  lines(1:(nrow(pulse)), resid_test[[i-1]], col = 'green')
+  points(x_osnd[[i-1]], osnd[[i-1]], pch = 19, col = "red")
+  
+  
 }
 
 ## Features (canonical waveform first):
