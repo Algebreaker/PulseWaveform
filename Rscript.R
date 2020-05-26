@@ -489,7 +489,28 @@ for(i in 1:length(osnd)){
   CT[i] <- x_osnd[[c(i, 2)]] - x_osnd[[c(i, 1)]]
 }
 
-
+# Inflexion point area ratio (For canonical waveform use c(i, 3), if using inflection point then use c(i, 4)):
+ipa_ratio <- c()
+for(i in 1:(length(poly_wave)-1)){
+  f <- c(x_osnd[[c(i, 1)]]:x_osnd[[c(i, 3)]], x_osnd[[c(i, 3)]])
+  g <- predict(poly_wave[[i]], f)
+  j <- c(x_osnd[[c(i, 3)]]:next_o[i], next_o[i])
+  k <- predict(poly_wave[[i]], j)
+  auc_systole <- AUC(f, g, method = "spline")
+  if(sum(j < 0) > 0){
+    poly_wave_diastole_subset <-CubicInterpSplineAsPiecePoly(j, k, "natural")
+    zero_crossing <- solve(poly_wave_diastole_subset, b = 0) 
+    zero_crossing_yval <- predict(poly_wave_diastole_subset, zero_crossing)
+    first_zero_crossing <- zero_crossing[min(which(zero_crossing > (x_osnd[[c(i, 1)]] + 30)))]   # first element that crosses 0 on the waves descent
+    j <- c(x_osnd[[c(i, 3)]]:first_zero_crossing, first_zero_crossing)
+    k <- predict(poly_wave[[i]], j)
+    auc_diastole <- AUC(j, k, method = "spline")
+  }else{
+    auc_diastole <- AUC(j, k, method = "spline")
+  }
+  ipa_ratio[i] <- auc_diastole / auc_systole
+  print(auc_diastole + auc_systole)
+}
 
 ###sines sines sines 
 
