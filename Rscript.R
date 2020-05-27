@@ -258,10 +258,12 @@ s <- c()
 s_yval <- c()
 next_o <- c()
 next_o_yval <- c()
-x <- c(0:35)
+x <- c(1:36)
+d_x <-c(1:60)
 s_sine <- list()
+d_sine <- list()
 
-for(i in 3:(ncol(pulse))){     # start from 3 for source 2 data, start from 2 for source data
+for(i in 2:(ncol(pulse))){     # start from 3 for source 2 data, start from 2 for source data
   
   sfunction2 <- splinefun(1:source_data_column_length, pulse[, i], method = "natural")
   deriv1_wave <- sfunction2(seq(1, source_data_column_length), deriv = 1)
@@ -383,12 +385,29 @@ for(i in 3:(ncol(pulse))){     # start from 3 for source 2 data, start from 2 fo
   next_o[i-1] <- inflexion_points_new[(which(abs(inflexion_points_new_yval[-c(1:3)]) == min(abs(inflexion_points_new_yval[-c(1:3)])))) + 3]
   next_o_yval[i-1] <- inflexion_points_new_yval[which(abs(inflexion_points_new_yval[-c(1:3)]) == min(abs(inflexion_points_new_yval[-c(1:3)]))) + 3]
   
-
-  # Finding first Sine
-  y <- ((osnd[[c(i-1, 2)]] -  osnd[[c(i-1, 1)]])/2) * sin(((2*pi)/((x_osnd[[c(i-1, 2)]] -  x_osnd[[c(i-1, 1)]])*2))  * (x - xval_width[1])) + (osnd[[c(i-1, 2)]]/2)
+	
+  #Define period as 3*v-u
+  period <- 3*(v-u)
   
-  y[0:x_osnd[[c(i-1,1)]]]<-0
+  #Define phi and replace all values larger than pi with pi, and all values smaller than -pi with -pi. This ensures a single peak
+  phi <- ((2*pi)/period)  * (x-(w_poly_peaks_wave[1]+(period/4)))
+  phi[phi>(pi)] <- pi
+  phi[phi<(-pi)] <- -pi
+	
+	
+  # Finding S peak 
+  # y = (S-O)/2 * cos(phi) + S/2
+  y <-((osnd[[c(i-1, 2)]] -  osnd[[c(i-1, 1)]])/2) * cos(phi) + (osnd[[c(i-1, 2)]]/2) 
+  #the last bit (s/2) only works if O is always 0 - otherwise should be (O+S)/2 
+ 
   
+  #Defining phi for the D peak
+  d_phi <- ((2*pi)/period)  * (d_x-(x_osnd[[c(i-1,4)]]))
+  d_phi[d_phi>(pi)] <- pi
+  d_phi[d_phi<(-pi)] <- -pi
+	
+  #Finding the sine for the D peak
+  d_y <- ((osnd[[c(i-1,4)]]-osnd[[c(i-1, 1)]])/2) * cos(d_phi) + (osnd[[c(i-1,4)]]/2)
 
   
   
@@ -404,8 +423,10 @@ for(i in 3:(ncol(pulse))){     # start from 3 for source 2 data, start from 2 fo
   #points(half_heights_wave_new, u_v_yval_wave, pch = 19)
   #points(notch, notch_poly_yval, pch = 19)
   
-  y[37:(nrow(pulse))] <-0
-  s_sine[[i-2]] <- y 
+  y[length(y):(nrow(pulse))] <-0
+  d_y[length(d_y):(nrow(pulse))] <- 0
+  s_sine[[i-1]] <- y 
+  d_sine[[i-1]] <- d_y
   
   
 }
@@ -418,20 +439,31 @@ for(i in 1:length(osnd)){
   print(osnd[[i]])
 }
 
-
 resid_test <- list()
+resid_peaks_y <- c()
+resid_peaks_x <- c()
+
+#Find residual by subtracting the s_sine and the d_sine from the pulse data
+#Find the x and y values of the peak of the residual to plot the N peak
 
 for(i in 2:(ncol(pulse))){
   
-  resid_test[[i-1]] <- pulse[,i]-s_sine[[i-1]]
-  
   plot(pulse$x, pulse[,i], type = 'l')
-  lines(1:(nrow(pulse)), s_sine[[i-1]], col = 'red')
-  lines(1:(nrow(pulse)), resid_test[[i-1]], col = 'green')
-  points(x_osnd[[i-1]], osnd[[i-1]], pch = 19, col = "red")
+  lines(1:(nrow(pulse)),s_sine[[i-1]], col='red')
+  lines(1:(nrow(pulse)),d_sine[[i-1]], col='purple')
+  d_y_resid <- pulse[,i] - s_sine[[i-1]]
+  d_y_resid <- d_y_resid - d_sine[[i-1]]
+  lines(1:(nrow(pulse)),d_y_resid, col='green')
+  #points(x_osnd[[i-1]], osnd[[i-1]], pch = 19, col = "red")
   
+  resid_test[[i-1]] <- d_y_resid
+  
+  resid_peaks_y[i-1] <- findpeaks(d_y_resid[20:40])[1]
+  resid_peaks_x[i-1] <- 20+(findpeaks(d_y_resid[20:40])[2])
+  points(resid_peaks_x[i-1], resid_peaks_y[i-1], pch = 19)
   
 }
+
 
 ## Features (canonical waveform first):
 
