@@ -258,8 +258,8 @@ s <- c()
 s_yval <- c()
 next_o <- c()
 next_o_yval <- c()
-x <- c(1:36)
-d_x <-c(1:60)
+x <- c(1:(nrow(pulse)))
+d_x <- c(1:(nrow(pulse)))
 s_sine <- list()
 d_sine <- list()
 
@@ -420,11 +420,11 @@ for(i in 2:(ncol(pulse))){     # start from 3 for source 2 data, start from 2 fo
   points(next_o[i-1], next_o_yval[i-1], pch = 19)
   }
   lines(x, y, col = 'red')
+  lines(d_x, d_y, col='purple')
   #points(half_heights_wave_new, u_v_yval_wave, pch = 19)
   #points(notch, notch_poly_yval, pch = 19)
   
-  y[length(y):(nrow(pulse))] <-0
-  d_y[length(d_y):(nrow(pulse))] <- 0
+
   s_sine[[i-1]] <- y 
   d_sine[[i-1]] <- d_y
   
@@ -464,6 +464,31 @@ for(i in 2:(ncol(pulse))){
   
 }
 
+#Use residual to find peaks and plot the sine curve for the tidal wave/N peak 
+
+n_x <- c(1:(nrow(pulse)))
+n_sine <- list()
+n_resid <- list()
+
+for(i in 2:(ncol(pulse))){
+  
+  plot(pulse$x, resid_test[[i-1]], type='l')
+  
+  #define phi for notch
+  n_phi <- ((2*pi)/period)  * (n_x-(resid_peaks_x[i-1]))
+  n_phi[n_phi>(pi)] <- pi
+  n_phi[n_phi<(-pi)] <- -pi
+  
+  #create notch sine curve
+  n_y <- ((resid_peaks_y[i-1]-osnd[[c(i-1, 1)]])/2) * cos(n_phi) + (resid_peaks_y[i-1]/2)
+  
+  lines(1:(nrow(pulse)),n_y, col='green')
+  n_sine[[i-1]] <- n_y
+  
+  resid <- resid_test[[i-1]] - n_y
+  lines(pulse$x, resid, col='blue')
+  n_resid[[i-1]] <- resid
+}
 
 ## Features (canonical waveform first):
 
