@@ -6,7 +6,10 @@ library(TeachingDemos)
 library(splines2)
 library(pracma)
 library(SplinesUtils)
+library(spectral)
+library(seewave)
 
+#remove NaNs
 data<-data[!(data$PPG.PulseOx1=='NaN'),]
 
 
@@ -16,7 +19,7 @@ data<-data[!(data$PPG.PulseOx1=='NaN'),]
 # unique values, with an effort to be robust against variation in the repeat pattern and also against 
 # genuine repeated values.
 
-list<-rle(data)
+list<-rle(data$PPG.PulseOx1)
 ID <- rep(1:length(list$values), times = list$lengths)
 data2 <- cbind(data, ID)
 data_downsampled <-c()
@@ -209,7 +212,6 @@ if((mean(o_difference)+15) > source_data_column_length_precursor[new_vector]){
 }else{
     source_data_column_length <- source_data_column_length_precursor[new_vector]
 }
-
 
 
 ## Chopping up the original data_undetrended (now baseline_corrected) into individual waves:
@@ -568,6 +570,25 @@ for(i in 1:(length(poly_wave)-1)){
   ipa_ratio[i] <- auc_diastole / auc_systole
   print(auc_diastole + auc_systole)
 }
+
+
+##Spectral Analysis
+
+#filtered <- filter.fft(spline_poly,fc=0.0925,BW=0.0525,n=50)
+#plot.fft(filtered)
+#spectral<-spec.fft(spline_poly)
+#plot(data_downsampled$PPG.PulseOx1)
+#plot(baseline_corrected)
+
+powerspectrum<-spectrum(data_downsampled$PPG.PulseOx1)
+powerspectrum<-spectrum(baseline_corrected)
+
+LF<-ffilter(data_downsampled$PPG.PulseOx1, f=75, from = 0.04, to = 0.145, bandpass = TRUE) #low bandpass, sampling frequency of 75 Hz (75 times per second)
+powerspectrum<-spectrum(LF)
+HF<-ffilter(data_downsampled$PPG.PulseOx1, f=75, from = 0.145, to = 0.45, bandpass = TRUE) #high bandpass
+powerspectrum<-spectrum(HF)
+
+spectralratio<-sum(LF)/sum(HF) #ratio of LF/HF
 
 ###sines sines sines 
 
