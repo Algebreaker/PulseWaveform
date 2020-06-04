@@ -492,6 +492,119 @@ for(i in 2:(ncol(pulse))){
   n_resid[[i-1]] <- resid
 }
 
+
+####LUCIE'S PRELIMINARY REFITTING SPLINES BIT THAT DOESN'T WORK (YET)
+
+max_shift=4
+sample_rate = 75
+avg_period <- 3*(mean(v_vals)-mean(u_vals))
+s_x <- c()
+s_y <- c()
+d_x <- c()
+d_y <- c()
+n_x <- c()
+n_y  <- c()
+
+
+for(i in 2:(ncol(pulse))){
+
+  fitted_s <- FALSE
+  fitted_n <- FALSE
+  fitted_d <- FALSE
+
+  while(!fitted_s | !fitted_n | !fitted_d){
+  
+    s_peak <- max(s_sine[[i-1]])
+    n_peak <- max(n_sine[[i-1]])
+    d_peak <- max(d_sine[[i-1]])
+    d_peak_x <- match(max(d_sine[[i-1]]), d_sine[[i-1]])
+  
+    if(s_peak > n_peak){
+    
+      d_resid <- pulse[,i] - d_sine[[i-1]]
+      d_n_resid <- d_resid - n_sine[[i-1]]
+      
+      s_x[i-1] <- findpeaks(d_n_resid)[1,2]
+      s_y[i-1] <- findpeaks(d_n_resid)[1,1]
+
+      
+
+      fitted_s <- TRUE
+    
+    } else if(n_peak > d_peak){
+    
+      s_resid <- pulse[,i] - s_sine[[i-1]]
+      s_d_resid <- s_resid - d_sine[[i-1]]
+    
+      s_d_resid_spline <-CubicInterpSplineAsPiecePoly(1:length(pulse[, i]), s_d_resid, "natural")
+      sfunction3 <- splinefun(1:source_data_column_length, s_d_resid, method = "natural")
+      deriv1_sd <- sfunction3(seq(1, source_data_column_length), deriv = 1)
+      deriv1_sd_poly <- CubicInterpSplineAsPiecePoly(1:source_data_column_length, deriv1_sd, "natural") 
+      current_deriv_n <- predict(deriv1_sd_poly, which(n_sine[[i-1]]==max(n_sine[[i-1]])))
+    
+        if(current_deriv_n < 0){
+        n_y[i-1] <- findpeaks(s_d_resid[which(s_sine[[i-1]]==s_peak):which(n_sine[[i-1]]==n_peak)])[1]
+        n_x[i-1] <- approx(x = s_d_resid, y= pulse$x, xout=new_n)$y
+        } else if(current_deriv_n>0){
+        n_y[i-1] <-findpeaks(s_d_resid[which(n_sine[[i-1]]==n_peak):which(d_sine[[i-1]]==d_peak)])[1]
+        n_x[i-1] <- approx(x = s_d_resid, y= pulse$x, xout=new_n)$y
+        }
+        
+        if(fitted_s & (!fitted_d)){
+        fitted_s = FALSE;
+        }
+
+      fitted_n = TRUE;
+    
+    
+    } else{
+    
+      s_resid <- pulse[,i] - s_sine[[i-1]]
+      s_n_resid <- s_resid - n_sine[[i-1]]
+      
+      s_n_resid_spline <-CubicInterpSplineAsPiecePoly(1:length(pulse[, i]), s_n_resid, "natural")
+      sfunction4 <- splinefun(1:source_data_column_length, s_n_resid, method = "natural")
+      deriv1_sn <- sfunction4(seq(1, source_data_column_length), deriv = 1)
+      deriv1_sn_poly <- CubicInterpSplineAsPiecePoly(1:source_data_column_length, deriv1_sn, "natural") 
+      new_d <- predict(deriv1_sn_poly, which(d_sine[[i-1]]==d_peak))
+
+      
+        if(new_d < 0){
+        new_d <-findpeaks(s_n_resid[which(d_sine[[i-1]]==d_peak):length(s_n_resid)])[1]
+        new_d_x <- approx(x = s_n_resid, y= pulse$x, xout=new_n)$y
+        } else if(new_d > 0){
+        new_d <-findpeaks(s_n_resid[which(n_sine[[i-1]]==n_peak):which(d_sine[[i-1]]==d_peak)])[1]
+        new_d_x <- approx(x = s_d_resid, y= pulse$x, xout=new_n)$y
+        }
+        
+        if(new_d_x > (d_peak_x + max_shift)){
+       
+        
+        max_deriv_d_x <- findpeaks(deriv1_sn[x_osnd[[c(i-1,3)]]:length(deriv1_sn)])[1,2]
+        max_deriv_d <- findpeaks(deriv1_sn[x_osnd[[c(i-1,3)]]:length(deriv1_sn)])[1,1]
+        new_d = 2 * max_deriv_d * sample_rate * avg_period
+        new_d_x = max_deriv_d_x + 0.5 * pi * avg_period
+
+        
+        }
+        
+      fitted_d = TRUE
+    
+    }
+  }
+}
+  
+  
+
+
+
+
+
+
+
+
+
+
 ## Features (canonical waveform first):
 
 # Peak to notch time (waveforms need to be normalized on o-o interval first (or can divide by the pulse duration)):
@@ -570,6 +683,8 @@ for(i in 1:(length(poly_wave)-1)){
   ipa_ratio[i] <- auc_diastole / auc_systole
   print(auc_diastole + auc_systole)
 }
+
+
 
 
 ##Spectral Analysis
