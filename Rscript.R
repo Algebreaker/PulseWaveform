@@ -508,8 +508,7 @@ n_y  <- c()
 
 
 ##Takes in the current estimated values for the S, N and D curves and refits them using the trace derivatives 
-
-for(i in 2:(ncol(pulse)-1)){
+or(i in 2:(ncol(pulse)-1)){
 
   fitted_s <- FALSE
   fitted_n <- FALSE
@@ -542,13 +541,14 @@ for(i in 2:(ncol(pulse)-1)){
       d_n_resid <- d_resid - n_sine[[i-1]]
       
       #find peaks of the residual as the new S peak
-      s_x[i-1] <- findpeaks(d_n_resid)[1,2]
-      s_y[i-1] <- findpeaks(d_n_resid)[1,1]
+      x_peaks <- findpeaks(d_n_resid)[,2]
+      pk_loc <- which(abs(x_peaks-s_peak_x)==min(abs(x_peaks - s_peak_x)))
+      s_x[i-1] <- findpeaks(d_n_resid)[pk_loc,2]
+      s_y[i-1] <- findpeaks(d_n_resid)[pk_loc,1]
 
       
       fitted_s <- TRUE
-      print(s_x)
-      print(s_y)
+
     
     } else if(n_peak > d_peak){
     
@@ -562,11 +562,11 @@ for(i in 2:(ncol(pulse)-1)){
       current_deriv_n <- predict(deriv1_sd_poly, n_peak_x)
     
         if(current_deriv_n < 0){
-          n_y_est <- findpeaks(deriv1_sd[s_peak_x:n_peak_x])[1]
           n_x_est <- s_peak_x + findpeaks(deriv1_sd[s_peak_x:n_peak_x])[2]
-        } else {
-          n_y_est <- findpeaks(deriv1_sd[n_peak_x:d_peak_x])[1]
+          n_y_est <- s_d_resid[n_x_est]
+        } else if(current_deriv_n > 0){
           n_x_est <- n_peak_x + findpeaks(deriv1_sd[n_peak_x:d_peak_x])[2]
+          n_y_est <- s_d_resid[n_x_est]
         } 
         
         n_y[i-1] <- n_y_est
@@ -616,7 +616,7 @@ for(i in 2:(ncol(pulse)-1)){
   }
 }
   
-
+  
 
 
 
