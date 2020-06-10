@@ -722,7 +722,7 @@ for(i in 2:(ncol(pulse))){
 }
 
 
-####LUCIE'S PRELIMINARY REFITTING SPLINES BIT THAT ALMOST WORKS?
+####LUCIE'S PRELIMINARY REFITTING SPLINES BIT THAT WORKS?
 
 
 max_shift=4
@@ -737,7 +737,8 @@ n_y  <- c()
 
 
 ##Takes in the current estimated values for the S, N and D curves and refits them using the trace derivatives 
-or(i in 2:(ncol(pulse)-1)){
+
+for(i in 2:(ncol(pulse)-1)){
 
   fitted_s <- FALSE
   fitted_n <- FALSE
@@ -749,9 +750,9 @@ or(i in 2:(ncol(pulse)-1)){
     s_peak <- max(s_sine[[i-1]])
     n_peak <- max(n_sine[[i-1]])
     d_peak <- max(d_sine[[i-1]])
-    d_peak_x <- match(max(d_sine[[i-1]]), d_sine[[i-1]])
-    n_peak_x <- match(max(n_sine[[i-1]]), n_sine[[i-1]])
-    s_peak_x <- match(max(s_sine[[i-1]]), s_sine[[i-1]])
+    d_peak_x <- match(d_peak, d_sine[[i-1]])
+    n_peak_x <- match(n_peak, n_sine[[i-1]])
+    s_peak_x <- match(s_peak, s_sine[[i-1]])
     
     #if we've refitted any of the peaks already, define them as -1
     if(fitted_s){
@@ -769,11 +770,14 @@ or(i in 2:(ncol(pulse)-1)){
       d_resid <- pulse[,i] - d_sine[[i-1]]
       d_n_resid <- d_resid - n_sine[[i-1]]
       
-      #find peaks of the residual as the new S peak
-      x_peaks <- findpeaks(d_n_resid)[,2]
-      pk_loc <- which(abs(x_peaks-s_peak_x)==min(abs(x_peaks - s_peak_x)))
-      s_x[i-1] <- findpeaks(d_n_resid)[pk_loc,2]
-      s_y[i-1] <- findpeaks(d_n_resid)[pk_loc,1]
+      d_n_resid_spline <-CubicInterpSplineAsPiecePoly(1:length(pulse[, i]), d_n_resid, "natural")
+      inflex_test_x <- solve(d_n_resid_spline, b=0, deriv=1)
+      inflex_test_y <- predict(d_n_resid_spline, inflex_test_x)
+      
+      pk_loc <- which(abs(inflex_test_x-s_peak_x)==min(abs(inflex_test_x - s_peak_x)))
+      
+      s_x[i-1] <- inflex_test_x[pk_loc]
+      s_y[i-1] <- inflex_test_y[pk_loc]
 
       
       fitted_s <- TRUE
@@ -785,21 +789,27 @@ or(i in 2:(ncol(pulse)-1)){
       s_d_resid <- s_resid - d_sine[[i-1]]
     
       s_d_resid_spline <-CubicInterpSplineAsPiecePoly(1:length(pulse[, i]), s_d_resid, "natural")
-      sfunction3 <- splinefun(1:source_data_column_length, s_d_resid, method = "natural")
-      deriv1_sd <- sfunction3(seq(1, source_data_column_length), deriv = 1)
-      deriv1_sd_poly <- CubicInterpSplineAsPiecePoly(1:source_data_column_length, deriv1_sd, "natural") 
-      current_deriv_n <- predict(deriv1_sd_poly, n_peak_x)
-    
+      current_deriv_n <- predict(s_d_resid_spline, n_peak_x, deriv=1)
+      
+      inflex_test_x <- solve(s_d_resid_spline, b=0, deriv=1)
+      inflex_test_y <- predict(s_d_resid_spline, inflex_test_x)
+        
         if(current_deriv_n < 0){
-          n_x_est <- s_peak_x + findpeaks(deriv1_sd[s_peak_x:n_peak_x])[2]
-          n_y_est <- s_d_resid[n_x_est]
+          subset_x <- inflex_test_x[inflex_test_x > s_peak_x & inflex_test_x < n_peak_x]
+          x_loc <- match(subset_x, inflex_test_x)
+          subset_y <- inflex_test_y[x_loc]
+          pk_loc <- which(abs(subset_x - n_peak_x)==min(abs(subset_x - n_peak_x)))
+
         } else if(current_deriv_n > 0){
-          n_x_est <- n_peak_x + findpeaks(deriv1_sd[n_peak_x:d_peak_x])[2]
-          n_y_est <- s_d_resid[n_x_est]
+          subset_x <- inflex_test_x[inflex_test_x > n_peak_x & inflex_test_x < d_peak_x]
+          x_loc <- match(subset_x, inflex_test_x)
+          subset_y <- inflex_test_y[x_loc]
+          pk_loc <- which(abs(subset_x - n_peak_x)==min(abs(subset_x - n_peak_x)))
+
         } 
         
-        n_y[i-1] <- n_y_est
-        n_x[i-1] <- n_x_est
+        n_y[i-1] <- subset_y[pk_loc]
+        n_x[i-1] <- subset_x[pk_loc]
         
         if(fitted_s & (!fitted_d)){
         fitted_s = FALSE;
@@ -814,26 +824,34 @@ or(i in 2:(ncol(pulse)-1)){
       s_n_resid <- s_resid - n_sine[[i-1]]
       
       s_n_resid_spline <-CubicInterpSplineAsPiecePoly(1:length(pulse[, i]), s_n_resid, "natural")
-      sfunction4 <- splinefun(1:source_data_column_length, s_n_resid, method = "natural")
-      deriv1_sn <- sfunction4(seq(1, source_data_column_length), deriv = 1)
-      deriv1_sn_poly <- CubicInterpSplineAsPiecePoly(1:source_data_column_length, deriv1_sn, "natural") 
-      d_y_est <- predict(deriv1_sn_poly, d_peak_x)
-
+      current_deriv_d <- predict(s_n_resid_spline, d_peak_x, deriv=1)
       
-      if(d_y_est < 0){
-        d_y_est <- findpeaks(deriv1_sn[(d_peak_x-1):length(s_n_resid)])[1]
-        d_x_est <- d_peak_x + findpeaks(deriv1_sn[(d_peak_x-1):length(s_n_resid)])[2]
-        } else if(d_y_est > 0){
-        d_y_est <- findpeaks(deriv1_sn[(n_peak_x):d_peak_x])[1]
-        d_x_est <- n_peak_x + findpeaks(deriv1_sn[n_peak_x:d_peak_x])[2]
-        }
-        
-      if(d_x_est > (d_peak_x + max_shift)){
-        max_deriv_d_x <- findpeaks(deriv1_sn[n_peak_x:length(deriv1_sn)])[1,2]
-        max_deriv_d <- findpeaks(deriv1_sn[n_peak_x:length(deriv1_sn)])[1,1]
-        d_y_est = 2 * max_deriv_d * sample_rate * avg_period
-        d_x_est = max_deriv_d_x + 0.5 * pi * avg_period
+      inflex_test_x <- solve(s_n_resid_spline, b=0, deriv=1)
+      inflex_test_y <- predict(s_n_resid_spline, inflex_test_x)
+
+      if(current_deriv_d < 0){
+        subset_x <- inflex_test_x[inflex_test_x > n_peak_x & inflex_test_x < d_peak_x]
+        x_loc <- match(subset_x, inflex_test_x)
+        subset_y <- inflex_test_y[x_loc]
+        pk_loc <- which(abs(subset_x - d_peak_x)==min(abs(subset_x - d_peak_x)))
+      
+      } else if(current_deriv_d > 0){
+        subset_x <- inflex_test_x[inflex_test_x > d_peak]
+        x_loc <- match(subset_x, inflex_test_x)
+        subset_y <- inflex_test_y[x_loc]
+        pk_loc <- which(abs(subset_x - d_peak_x)==min(abs(subset_x - d_peak_x)))
+
       }
+      
+      d_x_est <- subset_x[pk_loc]
+      d_y_est <- subset_y[pk_loc]
+        
+     # if(d_x_est > (d_peak_x + max_shift)){
+        #d_y_est <- inflex_test_y[which.max(inflex_test_y)]
+        #d_x_est <- inflex_test_x[which.max(inflex_test_y)]
+        #d_y_est = 2 * d_y_est * sample_rate * avg_period
+        #d_x_est = d_x_est + 0.5 * pi * avg_period
+    #  }
       
       d_y[i-1] <- d_y_est
       d_x[i-1] <- d_x_est
@@ -845,9 +863,13 @@ or(i in 2:(ncol(pulse)-1)){
   }
 }
   
+for(i in 2:(ncol(pulse)-1)){
+  plot(pulse$x, pulse[,i], type='l')
+  points(s_x[i-1], s_y[i-1], pch = 19, col ='red')
+  points(n_x[i-1], n_y[i-1], pch = 19, col = 'blue')
+  points(d_x[i-1], d_y[i-1], pch = 19, col = 'yellow')
+}
   
-
-
 
 
 
