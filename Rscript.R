@@ -1,142 +1,51 @@
 setwd("/home/johanna/Documents/Ninja theory/PulseAnalysis/Data/Craig")
 data <- read.table("Source2.csv", header=T, sep=",") #first line of the csv file needs to be deleted
 
-library(tidyverse)                                  #Have tidyverse packages installed and call tidyverse in library()
+library(tidyverse)                                 
 library(TeachingDemos)
 library(splines2)
 library(pracma)
-library(SplinesUtils)
+library(SplinesUtils) #SplinesUtils is best downloaded directly from Github
 library(spectral)
 library(seewave)
 
-#remove NaNs
-data<-data[!(data$PPG.PulseOx1=='NaN'),]
+#Source functions
+source("/Users/luciedaniel-watanabe/Desktop/attempt at pulse analysis/preproc.R")
+source("/Users/luciedaniel-watanabe/Desktop/attempt at pulse analysis/find_w.R")
+source("/Users/luciedaniel-watanabe/Desktop/attempt at pulse analysis/find_u_v.R")
+source("/Users/luciedaniel-watanabe/Desktop/attempt at pulse analysis/baseline.R")
 
 
-#Downsample
-# The BioRadio device provides 250 samples per second, but the PPG is only sampled 75 times per second, 
-# so we typically have repeated values in a pattern of 3-3-4 repeating. DownSample tries to retrieve the 
-# unique values, with an effort to be robust against variation in the repeat pattern and also against 
-# genuine repeated values.
+#Preprocessing which involves downsampling data and undetrending 
+undetrended_data <- data.frame(preproc(dat=data))
 
-list<-rle(data$PPG.PulseOx1)
-ID <- rep(1:length(list$values), times = list$lengths)
-data2 <- cbind(data, ID)
-data_downsampled <-c()
-
-for (i in 1:max(ID)){
-  sub.data <- filter(data2, ID == i)
-  if(nrow(sub.data) <= 4){
-    data_downsampled <- rbind(data_downsampled, sub.data[1,])
-  }else if(nrow(sub.data) > 4 ){data_downsampled <- rbind(data_downsampled, sub.data[1,], sub.data[5,])}
-}
-
-#Undetrend
-# Analysis of device output indicates that the PPG signal is detrended by application of the following
-# formula: OUT[i] = 80 + (OUT[i-1]-80) * 0.96875 + (IN[i] - [IN[i-1]), where the constance 0.96875 is
-# an approximation fitted to the data.
-# Individual pulse events are more comprehensible if the detrending is not used, so this function 
-#removes it by inverting the above function. 
-   # can simply reverse the equatino as in the c++ script. 
-undetrended <-replicate(length(data_downsampled$PPG.PulseOx1)-1, 0) 
-undetrended<-c(data_downsampled$PPG.PulseOx1[1],undetrended) #add first detrended value to vector
-for (i in 2:length(data_downsampled$PPG.PulseOx1))   
-{
-  undetrended[i]<-((data_downsampled$PPG.PulseOx1[i]-80) - ((data_downsampled$PPG.PulseOx1[i-1]-80) * 0.96875) + (undetrended[i-1]))
-}
-undetrended_data<-cbind(data_downsampled,undetrended)
-
-
-## create spline + derivatives 
-#to get y value from x value just use sfunction(x)
 sfunction <- splinefun(1:length(undetrended_data$undetrended), undetrended_data$undetrended[1:length(undetrended_data$undetrended)], method = "natural")
-spline <- sfunction(seq(1, length(undetrended_data$undetrended)), deriv = 0)
 deriv1 <- sfunction(seq(1, length(undetrended_data$undetrended)), deriv = 1)
-deriv2 <- sfunction(seq(1, length(undetrended_data$undetrended)), deriv = 2)
 
-########## 
-
-# Turning the undetrended data into a piece-wise polynomial spline (non-discrete): 
+#Creating polynomial splines from the data 
 spline_poly <- CubicInterpSplineAsPiecePoly(1:length(undetrended_data$undetrended), undetrended_data$undetrended[1:length(undetrended_data$undetrended)], "natural")
-
-
-## Finding inflexion points on spline_poly
-# Find all x values for inflexion points (points on deriv1 that equal 0):
-inflexion_points <- solve(spline_poly, b = 0, deriv = 1)
-# Find the y values for inflexion points:
-inflexion_points_yval <- predict(spline_poly, inflexion_points)
-# Plot the y values:
-plot(spline_poly)
-points(inflexion_points, inflexion_points_yval, pch = 19)
-
-## Finding W  (note that the quantile threshold 0.95 needs adjusting for some datasets)
-
-# Finding inflexion points on deriv1 requires redefining 1st deriv as a piece-wise spline
 deriv1_poly <- CubicInterpSplineAsPiecePoly(1:length(undetrended_data$undetrended), deriv1, "natural") 
-# Find inflexion points on deriv1_poly
-inflexion_points_deriv1 <- solve(deriv1_poly, b = 0, deriv = 1)
-inflexion_points_deriv1_yval <- predict(deriv1_poly, inflexion_points_deriv1)
-plot(deriv1_poly)
-points(inflexion_points_deriv1, inflexion_points_deriv1_yval, pch = 19)
-# Find correct threshold using histogram
-# hdat<-hist(deriv1)
-quantiles<-quantile(deriv1,probs=c(.025,.95))      ## this still needs adjusting based on source data              
-threshold<-quantiles[2]
-# Identifying peaks of deriv1_poly:
-w_poly_peaks <- predict(deriv1_poly, inflexion_points_deriv1)
-w_poly_peaks <- which(w_poly_peaks > threshold)     
-w_poly_peaks <- inflexion_points_deriv1[w_poly_peaks]
-# Plot on deriv1_poly
-plot(deriv1_poly)
-w_poly_peaks_yval <- predict(deriv1_poly, w_poly_peaks)
-points(w_poly_peaks, w_poly_peaks_yval, pch = 19)
-# Plot back on spline_poly:
-plot(spline_poly)
-w_poly_peaks_yval <- predict(spline_poly, w_poly_peaks)
-points(w_poly_peaks, w_poly_peaks_yval, pch = 19)
+## Finding inflexion points on spline_poly (points on deriv1 where x = 0):
+inflexion_points <- solve(spline_poly, b = 0, deriv = 1)
+inflexion_points_yval <- predict(spline_poly, inflexion_points)
+
+
+w <- find_w(dat=undetrended_data$undetrended, d1 = deriv1, d1p = deriv1_poly, sp = spline_poly, plot=FALSE)
+
+u_v <- find_u_v(dat = undetrended_data$undetrended, wx = w$w_poly_peaks, wy = w$w_poly_peaks_yval, d1 = deriv1, d1p = deriv1_poly, plot=FALSE)
 
 ## Find o in order to find the baseline
 o <- c()
-for(i in 1:length(w_poly_peaks)){
-  o[i] <- max(which(inflexion_points < w_poly_peaks[i]))
+for(i in 1:length(w$w_poly_peaks)){
+  o[i] <- max(which(inflexion_points < w$w_poly_peaks[i]))
 }
 plot(spline_poly)
 points(inflexion_points[o], inflexion_points_yval[o], pch = 19)
 
 
-## Finding U and V
-
-# Find half the height of w (on derivative y-axis)
-w_half_height <- predict(deriv1_poly, w_poly_peaks)/2
-# Find u and v:
-half_heights <- c()
-half_heights_yval <- c()
-for(i in 1:length(w_half_height)){
-  deriv1_poly_peak_subset <- CubicInterpSplineAsPiecePoly((w_poly_peaks[i]-10):(w_poly_peaks[i]+10), deriv1[(w_poly_peaks[i]-10):(w_poly_peaks[i]+10)], "natural") 
-  half_heights_precursor <- solve(deriv1_poly_peak_subset, b = w_half_height[i])
-  half_heights[c((2*(i)-1), (2*(i)))] <- half_heights_precursor
-  half_heights_yval[c((2*(i)-1), (2*(i)))] <- predict(deriv1_poly_peak_subset, half_heights[c((2*(i)-1), (2*(i)))])
-}
-# Plot u's and v's on deriv1_poly
-plot(deriv1_poly)
-points(half_heights, half_heights_yval, pch = 19)
-# Find u and v 
-u <- half_heights[seq_along(half_heights) %%2 != 0] 
-v <- half_heights[seq_along(half_heights) %%2 == 0]   
-# Find u and v y-values for spline_poly
-u_v_yval <- c()
-for(i in 1:length(w_poly_peaks)){
-  spline_poly_peak_subset <- CubicInterpSplineAsPiecePoly((w_poly_peaks[i]-10):(w_poly_peaks[i]+10), spline[(w_poly_peaks[i]-10):(w_poly_peaks[i]+10)], "natural") 
-  u_v_yval[c((2*(i)-1), (2*(i)))] <- predict(spline_poly_peak_subset, half_heights[c((2*(i)-1), (2*(i)))])
-}
-# Plot u's and v's on spline_poly
-plot(spline_poly)
-points(half_heights, u_v_yval, pch = 19)
-
-
-# Adjust for early O points:
-for(i in 1:length(w_poly_peaks)){
-  o_decider <- w_poly_peaks[i] - 2*(w_poly_peaks[i] - u[i])
+# Adjust for early O points: #Simon will figure this bit out 
+for(i in 1:length(w$w_poly_peaks)){
+  o_decider <- w$w_poly_peaks[i] - 2*(w$w_poly_peaks[i] - u_v$u[i])
   if(abs(o_decider - inflexion_points[o[i]]) > 1.5){
     inflexion_points[o[i]] <- o_decider
     inflexion_points_yval[o[i]] <- predict(spline_poly, o_decider)
@@ -145,85 +54,24 @@ for(i in 1:length(w_poly_peaks)){
 plot(spline_poly)
 points(inflexion_points[o], inflexion_points_yval[o], pch = 19)
 
-
-# Making a (non-polynomial) spline to fit the baseline
-sfunction3 <- splinefun(inflexion_points[o], inflexion_points_yval[o], method = "natural")
-spline_base <- sfunction3(seq(1, length(undetrended_data$undetrended)), deriv = 0)
-
-# Plotting spline_base on spline_poly
-plot(spline_poly)
-points(inflexion_points[o], inflexion_points_yval[o], pch = 19)
-lines(spline_base)
-
-# Correcting for baseline:
-baseline_corrected <- undetrended_data$undetrended[1:length(undetrended_data$undetrended)] - spline_base
-plot(baseline_corrected, type = "l")
-# Plot new baseline (y = 0)
-lines(1:length(undetrended_data$undetrended), seq(from = 0, to = 0, length.out = length(undetrended_data$undetrended)))
+baseline_corrected <- baseline(plot=FALSE)
 
 # Redefine splines now that baseline corrected:
-sfunction <- splinefun(1:length(undetrended_data$undetrended), baseline_corrected, method = "natural")
-spline <- sfunction(seq(1, length(undetrended_data$undetrended)), deriv = 0)
-deriv1 <- sfunction(seq(1, length(undetrended_data$undetrended)), deriv = 1)
-deriv2 <- sfunction(seq(1, length(undetrended_data$undetrended)), deriv = 2)
+sfunction_bc <- splinefun(1:length(baseline_corrected), baseline_corrected, method = "natural")
+deriv1_bc <- sfunction_bc(seq(1, length(baseline_corrected)), deriv = 1)
+deriv2_bc <- sfunction_bc(seq(1, length(baseline_corrected)), deriv = 2)
 
 # Turning the baseline_corrected data into a piece-wise polynomial spline (non-discrete): 
-spline_poly <- CubicInterpSplineAsPiecePoly(1:length(undetrended_data$undetrended), baseline_corrected[1:length(undetrended_data$undetrended)], "natural")
-
-# then re-find W for corrected baseline
-# Finding inflexion points on deriv1 requires redefining 1st deriv as a piece-meal spline
-deriv1_poly <- CubicInterpSplineAsPiecePoly(1:length(undetrended_data$undetrended), deriv1, "natural") 
-# Find inflexion points on deriv1_poly
-inflexion_points_deriv1 <- solve(deriv1_poly, b = 0, deriv = 1)
-inflexion_points_deriv1_yval <- predict(deriv1_poly, inflexion_points_deriv1)
-plot(deriv1_poly)
-points(inflexion_points_deriv1, inflexion_points_deriv1_yval, pch = 19)
-# Find correct threshold using histogram
-# hdat<-hist(deriv1)
-quantiles<-quantile(deriv1,probs=c(.025,.95))
-threshold<-quantiles[2]
-# Identifying peaks of deriv1_poly:
-w_poly_peaks <- predict(deriv1_poly, inflexion_points_deriv1)
-w_poly_peaks <- which(w_poly_peaks > threshold)     
-w_poly_peaks <- inflexion_points_deriv1[w_poly_peaks]
-# Plot on deriv1_poly
-plot(deriv1_poly)
-w_poly_peaks_yval <- predict(deriv1_poly, w_poly_peaks)
-points(w_poly_peaks, w_poly_peaks_yval, pch = 19)
-# Plot back on spline_poly:  ## this only exists in the old form
-plot(spline_poly)
-w_poly_peaks_yval <- predict(spline_poly, w_poly_peaks)
-points(w_poly_peaks, w_poly_peaks_yval, pch = 19)
+spline_poly_bc <- CubicInterpSplineAsPiecePoly(1:length(baseline_corrected), baseline_corrected, "natural")
+deriv1_poly_bc <- CubicInterpSplineAsPiecePoly(1:length(baseline_corrected), deriv1_bc, "natural") 
 
 
-##Find U and V again
+w_bc <- find_w(dat=baseline_corrected, d1 = deriv1_bc, d1p = deriv1_poly_bc, sp = spline_poly_bc, plot = FALSE)
 
-# Find half the height of w (on derivative y-axis)
-w_half_height <- predict(deriv1_poly, w_poly_peaks)/2
-# Find u and v:
-half_heights <- c()
-half_heights_yval <- c()
-for(i in 1:length(w_half_height)){
-  deriv1_poly_peak_subset <- CubicInterpSplineAsPiecePoly((w_poly_peaks[i]-10):(w_poly_peaks[i]+10), deriv1[(w_poly_peaks[i]-10):(w_poly_peaks[i]+10)], "natural") 
-  half_heights_precursor <- solve(deriv1_poly_peak_subset, b = w_half_height[i])
-  half_heights[c((2*(i)-1), (2*(i)))] <- half_heights_precursor
-  half_heights_yval[c((2*(i)-1), (2*(i)))] <- predict(deriv1_poly_peak_subset, half_heights[c((2*(i)-1), (2*(i)))])
-}
-# Plot u's and v's on deriv1_poly
-plot(deriv1_poly)
-points(half_heights, half_heights_yval, pch = 19)
-# Find u and v 
-u <- half_heights[seq_along(half_heights) %%2 != 0] 
-v <- half_heights[seq_along(half_heights) %%2 == 0]   
-# Find u and v y-values for spline_poly
-u_v_yval <- c()
-for(i in 1:length(w_poly_peaks)){
-  spline_poly_peak_subset <- CubicInterpSplineAsPiecePoly((w_poly_peaks[i]-10):(w_poly_peaks[i]+10), spline[(w_poly_peaks[i]-10):(w_poly_peaks[i]+10)], "natural") 
-  u_v_yval[c((2*(i)-1), (2*(i)))] <- predict(spline_poly_peak_subset, half_heights[c((2*(i)-1), (2*(i)))])
-}
-# Plot u's and v's on spline_poly
-plot(spline_poly)
-points(half_heights, u_v_yval, pch = 19)
+u_v_bc <- find_u_v(dat = baseline_corrected, wx = refit_w$w_poly_peaks, wy = refit_w$w_poly_peaks_yval, d1 = deriv1_bc, d1p = deriv1_poly_bc, plot = FALSE)
+
+
+
 
 ## Finding a scalar for each wave:
 # Find individual u and v y-values 
@@ -630,7 +478,7 @@ for(i in 2:(ncol(pulse2))){
 	
   # Finding S peak 
   # y = (S-O)/2 * cos(phi) + S/2
-  y <-((osnd[[c(i-1, 2)]] -  osnd[[c(i-1, 1)]])/2) * cos(phi) + (osnd[[c(i-1, 2)]]/2) 
+  y <-((osnd[[c(i-1, 2)]] -  osnd[[c(i-1, 1)]])/2) * cos(phi) + ((osnd[[c(i-1,1)]] + osnd[[c(i-1, 2)]])/2) 
   #the last bit (s/2) only works if O is always 0 - otherwise should be (O+S)/2 
  
   
@@ -640,7 +488,7 @@ for(i in 2:(ncol(pulse2))){
   d_phi[d_phi<(-pi)] <- -pi
 	
   #Finding the sine for the D peak
-  d_y <- ((osnd[[c(i-1,4)]]-osnd[[c(i-1, 1)]])/2) * cos(d_phi) + (osnd[[c(i-1,4)]]/2)
+  d_y <- ((osnd[[c(i-1,4)]]-osnd[[c(i-1, 1)]])/2) * cos(d_phi) + ((osnd[[c(i-1,1)]] + osnd[[c(i-1,4)]])/2)
 
   
   
