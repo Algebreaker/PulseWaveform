@@ -9,11 +9,21 @@ library(SplinesUtils) #SplinesUtils is best downloaded directly from Github
 library(spectral)
 library(seewave)
 
+#Owner='Lucie'
+Owner='Johanna'
+
 #Source functions
-source("/Users/luciedaniel-watanabe/Desktop/attempt at pulse analysis/preproc.R")
-source("/Users/luciedaniel-watanabe/Desktop/attempt at pulse analysis/find_w.R")
-source("/Users/luciedaniel-watanabe/Desktop/attempt at pulse analysis/find_u_v.R")
-source("/Users/luciedaniel-watanabe/Desktop/attempt at pulse analysis/baseline.R")
+if(Owner='Lucie'){
+  source("/Users/luciedaniel-watanabe/Desktop/attempt at pulse analysis/preproc.R")
+  source("/Users/luciedaniel-watanabe/Desktop/attempt at pulse analysis/find_w.R")
+  source("/Users/luciedaniel-watanabe/Desktop/attempt at pulse analysis/find_u_v.R")
+  source("/Users/luciedaniel-watanabe/Desktop/attempt at pulse analysis/baseline.R")
+}else{
+  source("/home/johanna/Documents/Ninja theory/PulseAnalysis/git/PulseWaveform/preproc.R")
+  source("/home/johanna/Documents/Ninja theory/PulseAnalysis/git/PulseWaveform/find_w.R")
+  source("/home/johanna/Documents/Ninja theory/PulseAnalysis/git/PulseWaveform/find_u_v.R")
+  source("/home/johanna/Documents/Ninja theory/PulseAnalysis/git/PulseWaveform/baseline.R")
+}
 
 
 #Preprocessing which involves downsampling data and undetrending 
@@ -820,6 +830,15 @@ HF<-ffilter(data_downsampled$PPG.PulseOx1, f=75, from = 0.145, to = 0.45, bandpa
 powerspectrum<-spectrum(HF)
 
 spectralratio<-sum(LF)/sum(HF) #ratio of LF/HF
+
+Y1 <- fft(baseline_corrected[1:1000])
+
+plot(abs(Y1), type="h")
+
+library(DescTools)
+bands<-c(0.04, 0.145, 0.45)
+frebands<-Freq(baseline_corrected, breaks = bands)
+Y1 <- fft(frebands[1])
 
 ###sines sines sines 
 
