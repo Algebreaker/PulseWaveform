@@ -815,30 +815,7 @@ for(i in 1:(length(poly_wave)-1)){
 
 ##Spectral Analysis
 
-#filtered <- filter.fft(spline_poly,fc=0.0925,BW=0.0525,n=50)
-#plot.fft(filtered)
-#spectral<-spec.fft(spline_poly)
-#plot(data_downsampled$PPG.PulseOx1)
-#plot(baseline_corrected)
-
-powerspectrum<-spectrum(data_downsampled$PPG.PulseOx1)
-powerspectrum<-spectrum(baseline_corrected)
-
-LF<-ffilter(data_downsampled$PPG.PulseOx1, f=75, from = 0.04, to = 0.145, bandpass = TRUE) #low bandpass, sampling frequency of 75 Hz (75 times per second)
-powerspectrum<-spectrum(LF)
-HF<-ffilter(data_downsampled$PPG.PulseOx1, f=75, from = 0.145, to = 0.45, bandpass = TRUE) #high bandpass
-powerspectrum<-spectrum(HF)
-
-spectralratio<-sum(LF)/sum(HF) #ratio of LF/HF
-
-Y1 <- fft(baseline_corrected[1:1000])
-
-plot(abs(Y1), type="h")
-
-library(DescTools)
-bands<-c(0.04, 0.145, 0.45)
-frebands<-Freq(baseline_corrected, breaks = bands)
-Y1 <- fft(frebands[1])
+spectralanalysis <- (spectrum(baseline_corrected))
 
 ###sines sines sines 
 
