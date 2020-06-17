@@ -1,29 +1,14 @@
 setwd("/home/johanna/Documents/Ninja theory/PulseAnalysis/Data/Craig")
 data <- read.table("Source2.csv", header=T, sep=",") #first line of the csv file needs to be deleted
 
-library(tidyverse)                                 
-library(TeachingDemos)
-library(splines2)
-library(pracma)
-library(SplinesUtils) #SplinesUtils is best downloaded directly from Github
-library(spectral)
-library(seewave)
+source("/Users/luciedaniel-watanabe/Desktop/attempt at pulse analysis/preproc.R")
+source("/Users/luciedaniel-watanabe/Desktop/attempt at pulse analysis/find_w.R")
+source("/Users/luciedaniel-watanabe/Desktop/attempt at pulse analysis/find_u_v.R")
+source("/Users/luciedaniel-watanabe/Desktop/attempt at pulse analysis/baseline.R")
+source("/Users/luciedaniel-watanabe/Desktop/attempt at pulse analysis/find_osnd.R")
+source("/Users/luciedaniel-watanabe/Desktop/attempt at pulse analysis/spectrum.R")
+source("/Users/luciedaniel-watanabe/Desktop/attempt at pulse analysis/find_wuv.R")
 
-#Owner='Lucie'
-Owner='Johanna'
-
-#Source functions
-if(Owner='Lucie'){
-  source("/Users/luciedaniel-watanabe/Desktop/attempt at pulse analysis/preproc.R")
-  source("/Users/luciedaniel-watanabe/Desktop/attempt at pulse analysis/find_w.R")
-  source("/Users/luciedaniel-watanabe/Desktop/attempt at pulse analysis/find_u_v.R")
-  source("/Users/luciedaniel-watanabe/Desktop/attempt at pulse analysis/baseline.R")
-}else{
-  source("/home/johanna/Documents/Ninja theory/PulseAnalysis/git/PulseWaveform/preproc.R")
-  source("/home/johanna/Documents/Ninja theory/PulseAnalysis/git/PulseWaveform/find_w.R")
-  source("/home/johanna/Documents/Ninja theory/PulseAnalysis/git/PulseWaveform/find_u_v.R")
-  source("/home/johanna/Documents/Ninja theory/PulseAnalysis/git/PulseWaveform/baseline.R")
-}
 
 
 #Preprocessing which involves downsampling data and undetrending 
@@ -39,7 +24,6 @@ deriv1_poly <- CubicInterpSplineAsPiecePoly(1:length(undetrended_data$undetrende
 inflexion_points <- solve(spline_poly, b = 0, deriv = 1)
 inflexion_points_yval <- predict(spline_poly, inflexion_points)
 
-
 w <- find_w(dat=undetrended_data$undetrended, d1 = deriv1, d1p = deriv1_poly, sp = spline_poly, plot=FALSE)
 
 u_v <- find_u_v(dat = undetrended_data$undetrended, wx = w$w_poly_peaks, wy = w$w_poly_peaks_yval, d1 = deriv1, d1p = deriv1_poly, plot=FALSE)
@@ -49,8 +33,8 @@ o <- c()
 for(i in 1:length(w$w_poly_peaks)){
   o[i] <- max(which(inflexion_points < w$w_poly_peaks[i]))
 }
-plot(spline_poly)
-points(inflexion_points[o], inflexion_points_yval[o], pch = 19)
+#plot(spline_poly)
+#points(inflexion_points[o], inflexion_points_yval[o], pch = 19)
 
 
 # Adjust for early O points: #Simon will figure this bit out 
@@ -61,8 +45,8 @@ for(i in 1:length(w$w_poly_peaks)){
     inflexion_points_yval[o[i]] <- predict(spline_poly, o_decider)
   }
 }
-plot(spline_poly)
-points(inflexion_points[o], inflexion_points_yval[o], pch = 19)
+#plot(spline_poly)
+#points(inflexion_points[o], inflexion_points_yval[o], pch = 19)
 
 baseline_corrected <- baseline(plot=FALSE)
 
@@ -78,18 +62,11 @@ deriv1_poly_bc <- CubicInterpSplineAsPiecePoly(1:length(baseline_corrected), der
 
 w_bc <- find_w(dat=baseline_corrected, d1 = deriv1_bc, d1p = deriv1_poly_bc, sp = spline_poly_bc, plot = FALSE)
 
-u_v_bc <- find_u_v(dat = baseline_corrected, wx = refit_w$w_poly_peaks, wy = refit_w$w_poly_peaks_yval, d1 = deriv1_bc, d1p = deriv1_poly_bc, plot = FALSE)
+u_v_bc <- find_u_v(dat = baseline_corrected, wx = w_bc$w_poly_peaks, wy = w_bc$w_poly_peaks_yval, d1 = deriv1_bc, d1p = deriv1_poly_bc, plot = FALSE)
 
 
-
-
-## Finding a scalar for each wave:
-# Find individual u and v y-values 
-u_yval <- u_v_yval[seq_along(u_v_yval) %%2 != 0] 
-v_yval <- u_v_yval[seq_along(u_v_yval) %%2 == 0]   
 # Find v-u differences
-v_minus_u <- v_yval - u_yval
-
+v_minus_u <- u_v_bc$v_yval - u_v_bc$u_yval
 
 ## Find o points again:
 o_yval <- predict(spline_poly, inflexion_points[o])
@@ -98,16 +75,17 @@ points(inflexion_points[o], o_yval, pch = 19)
 
 # Find o-w difference:
 o_w_difference <- c()
-for(i in 1:length(w_poly_peaks)){
-  o_w_difference[i] <- w_poly_peaks[i] - inflexion_points[o[i]]
+for(i in 1:length(w_bc$w_poly_peaks)){
+  o_w_difference[i] <- w_bc$w_poly_peaks[i] - inflexion_points[o[i]]
 }
 
 
-# Find mean distance between o_points:
+# Find distance between o_points:
 o_difference <- c()
 for(i in 1:(length(inflexion_points[o])-1)){
   o_difference[i] <- inflexion_points[o[i+1]] - inflexion_points[o[i]]
 }
+
 source_data_column_length_precursor <- c(71, 81, 91, 101, 111, 121)
 new_vector <- which(abs(source_data_column_length_precursor - (mean(o_difference)+15)) == min(abs(source_data_column_length_precursor - (mean(o_difference)+15))))
 if((mean(o_difference)+15) > source_data_column_length_precursor[new_vector]){
@@ -117,17 +95,17 @@ if((mean(o_difference)+15) > source_data_column_length_precursor[new_vector]){
 }
 
 
-
 ## Chopping up the original data_undetrended (now baseline_corrected) into individual waves:
 
 ## Remove incomplete waves from beginning / end 
-if(w_poly_peaks[1] < 15){
-  w_poly_peaks <- w_poly_peaks[-1]      # First w peak should be greater than 10
+if(w_bc$w_poly_peaks[1] < 15){
+  w_bc  <- w_bc[-1,]      # First w peak should be greater than 10
   o_w_difference <- o_w_difference[-1]
   o_difference <- o_difference[-1]
 }
-if(w_poly_peaks[length(w_poly_peaks)] > (length(baseline_corrected) - 77)){
-  w_poly_peaks <- w_poly_peaks[-length(w_poly_peaks)]
+#if the last element is less than length of baseline corrected
+if(w_bc$w_poly_peaks[length(w_bc$w_poly_peaks)] > (length(baseline_corrected) - 77)){
+  w_bc <- w_bc[-length(w_bc$w_poly_peaks), ]
   o_w_difference <- o_w_difference[-length(o_w_difference)]
   o_difference <- o_difference[-length(o_difference)]
 }
@@ -138,31 +116,30 @@ sourcedata <- baseline_corrected[1:length(undetrended_data$undetrended)]
 
 pulse <- data.frame()
 
-for(i in 1:(length(w_poly_peaks))){              # change this from 1:length(w_poly_peaks) to Q1 when averaging quartiles
-  
-  
-  #### Something isn't working in this (see intermediate_poly_Wave[[21]]) source 2 data....
-  spline_poly_wave_subset <- CubicInterpSplineAsPiecePoly(    (round(w_poly_peaks[i])-15):(round(w_poly_peaks[i]) +  (source_data_column_length-10)) ,     sourcedata[(round(w_poly_peaks[i])-15):(round(w_poly_peaks[i]) + (source_data_column_length-10))], "natural")
+# change this from 1:length(w_poly_peaks) to Q1 when averaging quartiles
+for(i in 1:(length(w_bc$w_poly_peaks))){              
+#### Something isn't working in this (see intermediate_poly_Wave[[21]]) source 2 data....
+  spline_poly_wave_subset <- CubicInterpSplineAsPiecePoly((round(w_bc$w_poly_peaks[i])-15):(round(w_bc$w_poly_peaks[i]) +  (source_data_column_length-10)) , sourcedata[(round(w_bc$w_poly_peaks[i])-15):(round(w_bc$w_poly_peaks[i]) + (source_data_column_length-10))], "natural")
   
   # Now get the y-values to fill the dataframe using the predict function
   
-  xxxx <- predict(spline_poly_wave_subset, c(seq((round(w_poly_peaks[i])-15), 
-                                                 (round(w_poly_peaks[i])-1), 0.1),   # this is now 141 in length
-                                             w_poly_peaks[i],                        # this is now number 142
-                                             seq((round(w_poly_peaks[i])+1), 
-                                                 (round(w_poly_peaks[i])+(source_data_column_length-10)), 0.1)))  
+  xxxx <- predict(spline_poly_wave_subset, c(seq((round(w_bc$w_poly_peaks[i])-15), 
+                                                 (round(w_bc$w_poly_peaks[i])-1), 0.1),   # this is now 141 in length
+                                             w_bc$w_poly_peaks[i],                        # this is now number 142
+                                             seq((round(w_bc$w_poly_peaks[i])+1), 
+                                                 (round(w_bc$w_poly_peaks[i])+(source_data_column_length-10)), 0.1)))  
   xxxx <-  as.data.frame(xxxx)
-  xxxx <- cbind(xxxx, c(     seq(   (round(w_poly_peaks[i])-15), (round(w_poly_peaks[i])-1), 0.1), w_poly_peaks[i],  seq(   (round(w_poly_peaks[i])+1), (round(w_poly_peaks[i])+(source_data_column_length-10)), 0.1)))
+  xxxx <- cbind(xxxx, c(seq((round(w_bc$w_poly_peaks[i])-15), (round(w_bc$w_poly_peaks[i])-1), 0.1), w_bc$w_poly_peaks[i],  seq(   (round(w_bc$w_poly_peaks[i])+1), (round(w_bc$w_poly_peaks[i])+(source_data_column_length-10)), 0.1)))
   colnames(xxxx) <- c('y', 'x') 
   xxxx[, 2] <- xxxx[, 2] - (xxxx$x[1]-1) 
   xxxx$wave <- i 
   # Need to scale so that v-u = 1
   xxxx$y <- xxxx$y/(v_minus_u[i])      ## scaling is an issue - did you calculate u and v?
   # Need to calculate difference between this w point and the first w point
-  y_axis_difference <- w_poly_peaks_yval[1] - xxxx$y[142]
+  y_axis_difference <- w_bc$w_poly_peaks_yval[1] - xxxx$y[142]
   xxxx$y <- xxxx$y + y_axis_difference
   # Need to adjust x values so that all w's line up on x-axis
-  x_axis_difference <- w_poly_peaks[1] - xxxx$x[142]
+  x_axis_difference <- w_bc$w_poly_peaks[1] - xxxx$x[142]
   xxxx$x <- xxxx$x + x_axis_difference
   # Adjust such that w = 0 on x-axis
   xxxx$x <- xxxx$x - xxxx$x[142]   # 92nd element of each wave is w
@@ -173,7 +150,7 @@ for(i in 1:(length(w_poly_peaks))){              # change this from 1:length(w_p
 
 ## Create intermediate splines for converting to non-stacked data-frame:     
 intermediate_poly_wave <- list()
-for(i in 1:(length(w_poly_peaks))){             
+for(i in 1:(length(w_bc$w_poly_peaks))){             
   intermediate_poly_wave[[i]] <- CubicInterpSplineAsPiecePoly(pulse$x[(((i-1)*(
     ((source_data_column_length*10)+33)))+1):((((i-1)*(
       ((source_data_column_length*10)+33)))+1)+(
@@ -184,7 +161,7 @@ for(i in 1:(length(w_poly_peaks))){
 }
 
 pulse2 <- data.frame(-14:(source_data_column_length-11))      ## -9 isn't far back enough - o's are being missed... is - 14?
-for(i in 1:(length(w_poly_peaks))){
+for(i in 1:(length(w_bc$w_poly_peaks))){
   
   yval <- predict(intermediate_poly_wave[[i]], c(-14:(source_data_column_length-11)))   ## Since w = 0 on x-axis, you can specify relative to 0 
   pulse2 <- cbind(pulse2, yval)
@@ -226,7 +203,7 @@ colnames(median)[1] <- "x"
 
 ggplot(data = pulse_stacked, aes(x, values, col = wave_ID), col = "black") +
   scale_color_manual(values = rep("black", ncol(pulse2))) +  
-  geom_line(size = 1.5, alpha = ((1/length(w_poly_peaks)*10)-(1/length(w_poly_peaks)))) + geom_line(data = average, aes(x, average_wave), size = 1.125, color = "red") + ylim(-0.5, 1.75) +   # ylim will vary based on source data
+  geom_line(size = 1.5, alpha = ((1/length(w_bc$w_poly_peaks)*10)-(1/length(w_bc$w_poly_peaks)))) + geom_line(data = average, aes(x, average_wave), size = 1.125, color = "red") + ylim(-0.5, 1.75) +   # ylim will vary based on source data
   theme(legend.position = "none")
 
 
@@ -238,296 +215,26 @@ for(i in 2:ncol(pulse2)){
 }
 
 
+#Use new polynomial splines to find w/u/v/notch values for each waveform 
+wuv <- find_wuv(p=pulse2, col_len = source_data_column_length, p_w = poly_wave)
 
+## Find O, S, N, D on the new polynomial splines:
 
-
-
-## Find W, O, S, N, D on the new polynomial splines:
-
-osnd <- list()
-pulse_width <- c()
-x_osnd <- list()
-s <- c()
-s_yval <- c()
-next_o <- c()
-next_o_yval <- c()
-x <- c(1:(nrow(pulse)))
-d_x <- c(1:(nrow(pulse)))
-s_sine <- list()
-d_sine <- list()
-
-for(i in 2:(ncol(pulse2))){        
-  
-  sfunction2 <- splinefun(1:(source_data_column_length+4), pulse2[, i], method = "natural")
-  deriv1_wave <- sfunction2(seq(1, (source_data_column_length+4)), deriv = 1)
-  deriv1_wave_poly <- CubicInterpSplineAsPiecePoly(1:(source_data_column_length+4), deriv1_wave, "natural") 
-  
-  
-  # Find inflexion points on deriv1_wave_poly
-  inflexion_points_deriv1_wave_poly <- solve(deriv1_wave_poly, b = 0, deriv = 1)
-  inflexion_points_deriv1_wave_poly_yval <- predict(deriv1_wave_poly, inflexion_points_deriv1_wave_poly)
-  #plot(deriv1_wave_poly)
-  #points(inflexion_points_deriv1_wave_poly, inflexion_points_deriv1_wave_poly_yval, pch = 19)
-  
-  # Find correct threshold using histogram
-  # hdat_2<-hist(deriv1_wave)
-  quantiles_2 <- quantile(deriv1_wave, probs=c(.025,.95))
-  threshold_2 <- quantiles_2[2]
-  
-  # Identifying peaks of deriv1_poly:
-  w_poly_peaks_wave <- predict(deriv1_wave_poly, inflexion_points_deriv1_wave_poly)
-  w_poly_peaks_wave <- which(w_poly_peaks_wave > threshold_2)     
-  w_poly_peaks_wave <- inflexion_points_deriv1_wave_poly[w_poly_peaks_wave]
-  
-
-  # Finding the 'notch' (renal wave)    
-  notch <- inflexion_points_deriv1_wave_poly[(which(inflexion_points_deriv1_wave_poly_yval == min(inflexion_points_deriv1_wave_poly_yval)))+1]
-  notch_poly_yval <- predict(poly_wave[[i-1]], notch)
-	
-	
-  #Find U and V
-  
-  # Find half the height of w (on derivative y-axis)
-  w_half_height_wave <- predict(deriv1_wave_poly, w_poly_peaks_wave[1])/2
-  # Find u and v for derivative:
-  half_heights_wave_new <- solve(deriv1_wave_poly, b = w_half_height_wave[1])
-  half_heights_wave_new_yval <- predict(deriv1_wave_poly, half_heights_wave_new)
-  u <- half_heights_wave_new[1]
-  v <- half_heights_wave_new[2]
-  # Find u and v y-values for original wave:
-  u_v_yval_wave <- predict(poly_wave[[i-1]], half_heights_wave_new)
-  u_yval <- u_v_yval_wave[1]
-  v_yval <- u_v_yval_wave[2]
-
-  
-  # Find OSND
-  inflexion_points_new <- solve(poly_wave[[i-1]], b = 0, deriv = 1)
-  inflexion_points_new_yval <- predict(poly_wave[[i-1]], inflexion_points_new)
-  o <- w_poly_peaks_wave[1] - o_w_difference[i-1]
-  o_yval <- predict(poly_wave[[i-1]], o)
-  
-  if(length(inflexion_points_new) >= 4){
-  
-  #Find the four inflexion points that are 1 to the left and 3 to the right of W
-  old_o <- max(which(inflexion_points_new < w_poly_peaks_wave[1]))
-  # Find x coords of OSND
-  x_osnd[[i-1]] <- inflexion_points_new[old_o:(old_o+3)]
-  # Replace old o with new o                 # the new o is already confirmed as the correct one to use from a previous for loop          
-  x_osnd[[c(i-1, 1)]] <- o
-  
-  # Find new S
-  s[i-1] <- w_poly_peaks_wave[1] + (2*(v - w_poly_peaks_wave[1]))
-  s_yval[i-1] <- predict(poly_wave[[i-1]], s[i-1])
-  
-  # Continue to define OSND (divergence here between waveforms based on if Paul type or not)
-  # if s - w is greater than new s - w, aka if its a Paul type:
-  if((inflexion_points_new[old_o+1] - w_poly_peaks_wave[1]) > (s[i-1] - w_poly_peaks_wave[1])){
-    
-    # Remove false N and D values 
-    x_osnd_precursor <- x_osnd[[i-1]]
-    if(length(which(complete.cases(x_osnd_precursor) ==1)) != 4){
-      x_osnd_precursor <- x_osnd_precursor[-(which(is.na(x_osnd_precursor)))]
-    }
-    if(length(x_osnd_precursor) == 2){
-      x_osnd[[i-1]] <- x_osnd_precursor
-    }else{
-      false_points <- which(x_osnd_precursor > notch) 
-      x_osnd_precursor <- x_osnd_precursor[-false_points]
-      x_osnd[[i-1]] <- x_osnd_precursor
-    }
-    # Find y coords of OSND
-    osnd[[i-1]] <- inflexion_points_new_yval[old_o:(old_o+3)]
-    osnd[[c(i-1, 1)]] <- o_yval
-    
-    # Remove false values again
-    osnd_precursor <- osnd[[i-1]]
-    if(length(which(complete.cases(osnd_precursor) ==1)) != 4){
-      osnd_precursor <- osnd_precursor[-(which(is.na(osnd_precursor)))]
-    }
-    if(length(osnd_precursor) == 2){
-      osnd[[i-1]] <- osnd_precursor
-    }else{
-      osnd_precursor <- osnd_precursor[-false_points]
-      osnd[[i-1]] <- osnd_precursor
-    }
-    
-    osnd[[c(i-1, 3)]] <- osnd[[c(i-1, 2)]]
-    osnd[[c(i-1, 2)]] <- s_yval[i-1]
-    x_osnd[[c(i-1, 3)]] <- x_osnd[[c(i-1, 2)]]
-    x_osnd[[c(i-1, 2)]] <- s[i-1]
-    osnd[[c(i-1, 4)]] <- notch_poly_yval
-    x_osnd[[c(i-1, 4)]] <- notch
-    
-
-  }else{
-    osnd[[i-1]] <- inflexion_points_new_yval[old_o:(old_o+3)]
-    osnd[[c(i-1, 1)]] <- o_yval
-    #osnd[[i-1]] <- osnd[[i-1]] - inflexion_points_new_yval[o]
-    
-    if((x_osnd[[c(i-1, 4)]] - x_osnd[[c(i-1, 3)]]) < 3 & (osnd[[c(i-1, 3)]] / (osnd[[c(i-1, 2)]] - osnd[[c(i-1, 1)]])) > 0.5){         # these lines are for cases when the canonical waveform has a prominent
-     osnd[[c(i-1, 3)]] <- inflexion_points_new_yval[old_o + 4]                                                                         # renal wave such that o+3 and o+4 are inflexion points between the 
-     x_osnd[[c(i-1, 3)]] <- inflexion_points_new[old_o + 4]                                                                            # systolic peak and the notch. This shifts them along by two. 
-     osnd[[c(i-1, 4)]] <- inflexion_points_new_yval[old_o + 5]                                                                         # A fixed threshold isn't ideal, but a threshold relative to O-S could work. 
-     x_osnd[[c(i-1, 4)]] <- inflexion_points_new[old_o + 5]
-    }
-    
-    if((x_osnd[[c(i-1, 4)]] - x_osnd[[c(i-1, 3)]]) < 3 &  x_osnd[[c(i-1, 4)]] < 30){
-      osnd[[c(i-1, 3)]] <- inflexion_points_new_yval[old_o + 4]                             # This is a special case for when there are two notches apparent
-      x_osnd[[c(i-1, 3)]] <- inflexion_points_new[old_o + 4]                                # between systolic and diastolic waves
-      osnd[[c(i-1, 4)]] <- inflexion_points_new_yval[old_o + 5]                             
-      x_osnd[[c(i-1, 4)]] <- inflexion_points_new[old_o + 5]
-    }
-    
-
-    
-    if(osnd[[c(i-1, 3)]] < 0 & (osnd[[c(i-1, 4)]] - osnd[[c(i-1, 3)]]) > 1){        # If N is less than 0 and D-N >1, this implies that N has risen above D such 
-      # find points either side of the notch                                        # that neither are inflection points and hence the inflection points
-      d <- notch + 2                                                                # of next O and S are incorrectly assigned to N and D. 
-      n <- notch - 2                                                                # These lines correct for that by finding the inflection point instead, 
-      d_yval <- predict(poly_wave[[i-1]], d)                                        # and taking values either side of it that approximate N and D. 
-      n_yval <- predict(poly_wave[[i-1]], n) 
-      # assign those points
-      osnd[[c(i-1, 3)]] <- n_yval
-      x_osnd[[c(i-1, 3)]] <- n
-      osnd[[c(i-1, 4)]] <- d_yval
-      x_osnd[[c(i-1, 4)]] <- d
-    }
-    
-    if((x_osnd[[c(i-1, 3)]] - x_osnd[[c(i-1, 2)]]) < 5){     # despite this being on the canonical waveform side, these lines
-      osnd[[c(i-1, 3)]] <- osnd[[c(i-1, 4)]]                 # are here because when an inflection point exists between systolic
-      x_osnd[[c(i-1, 3)]] <- x_osnd[[c(i-1, 4)]]             # peaks on non-canonical waveforms, they fulfill the condition
-      osnd[[c(i-1, 4)]] <- notch_poly_yval                   # to be processed on the canonical side. 
-      x_osnd[[c(i-1, 4)]] <- notch
-    }
-  }    
-  }else{
-    
-    #define old_o
-    old_o <- max(which(inflexion_points_new < w_poly_peaks_wave[1]))
-    #define osnd
-    x_osnd[[i-1]] <- inflexion_points_new[old_o:(old_o+3)]
-    osnd[[i-1]] <- inflexion_points_new_yval[old_o:(old_o+3)]
-    # Find new S
-    s[i-1] <- w_poly_peaks_wave[1] + (2*(v - w_poly_peaks_wave[1]))
-    s_yval[i-1] <- predict(poly_wave[[i-1]], s[i-1])
-    
-    # Distinguish between canonical vs non-canonical
-    if((inflexion_points_new[old_o+1] - w_poly_peaks_wave[1]) > (s[i-1] - w_poly_peaks_wave[1])){
-      
-      # Remove false N and D values 
-      x_osnd_precursor <- x_osnd[[i-1]]
-      if(length(which(complete.cases(x_osnd_precursor) ==1)) != 4){
-        x_osnd_precursor <- x_osnd_precursor[-(which(is.na(x_osnd_precursor)))]
-      }
-      if(length(x_osnd_precursor) == 2){
-        x_osnd[[i-1]] <- x_osnd_precursor
-      }else{
-        false_points <- which(x_osnd_precursor > notch) 
-        x_osnd_precursor <- x_osnd_precursor[-false_points]
-        x_osnd[[i-1]] <- x_osnd_precursor
-      }
-      # Find y coords of OSND
-      osnd[[i-1]] <- inflexion_points_new_yval[old_o:(old_o+3)]
-      osnd[[c(i-1, 1)]] <- o_yval
-      
-      # Remove false values again
-      osnd_precursor <- osnd[[i-1]]
-      if(length(which(complete.cases(osnd_precursor) ==1)) != 4){
-        osnd_precursor <- osnd_precursor[-(which(is.na(osnd_precursor)))]
-      }
-      if(length(osnd_precursor) == 2){
-        osnd[[i-1]] <- osnd_precursor
-      }else{
-        osnd_precursor <- osnd_precursor[-false_points]
-        osnd[[i-1]] <- osnd_precursor
-      }
-      
-      osnd[[c(i-1, 3)]] <- osnd[[c(i-1, 2)]]
-      osnd[[c(i-1, 2)]] <- s_yval[i-1]
-      x_osnd[[c(i-1, 3)]] <- x_osnd[[c(i-1, 2)]]
-      x_osnd[[c(i-1, 2)]] <- s[i-1]
-      osnd[[c(i-1, 4)]] <- notch_poly_yval
-      x_osnd[[c(i-1, 4)]] <- notch
-      
-    }else{
-      x_osnd[[c(i-1, 1)]] <- o                                 # Cases where there are fewer than 4 inflexion points identified 
-      x_osnd[[c(i-1, 2)]] <- inflexion_points_new[2]           # can occur if N and D converge and the spline isn't long enough for
-      x_osnd[[c(i-1, 3)]] <- notch                             # the next S to register as an inflexion point.
-      x_osnd[[c(i-1, 4)]] <- notch
-      osnd[[c(i-1, 1)]] <- o_yval
-      osnd[[c(i-1, 2)]] <- inflexion_points_new_yval[2]
-      osnd[[c(i-1, 3)]] <- notch_poly_yval
-      osnd[[c(i-1, 4)]] <- notch_poly_yval
-      
-    }   
-  }
-	
-
-  # Find pulse width = width at half the amplitude of the wave
-  #max_amp_precursor <- osnd[[i-1]] # second element will give amplitude of the wave
-  #half_amp <- max_amp_precursor[2]/2
-  #half_amp <- half_amp - inflexion_points_new_yval[o] # correcting for the fact that the spline goes below 0
-  # find all x values where y = half_amp
-  #xval_width <- solve(poly_wave[[i-1]], b = half_amp)
-  # Calculate width from the first two x-values:
-  #pulse_width[i-1] <- xval_width[2] - xval_width[1]
-
-  
-  # Find the next o_point
-  next_o <- x_osnd[[c(i-1, 1)]] + o_difference[i-1]
-  next_o_yval <- predict(poly_wave[[i-1]], next_o) 
-	
-  #Define period as 3*v-u
-  period <- 3*(v-u)
-  
-  #Define phi and replace all values larger than pi with pi, and all values smaller than -pi with -pi. This ensures a single peak
-  phi <- ((2*pi)/period)  * (x-(w_poly_peaks_wave[1]+(period/4)))
-  phi[phi>(pi)] <- pi
-  phi[phi<(-pi)] <- -pi
-	
-	
-  # Finding S peak 
-  # y = (S-O)/2 * cos(phi) + S/2
-  y <-((osnd[[c(i-1, 2)]] -  osnd[[c(i-1, 1)]])/2) * cos(phi) + ((osnd[[c(i-1,1)]] + osnd[[c(i-1, 2)]])/2) 
-  #the last bit (s/2) only works if O is always 0 - otherwise should be (O+S)/2 
- 
-  
-  #Defining phi for the D peak
-  d_phi <- ((2*pi)/period)  * (d_x-(x_osnd[[c(i-1,4)]]))
-  d_phi[d_phi>(pi)] <- pi
-  d_phi[d_phi<(-pi)] <- -pi
-	
-  #Finding the sine for the D peak
-  d_y <- ((osnd[[c(i-1,4)]]-osnd[[c(i-1, 1)]])/2) * cos(d_phi) + ((osnd[[c(i-1,1)]] + osnd[[c(i-1,4)]])/2)
-
-  
-  
-  # Plot back on poly_wave[[i]]:
-  plot(poly_wave[[i-1]])
-  w_poly_peaks_yval <- predict(poly_wave[[i-1]], w_poly_peaks_wave)
-  points(w_poly_peaks_wave[1], w_poly_peaks_yval[1], pch = 19)
-  points(x_osnd[[i-1]], osnd[[i-1]], pch = 19, col = "red")
-  points(next_o, next_o_yval, pch = 19)
-  lines(x, y, col = 'red')
-  lines(d_x, d_y, col='purple')
-  #points(half_heights_wave_new, u_v_yval_wave, pch = 19)
-  #points(notch, notch_poly_yval, pch = 19)
-  
-
-  s_sine[[i-1]] <- y 
-  d_sine[[i-1]] <- d_y
-  
-  
-}
+osnd_xy <- find_osnd(p = pulse2, p_w = poly_wave, col_len = source_data_column_length, wuvn = wuv)
+osnd_y <- osnd_xy[1:(length(osnd_xy)/2)]
+osnd_x <- osnd_xy[(length(osnd_xy)/2+1):length(osnd_xy)]
 
 #Print all osnd's
-for(i in 1:length(osnd)){
-  osnd_correction <- osnd[[i]]
+for(i in 1:length(osnd_y)){
+  osnd_correction <- osnd_y[[i]]
   osnd_correction <- osnd_correction - osnd_correction[1]
-  osnd[[i]] <- osnd_correction
-  print(osnd[[i]])
+  osnd_y[[i]] <- osnd_correction
+  print(osnd_y[[i]])
 }
 
+
+
+###PLEASE DON'T RUN ANY OF THE SINE STUFF FOR NOW, IT WILL NOT WORK!!###
 resid_test <- list()
 resid_peaks_y <- c()
 resid_peaks_x <- c()
@@ -1027,135 +734,3 @@ FitPeaks <- function(i_argW, i_val0, i_start, i_end, TOptional<FVector2D> (o_Pea
   
   }
 
-SplineFitting <- function(io_Beat)
-{
-  
-  }
-
-TranscribeTrace <- function(o_SplineData, i_Start, i_Length, i_Offset)
-{
-  
-  }
-
-#Try to find events for the current pulse, based on Elgendi, Liang & Ward (2018)
-# Events are intended to be unambiguous features in the PPG trace or its derivatives
-CalculateEvents <- function(io_Beat)
-{
-  
-  }
-
-#PPG traces must be aligned and scaled if they are to be averaged.  Defining
-# 'W' as time of steepest increase as the beat starts, 'U' and 'V' correspond
-# to the time when the gradient is half as steep (the gradient may not go to
-# zero in a consistent manner).  Assigning 'U' a value of zero, and 'V' a value
-# of one (the y scale and offset may vary between beats), the time at which the
-# scaled trace has a value of one half is used for time alignment.
-FindReferenceTime <- function(Spline)
-{
-  
-  }
-
-# Look for 'O' and 'S' - the beginning and end of the main increase
-FindEventsTrace <- function(io_Beat, Spline)
-{
-  
-  }
-
-#Main peak in the first derivative corresponds to the onset of the beat, powered
-# by the contraction of the left ventricle
-FindEvents1Dev <- function(io_Beat, Spline)
-{
-  
-  }
-
-
- 
-
-#PPG traces must be aligned and scaled if they are to be averaged.  Defining
-#'W' as time of steepest increase as the beat starts, 'U' and 'V' correspond
-#to the time when the gradient is half as steep (the gradient may not go to
-#zero in a consistent manner).  Assigning 'U' a value of zero, and 'V' a value
-#of one (the y scale and offset may vary between beats), the time at which the
-#scaled trace has a value of one half is used for time alignment.
-FindReferenceTime  <- function(FNTSpline, Spline)
-{
-}
-
-#Look for 'O' and 'S' - essentially the start and end of the main increase.
-FindEventsTrace <- function(FNTBeatParams, io_Beat, const FNTSplin, Spline)
-{
-}
-
-#Main peak in the first derivative corresponds to the onset of the beat - powered
-#by the contraction of the left ventricle.
-FindEvents1Dev <- function(FNTBeatParams, io_Beat, const FNTSpline, Spline) 
-{
-	}
-
-#Look for a series of three maxima (and two minima) in the second derivative
-#of the PPG trace.
-#If we found too many, reject the smallest ones to try to get to what by eye
-#are the `obvious' peaks
-#If we found too few, loosen our definition.  Look for inflections, 
-FindEvents2Dev<- function(FNTBeatParams, io_Beat, FNTSpline, Spline) 
-{
-	}
-
-
-#Having labelled a maximum in the first derivative as 'Z', we expect to find
-#the notch ('N') before it, and the diastolic peak ('D') after it.  Many
-#people do not have the peak, or it is only sometimes apparent.  In these
-#cases, we equate N, Z, and D.
-
-#Typically the first derivative has two minima exist between its main peak
-#('W') and Z; these we call 'X' and 'Y'.  Often there's only one real minimum.
-#If this is skewed early in the interval, it's probably X, if it's skewed
-#late, it's probably Y.  We might be able to label the other event based on
-#less strong criteria.
-FindEventsNotch<-function(FNTBeatParams, io_Beat, FNTSpline, Spline)
-	{
-	}
-
-FindZ<-function(FNTSpline, i_Spline, i_argXY, float i_rangeMax)
-	{
-	}
-
-#Generate a spline for the beat, with various protections
-#Spline x-coordinate will be time in units of seconds,
-#with zero value at 'W', the maximum first derivative.
-#'Truncated' means that we'd use more of the PPG buffer if we had it
-GetBeatSpline<-function(FNTBeatParams, i_Beat, FNTSpline, o_Spline) 
-	{
-	}
-
-GetBeatSpline<-function(FNTBeatParams, i_Beat, FNTSpline, o_Spline, i_AllowTruncation, o_truncated) 
-	{
-	}
-
-HasEventPeaks<-function(FNTBeatParams, i_Beat)
-	{
-	}
-
-Stats<-function(i_SampleSize, PublicStats, o_Stats, PrivateStats, o_Private)
-	{
-	}
-
-CalculateResidual<-function(i_Index)
-	{
-	}
-
-SubtractBeat<-function(FNTBeatParams, i_Beat)
-	{
-	}
-
-TestClamp<-function(FNTSpline, i_Spline, Start, MaxFirstDerivative)
-	{
-	}
-
-SubtractSine<-function(io_Data, Count, Peak, Amplitude, Width, io_Fit)
-{
-	}
-
-SinePeak<-function(DeltaTime, Amplitude, Width)
-	{
-	}
