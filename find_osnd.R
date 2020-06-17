@@ -1,8 +1,8 @@
-p_w = poly_wave
-p = pulse2
-col_len = source_data_column_length
-wuvn = wuv
-ow = o_w_difference
+#p_w = poly_wave
+#p = pulse2
+#col_len = source_data_column_length
+#wuvn = wuv
+#ow = o_w_difference
 
 
 find_osnd <- function(p, p_w, col_len, wuvn, ow, plot=FALSE){
