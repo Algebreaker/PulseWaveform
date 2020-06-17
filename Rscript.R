@@ -524,48 +524,6 @@ for(i in 1:(length(poly_wave)-1)){
 
 spectralanalysis <- (spectrum(baseline_corrected))
 
-###sines sines sines 
-
-
-pre_phase_test <- list()
-post_phase_test <- list()
-
-
-for(i in 2:((ncol(pulse))-1)){
-
-  
-  plot(pulse[,1], pulse[,i], type = 'l')
-
-  #identify the different systolic variables to be entered into the sine eq
-  #b is defined as 2*O-S
-  syst_b <- (2*pi)/abs(2*(x_osnd[[i]][1]-x_osnd[[i]][2]))
-  s_indx <- x_osnd[[i]][2]
-  o_indx <- x_osnd[[i]][1]
-  s_amp <- (pulse[,i][s_indx] - pulse[,i][o_indx])/2
-  
-  syst_y <- s_amp*sin(syst_b*(pulse[,1])+0)+(osnd[[i]][2]-s_amp)
-  pre_phase_test[[i-1]] <- syst_y
-  
-  lines(pulse[,1], syst_y, col='red')
-
-  
-  #estimate phase from the sine wave
-  #this DOESN'T WORK AND I DON'T KNOW WHY
-  syst_y_peak <- findpeaks(syst_y) 
-  xval <- approx(x=syst_y, y = pulse[,1], xout = syst_y_peak[2])$y
-  
-  #phase estimation - 360 * time delay / period
-  phase_est <- (360*(x_osnd[[i]][2]-xval))/((2*pi)/syst_b)
-  
-  syst_y_phase <- s_amp*sin(syst_b*(pulse[,1])+phase_est)+(osnd[[i]][2]-s_amp)
-  post_phase_test[[i-1]] <- syst_y_phase
-  
-  lines(pulse[,1], syst_y_phase, col = 'green')
-  
-
-}
-
-
 
 ########
 
