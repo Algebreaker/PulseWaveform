@@ -1,6 +1,7 @@
 setwd("/home/johanna/Documents/Ninja theory/PulseAnalysis/Data/Craig")
 data <- read.table("Source2.csv", header=T, sep=",") #first line of the csv file needs to be deleted
 
+
 source("/Users/luciedaniel-watanabe/Desktop/attempt at pulse analysis/preproc.R")
 source("/Users/luciedaniel-watanabe/Desktop/attempt at pulse analysis/find_w.R")
 source("/Users/luciedaniel-watanabe/Desktop/attempt at pulse analysis/find_u_v.R")
@@ -10,6 +11,7 @@ source("/Users/luciedaniel-watanabe/Desktop/attempt at pulse analysis/spectrum.R
 source("/Users/luciedaniel-watanabe/Desktop/attempt at pulse analysis/find_wuv.R")
 source("/Users/luciedaniel-watanabe/Desktop/attempt at pulse analysis/fit_sd_sine.R")
 source("/Users/luciedaniel-watanabe/Desktop/attempt at pulse analysis/fit_n_sine.R")
+source("/Users/luciedaniel-watanabe/Desktop/attempt at pulse analysis/refit_peaks.R")
 
 
 #Preprocessing which involves downsampling data and undetrending 
@@ -237,154 +239,28 @@ d_sines <- sd_sines[(length(sd_sines)/2+1):length(sd_sines)]
 n_sines <- fit_n_sine(p=pulse2, ss = s_sines, ds = d_sines, osndx = osnd_x, osndy = osnd_y, wuvn = wuv, plot=FALSE)
 
 
-####LUCIE'S PRELIMINARY REFITTING SPLINES BIT THAT WORKS?
+##Refitting the SND peaks 
 
+avg_period <- 3*(mean(wuv$v_x)-mean(wuv$u_x))
+refitted_snd <- refit_peaks(p=pulse2, ss= s_sines, ds= d_sines, ns= n_sines, period= avg_period)
 
-max_shift=4
-sample_rate = 75
-avg_period <- 3*(mean(v_vals)-mean(u_vals))
-s_x <- c()
-s_y <- c()
-d_x <- c()
-d_y <- c()
-n_x <- c()
-n_y  <- c()
-
-
-##Takes in the current estimated values for the S, N and D curves and refits them using the trace derivatives 
-
-for(i in 2:(ncol(pulse)-1)){
-
-  fitted_s <- FALSE
-  fitted_n <- FALSE
-  fitted_d <- FALSE
-
-  while(!fitted_s | !fitted_n | !fitted_d){
-    
-    ##define the peaks of the current waveform
-    s_peak <- max(s_sine[[i-1]])
-    n_peak <- max(n_sine[[i-1]])
-    d_peak <- max(d_sine[[i-1]])
-    d_peak_x <- match(d_peak, d_sine[[i-1]])
-    n_peak_x <- match(n_peak, n_sine[[i-1]])
-    s_peak_x <- match(s_peak, s_sine[[i-1]])
-    
-    #if we've refitted any of the peaks already, define them as -1
-    if(fitted_s){
-        s_peak = -1
-      }
-    if(fitted_n){
-        n_peak = -1
-      }
-    if(fitted_d){
-        d_peak = -1
-      }
-    
-    if(s_peak > n_peak){
-      #subtract the d and n peaks from the original trace
-      d_resid <- pulse[,i] - d_sine[[i-1]]
-      d_n_resid <- d_resid - n_sine[[i-1]]
-      
-      d_n_resid_spline <-CubicInterpSplineAsPiecePoly(1:length(pulse[, i]), d_n_resid, "natural")
-      inflex_test_x <- solve(d_n_resid_spline, b=0, deriv=1)
-      inflex_test_y <- predict(d_n_resid_spline, inflex_test_x)
-      
-      pk_loc <- which(abs(inflex_test_x-s_peak_x)==min(abs(inflex_test_x - s_peak_x)))
-      
-      s_x[i-1] <- inflex_test_x[pk_loc]
-      s_y[i-1] <- inflex_test_y[pk_loc]
-
-      
-      fitted_s <- TRUE
-
-    
-    } else if(n_peak > d_peak){
-    
-      s_resid <- pulse[,i] - s_sine[[i-1]]
-      s_d_resid <- s_resid - d_sine[[i-1]]
-    
-      s_d_resid_spline <-CubicInterpSplineAsPiecePoly(1:length(pulse[, i]), s_d_resid, "natural")
-      current_deriv_n <- predict(s_d_resid_spline, n_peak_x, deriv=1)
-      
-      inflex_test_x <- solve(s_d_resid_spline, b=0, deriv=1)
-      inflex_test_y <- predict(s_d_resid_spline, inflex_test_x)
-        
-        if(current_deriv_n < 0){
-          subset_x <- inflex_test_x[inflex_test_x > s_peak_x & inflex_test_x < n_peak_x]
-          x_loc <- match(subset_x, inflex_test_x)
-          subset_y <- inflex_test_y[x_loc]
-          pk_loc <- which(abs(subset_x - n_peak_x)==min(abs(subset_x - n_peak_x)))
-
-        } else if(current_deriv_n > 0){
-          subset_x <- inflex_test_x[inflex_test_x > n_peak_x & inflex_test_x < d_peak_x]
-          x_loc <- match(subset_x, inflex_test_x)
-          subset_y <- inflex_test_y[x_loc]
-          pk_loc <- which(abs(subset_x - n_peak_x)==min(abs(subset_x - n_peak_x)))
-
-        } 
-        
-        n_y[i-1] <- subset_y[pk_loc]
-        n_x[i-1] <- subset_x[pk_loc]
-        
-        if(fitted_s & (!fitted_d)){
-        fitted_s = FALSE;
-        }
-
-      fitted_n = TRUE;
-    
-    
-    } else{
-    
-      s_resid <- pulse[,i] - s_sine[[i-1]]
-      s_n_resid <- s_resid - n_sine[[i-1]]
-      
-      s_n_resid_spline <-CubicInterpSplineAsPiecePoly(1:length(pulse[, i]), s_n_resid, "natural")
-      current_deriv_d <- predict(s_n_resid_spline, d_peak_x, deriv=1)
-      
-      inflex_test_x <- solve(s_n_resid_spline, b=0, deriv=1)
-      inflex_test_y <- predict(s_n_resid_spline, inflex_test_x)
-
-      if(current_deriv_d < 0){
-        subset_x <- inflex_test_x[inflex_test_x > n_peak_x & inflex_test_x < d_peak_x]
-        x_loc <- match(subset_x, inflex_test_x)
-        subset_y <- inflex_test_y[x_loc]
-        pk_loc <- which(abs(subset_x - d_peak_x)==min(abs(subset_x - d_peak_x)))
-      
-      } else if(current_deriv_d > 0){
-        subset_x <- inflex_test_x[inflex_test_x > d_peak]
-        x_loc <- match(subset_x, inflex_test_x)
-        subset_y <- inflex_test_y[x_loc]
-        pk_loc <- which(abs(subset_x - d_peak_x)==min(abs(subset_x - d_peak_x)))
-
-      }
-      
-      d_x_est <- subset_x[pk_loc]
-      d_y_est <- subset_y[pk_loc]
-        
-     # if(d_x_est > (d_peak_x + max_shift)){
-        #d_y_est <- inflex_test_y[which.max(inflex_test_y)]
-        #d_x_est <- inflex_test_x[which.max(inflex_test_y)]
-        #d_y_est = 2 * d_y_est * sample_rate * avg_period
-        #d_x_est = d_x_est + 0.5 * pi * avg_period
-    #  }
-      
-      d_y[i-1] <- d_y_est
-      d_x[i-1] <- d_x_est
-      
-        
-      fitted_d = TRUE
-    
-    }
-  }
+##Plotting the refitted SND peaks back on the waveforms 
+for(i in 2:(ncol(pulse2))){
+  plot(1:nrow(pulse2), pulse2[,i], type='l')
+  points(refitted_snd$s_x[i-1], refitted_snd$s_y[i-1], pch = 19, col ='red')
+  points(refitted_snd$n_x[i-1], refitted_snd$n_y[i-1], pch = 19, col = 'blue')
+  points(refitted_snd$d_x[i-1], refitted_snd$d_y[i-1], pch = 19, col = 'yellow')
 }
   
-for(i in 2:(ncol(pulse)-1)){
-  plot(pulse$x, pulse[,i], type='l')
-  points(s_x[i-1], s_y[i-1], pch = 19, col ='red')
-  points(n_x[i-1], n_y[i-1], pch = 19, col = 'blue')
-  points(d_x[i-1], d_y[i-1], pch = 19, col = 'yellow')
+
+
+Print all osnd's
+for(i in 1:length(osnd_y)){
+  osnd_correction <- osnd_y[[i]]
+  osnd_correction <- osnd_correction - osnd_correction[1]
+  osnd_y[[i]] <- osnd_correction
+  print(osnd_y[[i]])
 }
-  
 
 
 
@@ -476,46 +352,4 @@ spectralanalysis <- (spectrum(baseline_corrected))
 
 
 ########
-
-#Plot average trace
-averagetrace<-rowMeans(pulse[-1])
-means <- data.frame(id=1:length(averagetrace), av=averagetrace)
-ggplot(data = pulse_stacked, aes(x = pulse_stacked$x, y = pulse_stacked$values, col = pulse_stacked$wave_ID)) +
-  geom_line(size = 1.5)+
-  geom_line(data=means, aes(x=id, y=av), color="black")
-
-	
-	# Sense rapid increase as a possible beat                                         
-
-       # Empirical checks of whether the current increase in the trace value looks
-       # like a beat profile.  There should be a resolvable peak in the gradient,
-	     # or else we should wait for more context.  The residual should have
-	     # increased, so we don't double count activity from a previous beat.
-       
-       # If the same beat is already in the history, it will be processed elsewhere.
-       # Attempt to match the beat profile to the empirical template.
-  
-  }
-
-
-
-
-#inputs for this not sure about in R
-FitPeaks <- function(i_argW, i_val0, i_start, i_end, TOptional<FVector2D> (o_Peaks)[FitBeatConst::NUM_PEAKS]) 
-{
- sfunction<- splinefun(1:500, undetrended_data$PPG.PulseOx1[1:500], method="natural")
-  deriv1<-sfunction(1:500, deriv = 1) #first derivative of the spline function
-  plot(deriv1, type="l")
-  p<-findpeaks(deriv1, nups = 6, minpeakdistance = 40) #finding maximum of first derivative
-    plot(deriv1, type = 'l')
-        points(p[,2], p[,1], col = 'red', pch = 19)
-      peakindex<-p[,2]
-
-  }
-  ###This is just an application for fun to visualise the derivs:
-  #splinevectorx<-as.numeric(unlist(spline[1]))
-  #splinevectory<-as.numeric(unlist(spline[2]))
-  #TkSpline(x=splinevectorx, y=splinevectory)
-  
-  }
 
