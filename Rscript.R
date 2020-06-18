@@ -8,7 +8,8 @@ source("/Users/luciedaniel-watanabe/Desktop/attempt at pulse analysis/baseline.R
 source("/Users/luciedaniel-watanabe/Desktop/attempt at pulse analysis/find_osnd.R")
 source("/Users/luciedaniel-watanabe/Desktop/attempt at pulse analysis/spectrum.R")
 source("/Users/luciedaniel-watanabe/Desktop/attempt at pulse analysis/find_wuv.R")
-
+source("/Users/luciedaniel-watanabe/Desktop/attempt at pulse analysis/fit_sd_sine.R")
+source("/Users/luciedaniel-watanabe/Desktop/attempt at pulse analysis/fit_n_sine.R")
 
 
 #Preprocessing which involves downsampling data and undetrending 
@@ -224,67 +225,16 @@ osnd_xy <- find_osnd(p = pulse2, p_w = poly_wave, col_len = source_data_column_l
 osnd_y <- osnd_xy[1:(length(osnd_xy)/2)]
 osnd_x <- osnd_xy[(length(osnd_xy)/2+1):length(osnd_xy)]
 
-#Print all osnd's
-for(i in 1:length(osnd_y)){
-  osnd_correction <- osnd_y[[i]]
-  osnd_correction <- osnd_correction - osnd_correction[1]
-  osnd_y[[i]] <- osnd_correction
-  print(osnd_y[[i]])
-}
 
+#Fit S and D sines using the OSND points
 
+sd_sines <- find_sd_sine(p = pulse2, wuvn = wuv, osndx = osnd_x, osndy = osnd_y, pw = poly_wave, plot=FALSE)
+s_sines <- sd_sines[1:(length(sd_sines)/2)]
+d_sines <- sd_sines[(length(sd_sines)/2+1):length(sd_sines)]
 
-###PLEASE DON'T RUN ANY OF THE SINE STUFF FOR NOW, IT WILL NOT WORK!!###
-resid_test <- list()
-resid_peaks_y <- c()
-resid_peaks_x <- c()
+#Fit N sines using the S and D sines
 
-#Find residual by subtracting the s_sine and the d_sine from the pulse data
-#Find the x and y values of the peak of the residual to plot the N peak
-
-for(i in 2:(ncol(pulse))){
-  
-  plot(pulse$x, pulse[,i], type = 'l')
-  lines(1:(nrow(pulse)),s_sine[[i-1]], col='red')
-  lines(1:(nrow(pulse)),d_sine[[i-1]], col='purple')
-  d_y_resid <- pulse[,i] - s_sine[[i-1]]
-  d_y_resid <- d_y_resid - d_sine[[i-1]]
-  lines(1:(nrow(pulse)),d_y_resid, col='green')
-  #points(x_osnd[[i-1]], osnd[[i-1]], pch = 19, col = "red")
-  
-  resid_test[[i-1]] <- d_y_resid
-  
-  resid_peaks_y[i-1] <- findpeaks(d_y_resid[20:40])[1]
-  resid_peaks_x[i-1] <- 20+(findpeaks(d_y_resid[20:40])[2])
-  points(resid_peaks_x[i-1], resid_peaks_y[i-1], pch = 19)
-  
-}
-
-#Use residual to find peaks and plot the sine curve for the tidal wave/N peak 
-
-n_x <- c(1:(nrow(pulse)))
-n_sine <- list()
-n_resid <- list()
-
-for(i in 2:(ncol(pulse))){
-  
-  plot(pulse$x, resid_test[[i-1]], type='l')
-  
-  #define phi for notch
-  n_phi <- ((2*pi)/period)  * (n_x-(resid_peaks_x[i-1]))
-  n_phi[n_phi>(pi)] <- pi
-  n_phi[n_phi<(-pi)] <- -pi
-  
-  #create notch sine curve
-  n_y <- ((resid_peaks_y[i-1]-osnd[[c(i-1, 1)]])/2) * cos(n_phi) + (resid_peaks_y[i-1]/2)
-  
-  lines(1:(nrow(pulse)),n_y, col='green')
-  n_sine[[i-1]] <- n_y
-  
-  resid <- resid_test[[i-1]] - n_y
-  lines(pulse$x, resid, col='blue')
-  n_resid[[i-1]] <- resid
-}
+n_sines <- fit_n_sine(p=pulse2, ss = s_sines, ds = d_sines, osndx = osnd_x, osndy = osnd_y, wuvn = wuv, plot=FALSE)
 
 
 ####LUCIE'S PRELIMINARY REFITTING SPLINES BIT THAT WORKS?
@@ -548,130 +498,7 @@ ggplot(data = pulse_stacked, aes(x = pulse_stacked$x, y = pulse_stacked$values, 
   }
 
 
-#Refitbeats
-# Beats are added to record keeping once the first peak is detected, but some
-# analysis is delayed until the third peak can be detected, or a subsequent
-# beat prevents the tail of the beat being observed.
 
-
-RefitBeats <- function()
- {
-       # Try to fit fourth peak
-       # For all unconfirmed beats in the history, attempt to refit with current trace data.
-       # Do not attempt to fit later profiles; We might incorrectly accept a secondary peak.
-       # Find valid beats and exclude false positives to an acceptable degree.  The beat must
-       # be of sufficient amplitude and enough time must have passed since the previous beat, 
-       # but there is some subtlety in combining these two requirements.
-       # The fourth peak is added quite late, as the beat is generally accepted once the third 
-       # peak is resolved.  Thus, the residual needs to be updated specifically.  The other 
-       # peaks are handled during ConfirmBeat.
- }
-
-
-#UpdatePPGanalysis
-
-UpdatePPGanalysis <- function(). 
-{
-        #Enter calibration mode if the current interval between beats is too long.
-        #Validate peak of last beat if sufficient time has passed
-  
-  }
-
-
-
-
-#CalcMaxGradient
-
-CalcMaxGradient <- function(i_amplitude, i_HasSkippedBeat, io_Interval)
-{
-  
-  }
-
-#TestMergeBeats
-# Check whether the last beat in the history should be confirmed on the basis
-# of timings, or a confirmed beat should be replaced with this new beat.
-
-TestMergeBeats <- function()
- {
-  
-  }
-
-#TestSkippedBeat
-# Sometimes, in some individuals, a fraction of heart beats are 'skipped'.
-# Physiologically this is probably because the heart tries to beat too early,
-# so there's no pressure wave to propagate out to the PPG.  If we assume the
-# existence of this skipped beat, the overall heart rate is nearly unaffected.
-# We therefore need to detect skipped beats to keep meaningful statistical
-# measures, which themselves are used to detect subsequent beats.
-
-TestSkippedBeat <- function()
-{
-    # Multiple skipped beats may indicate that we've just got the wrong rate...
-  }
-
-
-#UndoBeat
-# Reject a beat assignment;
-# * Recalculate the residue after subtracting all beats from the trace
-# * Recalculate the Bayesian model for the P50 statistic.
-
-UndoBeat <- function()
-{
-  
-  }
-
-#UpdateAverageBeat 
-
-UpdateAverageBeat <- function()
-{
-  
-  }
-
-#CalibrateBeat
-#Method to find pulse 
-
-CalibrateBeat <- function()
-{
-  
-  }
-
-#FindPeak
-
-FindPeak <- funtion()
-{
-    # Look for a well-defined peak
-    # If there's no definite maximum, look for a maximum in the first
-	  # derivative.  Sometimes the 'secondary' peak rises from the 'primary'
-	  # without the gradient decreasing to zero.
-  
-  }
-
-#HasCalibrationData
-
-HasCalibrationData <- function()
-{
-  
-  }
-
-
-TestArea <- function()
-{
-  
-  }
-
-# Accept that we have found a new beat if we can adequately fit it with the following basic model; 
-# there exists a primary peak of a certain shape, whose echo will follow a certain time later. There is aslo
-# a secondary component which (may) be added to this with its own echo.
-#Once each component is located, substract it from the trace to make it easier to find the components
-FitBeat <- function(FNTBeatParams, io_Beat)
-{                                                   
-  
-  }
-
-FindStartIndex <- function(i_PeakIndex)
-{
-  
-  }
 
 #inputs for this not sure about in R
 FitPeaks <- function(i_argW, i_val0, i_start, i_end, TOptional<FVector2D> (o_Peaks)[FitBeatConst::NUM_PEAKS]) 
