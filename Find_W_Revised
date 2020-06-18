@@ -1,0 +1,121 @@
+##################### Finding W (revised) ##########################################
+
+deriv1_poly <- CubicInterpSplineAsPiecePoly(1:length(undetrended_data$undetrended), deriv1, "natural") 
+inflexion_points_deriv1 <- solve(deriv1_poly, b = 0, deriv = 1)
+inflexion_points_deriv1_yval <- predict(deriv1_poly, inflexion_points_deriv1)
+w_poly_peaks <- c()
+w_poly_peaks_yval <- c()
+window <- list()
+for(i in 1:length(deriv1)){      
+  switch <- 0
+  if(i == 1){
+    window[[i]] <- deriv1[(((i-1)*50)):((((i-1)*50) + 1) + 50)]
+  }
+  if(i == 2){
+    window[[i]] <- deriv1[(((i-1)*50)):((((i-1)*50) + 1) + 50)]
+  }
+  if(i > 2){
+    if((w_poly_peaks[length(w_poly_peaks)] + 1.25*p_p_distance) > length(deriv1)){
+      break
+    }
+    p_p_distance <- w_poly_peaks[length(w_poly_peaks)] - w_poly_peaks[length(w_poly_peaks)-1] 
+    window[[i]] <- deriv1[(w_poly_peaks[length(w_poly_peaks)] + 0.75*p_p_distance):(w_poly_peaks[length(w_poly_peaks)] + 1.25*p_p_distance)]
+    if(window[[c(i, 1)]] == window[[c(i-1, 1)]]){
+      window[[i]] <- deriv1[(w_poly_peaks[length(w_poly_peaks)] + 200):(w_poly_peaks[length(w_poly_peaks)] + 300)]
+      switch <- 1
+    }
+  }
+  window_poly <- CubicInterpSplineAsPiecePoly(1:length(window[[i]]), window[[i]], "natural") 
+  inflexion_points_window <- solve(window_poly, b = 0, deriv = 1)
+  inflexion_points_window_yval <- predict(window_poly, inflexion_points_window)
+  threshold <- quantile(window[[i]], probs=c(.95))      
+  window_poly_peaks <- which(inflexion_points_window_yval > threshold)     
+  window_poly_peaks <- inflexion_points_window[window_poly_peaks]
+  window_poly_peaks_yval <- predict(window_poly, window_poly_peaks)
+  if(i==2){
+    window_poly_peaks <- window_poly_peaks + ((i-1)*50)
+  }
+  if(i > 2){
+    if(switch == 1){
+      window_poly_peaks <- window_poly_peaks + (w_poly_peaks[length(w_poly_peaks)] + 200)
+    }else{
+      window_poly_peaks <- window_poly_peaks + (w_poly_peaks[length(w_poly_peaks)] + 0.75*p_p_distance)
+    }
+  }
+   if(length(window_poly_peaks) == 2){
+    w_poly_peaks[(length(w_poly_peaks)+1):(length(w_poly_peaks) + length(window_poly_peaks))] <-  window_poly_peaks 
+    w_poly_peaks_yval[(length(w_poly_peaks)+1):(length(w_poly_peaks) + length(window_poly_peaks))] <- window_poly_peaks_yval
+  }
+  if(length(window_poly_peaks) == 1){     
+    if(i > 2){
+      if(window_poly_peaks_yval < max(window[[i]]) & (window_poly_peaks - w_poly_peaks[length(w_poly_peaks)]) < p_p_distance*0.75){   #assume peak is spurious if it is not the maximum value and the half maximum > 12 (  and it sits in the middle of the window -->  & ((window_poly_peaks - ((i-1)*90)) > 5 & (window_poly_peaks - ((i-1)*90)) < 85)    )
+        next
+      }
+    }
+    w_poly_peaks[(length(w_poly_peaks)+1):(length(w_poly_peaks) + length(window_poly_peaks))] <-  window_poly_peaks   # you are saying that you want to add on to the end of w_poly_peaks
+    w_poly_peaks_yval[(length(w_poly_peaks_yval)+1):(length(w_poly_peaks_yval) + length(window_poly_peaks_yval))] <- window_poly_peaks_yval
+  }
+  if(length(window_poly_peaks) < 1){                     # If less than 1 peak identified, reduce the threshold
+    threshold <- quantile(window[[i]], probs=c(.9))  
+    window_poly_peaks <- which(inflexion_points_window_yval > threshold)     
+    window_poly_peaks <- inflexion_points_window[window_poly_peaks]
+    window_poly_peaks_yval <- predict(window_poly, window_poly_peaks)
+    if(i==2){
+      window_poly_peaks <- window_poly_peaks + ((i-1)*50)
+    }
+    if(i > 2){
+      if(switch == 1){
+        window_poly_peaks <- window_poly_peaks + (w_poly_peaks[length(w_poly_peaks)] + 200)
+      }else{
+        window_poly_peaks <- window_poly_peaks + (w_poly_peaks[length(w_poly_peaks)] + 0.75*p_p_distance)
+      }
+    }
+    if(length(window_poly_peaks) == 2){
+      w_poly_peaks[(length(w_poly_peaks)+1):(length(w_poly_peaks) + length(window_poly_peaks))] <-  window_poly_peaks 
+    }
+    if(length(window_poly_peaks) == 1){
+      if(window_poly_peaks_yval < max(window[[i]]) & window_poly_peaks_yval > 1){
+        next
+      }
+      w_poly_peaks[(length(w_poly_peaks)+1):(length(w_poly_peaks) + length(window_poly_peaks))] <-  window_poly_peaks  
+    }
+    if(length(window_poly_peaks) < 1){
+      threshold <- quantile(window[[i]], probs=c(.85))  
+      window_poly_peaks <- which(inflexion_points_window_yval > threshold)     
+      window_poly_peaks <- inflexion_points_window[window_poly_peaks]
+      window_poly_peaks_yval <- predict(window_poly, window_poly_peaks)
+      if(length(window_poly_peaks) == 2){
+        w_poly_peaks[(length(w_poly_peaks)+1):(length(w_poly_peaks) + length(window_poly_peaks))] <-  window_poly_peaks 
+      }
+      if(length(window_poly_peaks) == 1){
+        if(window_poly_peaks_yval < max(window[[i]])){    
+          next
+        }
+        w_poly_peaks[(length(w_poly_peaks)+1):(length(w_poly_peaks) + length(window_poly_peaks))] <-  window_poly_peaks 
+      }
+     
+      if(length(window_poly_peaks) < 1){
+        threshold <- quantile(window[[i]], probs=c(.8))  
+        window_poly_peaks <- which(inflexion_points_window_yval > threshold)     
+        window_poly_peaks <- inflexion_points_window[window_poly_peaks]
+        window_poly_peaks_yval <- predict(window_poly, window_poly_peaks)
+        if(length(window_poly_peaks) == 2){
+          w_poly_peaks[(length(w_poly_peaks)+1):(length(w_poly_peaks) + length(window_poly_peaks))] <-  window_poly_peaks
+        }
+        if(length(window_poly_peaks) == 1){
+          if(window_poly_peaks_yval < max(window[[i]])){  
+            next
+          }
+          w_poly_peaks[(length(w_poly_peaks)+1):(length(w_poly_peaks) + length(window_poly_peaks))] <-  window_poly_peaks
+        }
+      }
+    }
+  }
+}
+w_poly_peaks <- w_poly_peaks - 1
+for(i in 1:length(w_poly_peaks)){
+  w_poly_peaks[i] <- inflexion_points_deriv1[which(abs(inflexion_points_deriv1 - w_poly_peaks[i]) == min(abs(inflexion_points_deriv1 - w_poly_peaks[i])))]
+}
+w_poly_peaks_yval <- predict(deriv1_poly, w_poly_peaks)
+
+############################################################################################################
