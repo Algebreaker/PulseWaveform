@@ -2,16 +2,16 @@ setwd("/home/johanna/Documents/Ninja theory/PulseAnalysis/Data/Craig")
 data <- read.table("Source2.csv", header=T, sep=",") #first line of the csv file needs to be deleted
 
 
-source("/Users/luciedaniel-watanabe/Desktop/attempt at pulse analysis/preproc.R")
-source("/Users/luciedaniel-watanabe/Desktop/attempt at pulse analysis/find_w.R")
-source("/Users/luciedaniel-watanabe/Desktop/attempt at pulse analysis/find_u_v.R")
-source("/Users/luciedaniel-watanabe/Desktop/attempt at pulse analysis/baseline.R")
-source("/Users/luciedaniel-watanabe/Desktop/attempt at pulse analysis/find_osnd.R")
-source("/Users/luciedaniel-watanabe/Desktop/attempt at pulse analysis/spectrum.R")
-source("/Users/luciedaniel-watanabe/Desktop/attempt at pulse analysis/find_wuv.R")
-source("/Users/luciedaniel-watanabe/Desktop/attempt at pulse analysis/fit_sd_sine.R")
-source("/Users/luciedaniel-watanabe/Desktop/attempt at pulse analysis/fit_n_sine.R")
-source("/Users/luciedaniel-watanabe/Desktop/attempt at pulse analysis/refit_peaks.R")
+source("/home/johanna/Documents/Ninja theory/PulseAnalysis/git/PulseWaveform/preproc.R")
+source("/home/johanna/Documents/Ninja theory/PulseAnalysis/git/PulseWaveform/find_w.R")
+source("/home/johanna/Documents/Ninja theory/PulseAnalysis/git/PulseWaveform/find_u_v.R")
+source("/home/johanna/Documents/Ninja theory/PulseAnalysis/git/PulseWaveform/baseline.R")
+source("/home/johanna/Documents/Ninja theory/PulseAnalysis/git/PulseWaveform/find_osnd.R")
+source("/home/johanna/Documents/Ninja theory/PulseAnalysis/git/PulseWaveform/spectrum.R")
+source("/home/johanna/Documents/Ninja theory/PulseAnalysis/git/PulseWaveform/find_wuv.R")
+source("/home/johanna/Documents/Ninja theory/PulseAnalysis/git/PulseWaveform/fit_sd_sine.R")
+source("/home/johanna/Documents/Ninja theory/PulseAnalysis/git/PulseWaveform/fit_n_sine.R")
+source("/home/johanna/Documents/Ninja theory/PulseAnalysis/git/PulseWaveform/refit_peaks.R")
 
 
 #Preprocessing which involves downsampling data and undetrending 
@@ -254,7 +254,7 @@ for(i in 2:(ncol(pulse2))){
   
 
 
-Print all osnd's
+#Print all osnd's
 for(i in 1:length(osnd_y)){
   osnd_correction <- osnd_y[[i]]
   osnd_correction <- osnd_correction - osnd_correction[1]
