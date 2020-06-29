@@ -15,7 +15,7 @@ preproc <- function(dat){
   data_downsampled <-c()
   
   for (i in 1:max(ID)){
-    sub.data <- filter(data2, ID == i)
+    sub.data <- dplyr::filter(data2, ID == i)
     if(nrow(sub.data) <= 4){
       data_downsampled <- rbind(data_downsampled, sub.data[1,])
     }else if(nrow(sub.data) > 4 ){data_downsampled <- rbind(data_downsampled, sub.data[1,], sub.data[5,])}

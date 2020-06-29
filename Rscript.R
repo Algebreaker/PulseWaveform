@@ -1,5 +1,5 @@
-setwd("/home/johanna/Documents/Ninja theory/PulseAnalysis/Data/Craig")
-data <- read.table("Source2.csv", header=T, sep=",") #first line of the csv file needs to be deleted
+setwd("/home/johanna/Documents/Ninja theory/PulseAnalysis/git/PulseWaveform")
+data <- read.table("anon_pre_food_2.csv", header=T, sep=",") #first line of the csv file needs to be deleted
 
 library(tidyverse)
 library(TeachingDemos)
@@ -228,7 +228,7 @@ for(i in 2:ncol(pulse2)){
 wuv <- find_wuv(p=pulse2, col_len = source_data_column_length, p_w = poly_wave)
 
 ## Find O, S, N, D on the new polynomial splines:
-
+osnd_xy <- find_osnd(p = pulse2, p_w = poly_wave, col_len = source_data_column_length, wuvn = wuv)
 osnd_xy <- find_osnd(p = pulse2, p_w = poly_wave, col_len = source_data_column_length, wuvn = wuv)
 osnd_y <- osnd_xy[1:(length(osnd_xy)/2)]
 osnd_x <- osnd_xy[(length(osnd_xy)/2+1):length(osnd_xy)]
