@@ -5,8 +5,8 @@ find_sd_sine <- function(p, wuvn, osndx, osndy, pw, plot=FALSE){
   d_sine <- list()
   
   for(i in 1:length(osndx)){
-    #period <- 3*(wuvn$v_x[i]-wuvn$u_x[i])
-    period = 25
+    period <- 3*(wuvn$v_x[i]-wuvn$u_x[i])
+    #period = 25
     
     phi <- ((2*pi)/period)  * (x.-(wuvn$w[i]+(period/4)))
     phi[phi>(pi)] <- pi
@@ -67,8 +67,8 @@ fit_n_sine <- function(p, ss, ds, osndx, osndy, wuvn, plot=FALSE){
 #    }
     
     
-    #period <- 3*(wuvn$v_x[i-1]-wuvn$u_x[i-1])
-    period <- 25
+    period <- 3*(wuvn$v_x[i-1]-wuvn$u_x[i-1])
+    #period <- 25
     
     pks <- findpeaks(d_y_resid[osndx[[c(i-1,2)]]:osndx[[c(i-1,4)]]])
     if(is.null(pks)){
