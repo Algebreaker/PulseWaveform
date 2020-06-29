@@ -1,13 +1,24 @@
 setwd("/home/johanna/Documents/Ninja theory/PulseAnalysis/Data/Craig")
 data <- read.table("Source2.csv", header=T, sep=",") #first line of the csv file needs to be deleted
 
+library(tidyverse)
+library(TeachingDemos)
+library(splines2)
+library(pracma)
+library(SplinesUtils)
+library(DescTools)
 
-source("/Users/luciedaniel-watanabe/Desktop/attempt at pulse analysis/preproc.R")
-source("/Users/luciedaniel-watanabe/Desktop/attempt at pulse analysis/find_osnd.R")
-source("/Users/luciedaniel-watanabe/Desktop/attempt at pulse analysis/spectrum.R")
-source("/Users/luciedaniel-watanabe/Desktop/attempt at pulse analysis/find_w_u_v.R")
-source("/Users/luciedaniel-watanabe/Desktop/attempt at pulse analysis/fit_sines.R")
-source("/Users/luciedaniel-watanabe/Desktop/attempt at pulse analysis/refit_peaks.R")
+source("/home/johanna/Documents/Ninja theory/PulseAnalysis/git/PulseWaveform/preproc.R")
+source("/home/johanna/Documents/Ninja theory/PulseAnalysis/git/PulseWaveform/find_w.R")
+source("/home/johanna/Documents/Ninja theory/PulseAnalysis/git/PulseWaveform/find_u_v.R")
+source("/home/johanna/Documents/Ninja theory/PulseAnalysis/git/PulseWaveform/baseline.R")
+source("/home/johanna/Documents/Ninja theory/PulseAnalysis/git/PulseWaveform/find_osnd.R")
+source("/home/johanna/Documents/Ninja theory/PulseAnalysis/git/PulseWaveform/spectrum.R")
+source("/home/johanna/Documents/Ninja theory/PulseAnalysis/git/PulseWaveform/find_wuv.R")
+source("/home/johanna/Documents/Ninja theory/PulseAnalysis/git/PulseWaveform/fit_sd_sine.R")
+source("/home/johanna/Documents/Ninja theory/PulseAnalysis/git/PulseWaveform/fit_n_sine.R")
+source("/home/johanna/Documents/Ninja theory/PulseAnalysis/git/PulseWaveform/refit_peaks.R")
+
 
 #Preprocessing which involves downsampling data and undetrending 
 undetrended_data <- data.frame(preproc(dat=data))
@@ -89,7 +100,7 @@ new_vector <- which(abs(source_data_column_length_precursor - (mean(o_difference
 if((mean(o_difference)+15) > source_data_column_length_precursor[new_vector]){
   source_data_column_length <- source_data_column_length_precursor[new_vector+1]
 }else{
-  source_data_column_length <- source_data_column_length_precursor[new_vector]
+    source_data_column_length <- source_data_column_length_precursor[new_vector]
 }
 
 
@@ -116,7 +127,7 @@ pulse <- data.frame()
 
 # change this from 1:length(w_poly_peaks) to Q1 when averaging quartiles
 for(i in 1:(length(w_bc$w_poly_peaks))){              
-  #### Something isn't working in this (see intermediate_poly_Wave[[21]]) source 2 data....
+#### Something isn't working in this (see intermediate_poly_Wave[[21]]) source 2 data....
   spline_poly_wave_subset <- CubicInterpSplineAsPiecePoly((round(w_bc$w_poly_peaks[i])-15):(round(w_bc$w_poly_peaks[i]) +  (source_data_column_length-10)) , sourcedata[(round(w_bc$w_poly_peaks[i])-15):(round(w_bc$w_poly_peaks[i]) + (source_data_column_length-10))], "natural")
   
   # Now get the y-values to fill the dataframe using the predict function
@@ -188,6 +199,7 @@ for(i in 1:nrow(pulse2)){
 
 
 ## Can now stack and plot the mean +/- median wave 
+
 pulse_stacked <- gather(pulse2, key = "wave_ID", value = "values", -c("x"))
 
 average <- data.frame(-14:(source_data_column_length-11))    ## should differ depending on length of waveform
@@ -198,10 +210,11 @@ median <- data.frame(-14:(source_data_column_length-11))
 median <- cbind(median, median_wave)
 colnames(median)[1] <- "x"
 
-#ggplot(data = pulse_stacked, aes(x, values, col = wave_ID), col = "black") +
-#  scale_color_manual(values = rep("black", ncol(pulse2))) +  
-#  geom_line(size = 1.5, alpha = ((1/length(w_bc$w_poly_peaks)*10)-(1/length(w_bc$w_poly_peaks)))) + geom_line(data = average, aes(x, average_wave), size = 1.125, color = "red") + ylim(-0.5, 1.75) +   # ylim will vary based on source data
-#  theme(legend.position = "none")
+ggplot(data = pulse_stacked, aes(x, values, col = wave_ID), col = "black") +
+  scale_color_manual(values = rep("black", ncol(pulse2))) +  
+  geom_line(size = 1.5, alpha = ((1/length(w_bc$w_poly_peaks)*10)-(1/length(w_bc$w_poly_peaks)))) + geom_line(data = average, aes(x, average_wave), size = 1.125, color = "red") + ylim(-0.5, 1.75) +   # ylim will vary based on source data
+  theme(legend.position = "none")
+
 
 ## Now data is scaled and y-axis normalized*, create a new polynomial spline for each wave
 
@@ -215,80 +228,39 @@ for(i in 2:ncol(pulse2)){
 wuv <- find_wuv(p=pulse2, col_len = source_data_column_length, p_w = poly_wave)
 
 ## Find O, S, N, D on the new polynomial splines:
+
 osnd_xy <- find_osnd(p = pulse2, p_w = poly_wave, col_len = source_data_column_length, wuvn = wuv)
 osnd_y <- osnd_xy[1:(length(osnd_xy)/2)]
 osnd_x <- osnd_xy[(length(osnd_xy)/2+1):length(osnd_xy)]
 
 
 #Fit S and D sines using the OSND points
+
 sd_sines <- find_sd_sine(p = pulse2, wuvn = wuv, osndx = osnd_x, osndy = osnd_y, pw = poly_wave, plot=FALSE)
 s_sines <- sd_sines[1:(length(sd_sines)/2)]
 d_sines <- sd_sines[(length(sd_sines)/2+1):length(sd_sines)]
 
 #Fit N sines using the S and D sines
+
 n_sines <- fit_n_sine(p=pulse2, ss = s_sines, ds = d_sines, osndx = osnd_x, osndy = osnd_y, wuvn = wuv, plot=FALSE)
 
 
 ##Refitting the SND peaks 
-#avg_period <- 3*(mean(wuv$v_x)-mean(wuv$u_x))
-avg_period = 25
+
+avg_period <- 3*(mean(wuv$v_x)-mean(wuv$u_x))
 refitted_snd <- refit_peaks(p=pulse2, ss= s_sines, ds= d_sines, ns= n_sines, period= avg_period)
 
 ##Plotting the refitted SND peaks back on the waveforms 
-#for(i in 2:(ncol(pulse2))){
-#  plot(1:nrow(pulse2), pulse2[,i], type='l')
-#  points(refitted_snd$s_x[i-1], refitted_snd$s_y[i-1], pch = 19, col ='red')
-#  points(refitted_snd$n_x[i-1], refitted_snd$n_y[i-1], pch = 19, col = 'blue')
-#  points(refitted_snd$d_x[i-1], refitted_snd$d_y[i-1], pch = 19, col = 'yellow')
-#}
-
-#Creating a new osnd_x/y list incorporating the reffited SND peaks 
-refit_osnd_x <- list()
-refit_osnd_y <- list()
-
-for(i in 1:length(osnd_x)){
-  refit_osnd_x[[i]] <- c(NA, NA, NA, NA)
-  refit_osnd_x[[c(i,1)]] <- osnd_x[[c(i,1)]]
-  refit_osnd_x[[c(i,2)]] <- refitted_snd$s_x[i]
-  refit_osnd_x[[c(i,3)]] <- refitted_snd$n_x[i]
-  refit_osnd_x[[c(i,4)]] <- refitted_snd$d_x[i]
+for(i in 2:(ncol(pulse2))){
+  plot(1:nrow(pulse2), pulse2[,i], type='l')
+  points(refitted_snd$s_x[i-1], refitted_snd$s_y[i-1], pch = 19, col ='red')
+  points(refitted_snd$n_x[i-1], refitted_snd$n_y[i-1], pch = 19, col = 'blue')
+  points(refitted_snd$d_x[i-1], refitted_snd$d_y[i-1], pch = 19, col = 'yellow')
 }
-
-for(i in 1:length(osnd_y)){
-  refit_osnd_y[[i]] <- c(NA, NA, NA, NA)
-  refit_osnd_y[[c(i,1)]] <- osnd_y[[c(i,1)]]
-  refit_osnd_y[[c(i,2)]] <- refitted_snd$s_y[i]
-  refit_osnd_y[[c(i,3)]] <- refitted_snd$n_y[i]
-  refit_osnd_y[[c(i,4)]] <- refitted_snd$d_y[i]
-}
-
-#Refit sines using the refitted SND values
-refit_sd_sines <- find_sd_sine(p = pulse2, wuvn = wuv, osndx = refit_osnd_x, osndy = refit_osnd_y, pw = poly_wave, plot=FALSE)
-refit_s_sines <- refit_sd_sines[1:(length(sd_sines)/2)]
-refit_d_sines <- refit_sd_sines[(length(sd_sines)/2+1):length(sd_sines)]
-
-refit_n_sines <- fit_n_sine(p=pulse2, ss = s_sines, ds = d_sines, osndx = refit_osnd_x, osndy = refit_osnd_y, wuvn = wuv, plot=FALSE)
-
-#Finding the residual after subtracting all the sines from the original pulse 
-sine_resid <- list()
-const <- c()
-for(i in 2:ncol(pulse2)){
-  const <- rep(refit_s_sines[[i-1]][[length(refit_s_sines[[i-1]])]],length(refit_s_sines[[i-1]]))
-  sine_resid[[i-1]] <- pulse2[,i]
-  sine_resid[[i-1]] <- (((((sine_resid[[i-1]] - refit_s_sines[[i-1]]) + const) - refit_d_sines[[i-1]]) + const) - refit_n_sines[[i-1]]) + const
-}
-
-#Plotting all the sines on the pulse trace, as well as the residual
-#for(i in 2:ncol(pulse2)){
-#  plot(1:(nrow(pulse2)), pulse2[,i], type = 'l')
-#  lines(1:(nrow(pulse2)), refit_s_sines[[i-1]], col='red')
-#  lines(1:(nrow(pulse2)), refit_d_sines[[i-1]], col='purple')
-#  lines(1:(nrow(pulse2)), refit_n_sines[[i-1]], col='green')
-#  lines(1:(nrow(pulse2)), sine_resid[[i-1]], col='yellow')
-#}
+  
 
 
-#Correct all OSNDs so that O = 0
+#Print all osnd's
 for(i in 1:length(osnd_y)){
   osnd_correction <- osnd_y[[i]]
   osnd_correction <- osnd_correction - osnd_correction[1]
@@ -315,7 +287,7 @@ for(i in 1:length(osnd)){
 # Stiffness Index = height / PPT
 SI <- c()
 for(i in 1:length(osnd)){
-  SI[i] <- x# Insert height here # / PPT[i]
+  SI[i] <- # Insert height here # / PPT[i]
 }
 
 # Notch to peak ratio  = height of notch / height of primary peak (this was referred to as RI in multivariate paper)
@@ -383,6 +355,7 @@ for(i in 1:(length(poly_wave)-1)){
 ##Spectral Analysis
 
 spectralanalysis <- (spectrum(baseline_corrected))
+
 
 ########
 

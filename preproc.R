@@ -1,6 +1,7 @@
 
+
 preproc <- function(dat){
-  dat<-dat[!(dat$PPG.PulseOx1=='NaN'),]
+  dat<-data[!(data$PPG.PulseOx1=='NaN'),]
   
   #Downsample
   # The BioRadio device provides 250 samples per second, but the PPG is only sampled 75 times per second, 
@@ -10,7 +11,7 @@ preproc <- function(dat){
   
   list<-rle(dat$PPG.PulseOx1)
   ID <- rep(1:length(list$values), times = list$lengths)
-  data2 <- cbind(data, ID)
+  data2 <- cbind(dat, ID)
   data_downsampled <-c()
   
   for (i in 1:max(ID)){
@@ -60,5 +61,4 @@ baseline <- function(plot = FALSE){
   
   return(baseline_corrected)
 }
-
 
