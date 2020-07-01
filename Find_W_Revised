@@ -1,121 +1,126 @@
 ##################### Finding W (revised) ##########################################
 
-deriv1_poly <- CubicInterpSplineAsPiecePoly(1:length(undetrended_data$undetrended), deriv1, "natural") 
-inflexion_points_deriv1 <- solve(deriv1_poly, b = 0, deriv = 1)
-inflexion_points_deriv1_yval <- predict(deriv1_poly, inflexion_points_deriv1)
-w_poly_peaks <- c()
-w_poly_peaks_yval <- c()
-window <- list()
-for(i in 1:length(deriv1)){      
-  switch <- 0
-  if(i == 1){
-    window[[i]] <- deriv1[(((i-1)*50)):((((i-1)*50) + 1) + 50)]
-  }
-  if(i == 2){
-    window[[i]] <- deriv1[(((i-1)*50)):((((i-1)*50) + 1) + 50)]
-  }
-  if(i > 2){
-    if((w_poly_peaks[length(w_poly_peaks)] + 1.25*p_p_distance) > length(deriv1)){
-      break
+undetrended_x <- undetrended_data$undetrended # Function doesn't seem to accept $ symbol        
+
+find_w <- function(undetrended_x){
+  
+  deriv1_poly <- CubicInterpSplineAsPiecePoly(1:length(undetrended_x), deriv1, "natural")       # Make a spline of 1st deriv
+  inflexion_points_deriv1 <- solve(deriv1_poly, b = 0, deriv = 1)                               # Find inflexion points 1st deriv
+  inflexion_points_deriv1_yval <- predict(deriv1_poly, inflexion_points_deriv1)
+  w_poly_peaks <- c()                                                                           # Create vectors for w values to be stored
+  w_poly_peaks_yval <- c()
+  window <- list()                                                                              # Define 'window' as the timeframe you will look for peaks in
+  for(i in 1:length(deriv1)){ 
+    p_p_distance <- 1                                                                           # Window is based on the previous peak to peak distance (p_p_distance), initially defined here
+    switch <- 0                                                                                 # Switch is automatically set to 0, will become relevent later on.
+    if(i == 1){                                                                                 # The first window looks at the first 50 samples
+      window[[i]] <- deriv1[(((i-1)*50)):((((i-1)*50) + 1) + 50)]
     }
-    p_p_distance <- w_poly_peaks[length(w_poly_peaks)] - w_poly_peaks[length(w_poly_peaks)-1] 
-    window[[i]] <- deriv1[(w_poly_peaks[length(w_poly_peaks)] + 0.75*p_p_distance):(w_poly_peaks[length(w_poly_peaks)] + 1.25*p_p_distance)]
-    if(window[[c(i, 1)]] == window[[c(i-1, 1)]]){
-      window[[i]] <- deriv1[(w_poly_peaks[length(w_poly_peaks)] + 200):(w_poly_peaks[length(w_poly_peaks)] + 300)]
-      switch <- 1
+    if(i == 2){                                                                                 # The second window looks at the second 50 samples
+      window[[i]] <- deriv1[(((i-1)*50)):((((i-1)*50) + 1) + 50)]
     }
-  }
-  window_poly <- CubicInterpSplineAsPiecePoly(1:length(window[[i]]), window[[i]], "natural") 
-  inflexion_points_window <- solve(window_poly, b = 0, deriv = 1)
-  inflexion_points_window_yval <- predict(window_poly, inflexion_points_window)
-  threshold <- quantile(window[[i]], probs=c(.95))      
-  window_poly_peaks <- which(inflexion_points_window_yval > threshold)     
-  window_poly_peaks <- inflexion_points_window[window_poly_peaks]
-  window_poly_peaks_yval <- predict(window_poly, window_poly_peaks)
-  if(i==2){
-    window_poly_peaks <- window_poly_peaks + ((i-1)*50)
-  }
-  if(i > 2){
-    if(switch == 1){
-      window_poly_peaks <- window_poly_peaks + (w_poly_peaks[length(w_poly_peaks)] + 200)
-    }else{
-      window_poly_peaks <- window_poly_peaks + (w_poly_peaks[length(w_poly_peaks)] + 0.75*p_p_distance)
-    }
-  }
-   if(length(window_poly_peaks) == 2){
-    w_poly_peaks[(length(w_poly_peaks)+1):(length(w_poly_peaks) + length(window_poly_peaks))] <-  window_poly_peaks 
-    w_poly_peaks_yval[(length(w_poly_peaks)+1):(length(w_poly_peaks) + length(window_poly_peaks))] <- window_poly_peaks_yval
-  }
-  if(length(window_poly_peaks) == 1){     
-    if(i > 2){
-      if(window_poly_peaks_yval < max(window[[i]]) & (window_poly_peaks - w_poly_peaks[length(w_poly_peaks)]) < p_p_distance*0.75){   #assume peak is spurious if it is not the maximum value and the half maximum > 12 (  and it sits in the middle of the window -->  & ((window_poly_peaks - ((i-1)*90)) > 5 & (window_poly_peaks - ((i-1)*90)) < 85)    )
-        next
+    if(i > 2){                                                                                  # The third window and above is then based on p_p_distance
+      if((w_poly_peaks[length(w_poly_peaks)] + 1.25*p_p_distance) > length(deriv1)){            # This if loop is so that if the next window goes beyond the length of the data it will end the looping.
+        break
+      }
+      p_p_distance <- w_poly_peaks[length(w_poly_peaks)] - w_poly_peaks[length(w_poly_peaks)-1]                                                   # p_p_distance defined
+      window[[i]] <- deriv1[(w_poly_peaks[length(w_poly_peaks)] + 0.75*p_p_distance):(w_poly_peaks[length(w_poly_peaks)] + 1.25*p_p_distance)]    # window defined as (the previous peak + 0.75*p_p_distance) to (previous peak + 1.25*p_p_distance)
+      if(window[[c(i, 1)]] == window[[c(i-1, 1)]]){                                                                                               # If the window is the same as the previous window (which would happen if no peaks were defined in a loop i.e in the case of artifact), 
+        window[[i]] <- deriv1[(w_poly_peaks[length(w_poly_peaks)] + 200):(w_poly_peaks[length(w_poly_peaks)] + 300)]                              # then the window is redefined as being (last peak + 200) to (last peak + 300)
+        switch <- 1                                                                                                                               # Switch is also redefined as 1, and will be used as an indicator that the windowing has had to 'restart'
       }
     }
-    w_poly_peaks[(length(w_poly_peaks)+1):(length(w_poly_peaks) + length(window_poly_peaks))] <-  window_poly_peaks   # you are saying that you want to add on to the end of w_poly_peaks
-    w_poly_peaks_yval[(length(w_poly_peaks_yval)+1):(length(w_poly_peaks_yval) + length(window_poly_peaks_yval))] <- window_poly_peaks_yval
-  }
-  if(length(window_poly_peaks) < 1){                     # If less than 1 peak identified, reduce the threshold
-    threshold <- quantile(window[[i]], probs=c(.9))  
-    window_poly_peaks <- which(inflexion_points_window_yval > threshold)     
-    window_poly_peaks <- inflexion_points_window[window_poly_peaks]
+    window_poly <- CubicInterpSplineAsPiecePoly(1:length(window[[i]]), window[[i]], "natural")  # Make a spline of window
+    inflexion_points_window <- solve(window_poly, b = 0, deriv = 1)                             # Find inflection points on the spline
+    inflexion_points_window_yval <- predict(window_poly, inflexion_points_window)
+    threshold <- quantile(window[[i]], probs=c(.95))                                            # Define a threshold for finding peaks, initially of 0.95 (this will be set lower if no peaks found initially)
+    window_poly_peaks <- which(inflexion_points_window_yval > threshold)                        # Find which inflection points are above threshold
+    window_poly_peaks <- inflexion_points_window[window_poly_peaks]                             
     window_poly_peaks_yval <- predict(window_poly, window_poly_peaks)
-    if(i==2){
-      window_poly_peaks <- window_poly_peaks + ((i-1)*50)
+    if(i==2){                                                                                   # If i = 2, the x-axis of the points found (if any) are corrected to be the same as the entire time series (instead of the window's x-axis)
+      window_poly_peaks <- window_poly_peaks + ((i-1)*50)  
     }
-    if(i > 2){
+    if(i > 2){                                                                                  # If i > 2, you first check if this is a 'restarted' window (if it is you redefine its x-axis accordingly)
       if(switch == 1){
         window_poly_peaks <- window_poly_peaks + (w_poly_peaks[length(w_poly_peaks)] + 200)
-      }else{
+      }else{                                                                                                                            # If it's not a restarted window, redefine the x-axis accordingly
         window_poly_peaks <- window_poly_peaks + (w_poly_peaks[length(w_poly_peaks)] + 0.75*p_p_distance)
       }
     }
-    if(length(window_poly_peaks) == 2){
+    if(length(window_poly_peaks) == 2){                                                                                                 # If two peaks were found, add them to the end of w_poly_peaks
       w_poly_peaks[(length(w_poly_peaks)+1):(length(w_poly_peaks) + length(window_poly_peaks))] <-  window_poly_peaks 
+      w_poly_peaks_yval[(length(w_poly_peaks)+1):(length(w_poly_peaks) + length(window_poly_peaks))] <- window_poly_peaks_yval
     }
-    if(length(window_poly_peaks) == 1){
-      if(window_poly_peaks_yval < max(window[[i]]) & window_poly_peaks_yval > 1){
-        next
+    if(length(window_poly_peaks) == 1){                                                                                                 # If one peak was found:
+      if(i > 2){
+        if(window_poly_peaks_yval < max(window[[i]]) & (window_poly_peaks - w_poly_peaks[length(w_poly_peaks)]) < p_p_distance*0.75){   # Assume peak is spurious if it is not the maximum value and the distance of the found peak from the last peak is less than 0.75*p_p_distance (i.e likely to be a secondary peak)
+          next                                                                                                                          # If the these criteria are met, go to the next loop
+        }
       }
-      w_poly_peaks[(length(w_poly_peaks)+1):(length(w_poly_peaks) + length(window_poly_peaks))] <-  window_poly_peaks  
+      w_poly_peaks[(length(w_poly_peaks)+1):(length(w_poly_peaks) + length(window_poly_peaks))] <-  window_poly_peaks   # you are saying that you want to add on to the end of w_poly_peaks    # Otherwise, add the peak value to the end of w_poly_peaks 
+      #w_poly_peaks_yval[(length(w_poly_peaks_yval)+1):(length(w_poly_peaks_yval) + length(window_poly_peaks_yval))] <- window_poly_peaks_yval
     }
-    if(length(window_poly_peaks) < 1){
-      threshold <- quantile(window[[i]], probs=c(.85))  
-      window_poly_peaks <- which(inflexion_points_window_yval > threshold)     
+    if(length(window_poly_peaks) < 1){                                                                                                  # If no peaks are found, reduce the threshold
+      threshold <- quantile(window[[i]], probs=c(.9))               
+      window_poly_peaks <- which(inflexion_points_window_yval > threshold)                                                              # Repeat the same code as above, given that the lowered threshold may have now found a peak
       window_poly_peaks <- inflexion_points_window[window_poly_peaks]
       window_poly_peaks_yval <- predict(window_poly, window_poly_peaks)
+      if(i==2){
+        window_poly_peaks <- window_poly_peaks + ((i-1)*50)
+      }
+      if(i > 2){
+        if(switch == 1){
+          window_poly_peaks <- window_poly_peaks + (w_poly_peaks[length(w_poly_peaks)] + 200)
+        }else{
+          window_poly_peaks <- window_poly_peaks + (w_poly_peaks[length(w_poly_peaks)] + 0.75*p_p_distance)
+        }
+      }
       if(length(window_poly_peaks) == 2){
         w_poly_peaks[(length(w_poly_peaks)+1):(length(w_poly_peaks) + length(window_poly_peaks))] <-  window_poly_peaks 
       }
       if(length(window_poly_peaks) == 1){
-        if(window_poly_peaks_yval < max(window[[i]])){    
+        if(window_poly_peaks_yval < max(window[[i]]) & window_poly_peaks_yval > 1){
           next
         }
-        w_poly_peaks[(length(w_poly_peaks)+1):(length(w_poly_peaks) + length(window_poly_peaks))] <-  window_poly_peaks 
+        w_poly_peaks[(length(w_poly_peaks)+1):(length(w_poly_peaks) + length(window_poly_peaks))] <-  window_poly_peaks  
       }
-     
       if(length(window_poly_peaks) < 1){
-        threshold <- quantile(window[[i]], probs=c(.8))  
+        threshold <- quantile(window[[i]], probs=c(.85))  
         window_poly_peaks <- which(inflexion_points_window_yval > threshold)     
         window_poly_peaks <- inflexion_points_window[window_poly_peaks]
         window_poly_peaks_yval <- predict(window_poly, window_poly_peaks)
         if(length(window_poly_peaks) == 2){
-          w_poly_peaks[(length(w_poly_peaks)+1):(length(w_poly_peaks) + length(window_poly_peaks))] <-  window_poly_peaks
+          w_poly_peaks[(length(w_poly_peaks)+1):(length(w_poly_peaks) + length(window_poly_peaks))] <-  window_poly_peaks 
         }
         if(length(window_poly_peaks) == 1){
-          if(window_poly_peaks_yval < max(window[[i]])){  
+          if(window_poly_peaks_yval < max(window[[i]])){    
             next
           }
-          w_poly_peaks[(length(w_poly_peaks)+1):(length(w_poly_peaks) + length(window_poly_peaks))] <-  window_poly_peaks
+          w_poly_peaks[(length(w_poly_peaks)+1):(length(w_poly_peaks) + length(window_poly_peaks))] <-  window_poly_peaks 
+        }
+        
+        if(length(window_poly_peaks) < 1){
+          threshold <- quantile(window[[i]], probs=c(.8))                                                                          # If still no peaks are found, lower the threshold again (this is likely to be a small number of cases)
+          window_poly_peaks <- which(inflexion_points_window_yval > threshold)                                                     # Once again, the same code is repeated for any new peaks that may have been found after lowering the threshold
+          window_poly_peaks <- inflexion_points_window[window_poly_peaks]
+          window_poly_peaks_yval <- predict(window_poly, window_poly_peaks)
+          if(length(window_poly_peaks) == 2){
+            w_poly_peaks[(length(w_poly_peaks)+1):(length(w_poly_peaks) + length(window_poly_peaks))] <-  window_poly_peaks
+          }
+          if(length(window_poly_peaks) == 1){
+            if(window_poly_peaks_yval < max(window[[i]])){  
+              next
+            }
+            w_poly_peaks[(length(w_poly_peaks)+1):(length(w_poly_peaks) + length(window_poly_peaks))] <-  window_poly_peaks
+          }
         }
       }
     }
   }
+  w_poly_peaks <- w_poly_peaks - 1                                                                                                                              # Adjust by 1 so that all values are correct for the x-axis of the entire time-series (not sure what causes this shift in the first place)
+  for(i in 1:length(w_poly_peaks)){                                                                                                                             # Find the inflexion points on 1st deriv that correspond to w_poly_peaks (this is to correct for any minor differences in W value due to different scales of splines being used)
+    w_poly_peaks[i] <- inflexion_points_deriv1[which(abs(inflexion_points_deriv1 - w_poly_peaks[i]) == min(abs(inflexion_points_deriv1 - w_poly_peaks[i])))]
+  }
+  w_poly_peaks_yval <- predict(deriv1_poly, w_poly_peaks)                                                                                                       # Find the y-values corresponding to w_poly_peaks
+  
 }
-w_poly_peaks <- w_poly_peaks - 1
-for(i in 1:length(w_poly_peaks)){
-  w_poly_peaks[i] <- inflexion_points_deriv1[which(abs(inflexion_points_deriv1 - w_poly_peaks[i]) == min(abs(inflexion_points_deriv1 - w_poly_peaks[i])))]
-}
-w_poly_peaks_yval <- predict(deriv1_poly, w_poly_peaks)
-
-############################################################################################################

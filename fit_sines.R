@@ -5,8 +5,8 @@ find_sd_sine <- function(p, wuvn, osndx, osndy, pw, plot=FALSE){
   d_sine <- list()
   
   for(i in 1:length(osndx)){
-    #period <- 3*(wuvn$v_x[i]-wuvn$u_x[i])
-    period = 25
+    period <- 3*(wuvn$v_x[i]-wuvn$u_x[i])
+    #period = 25
     
     phi <- ((2*pi)/period)  * (x.-(wuvn$w[i]+(period/4)))
     phi[phi>(pi)] <- pi
@@ -59,16 +59,16 @@ fit_n_sine <- function(p, ss, ds, osndx, osndy, wuvn, plot=FALSE){
     d_y_resid <- d_y_resid - ds[[i-1]]
     d_y_resid <- d_y_resid + const
     
-    #if(plot){
-    #  plot(1:(nrow(p)), p[,i], type = 'l', ylab = 'Plotting residual of S and D sines')
-    #  lines(1:(nrow(p)),ss[[i-1]], col='red')
-    #  lines(1:(nrow(p)),ds[[i-1]], col='purple')
-    #  lines(1:(nrow(p)),d_y_resid, col='green')
-#    }
+    if(plot){
+      plot(1:(nrow(p)), p[,i], type = 'l', ylab = 'Plotting residual of S and D sines')
+      lines(1:(nrow(p)),ss[[i-1]], col='red')
+      lines(1:(nrow(p)),ds[[i-1]], col='purple')
+      lines(1:(nrow(p)),d_y_resid, col='green')
+    }
     
     
-    #period <- 3*(wuvn$v_x[i-1]-wuvn$u_x[i-1])
-    period <- 25
+    period <- 3*(wuvn$v_x[i-1]-wuvn$u_x[i-1])
+    #period <- 25
     
     pks <- findpeaks(d_y_resid[osndx[[c(i-1,2)]]:osndx[[c(i-1,4)]]])
     if(is.null(pks)){
@@ -87,12 +87,12 @@ fit_n_sine <- function(p, ss, ds, osndx, osndy, wuvn, plot=FALSE){
     #create notch sine curve
     n_y <- ((resid_peaks_y[i-1]-osndy[[c(i-1, 1)]])/2) * cos(n_phi) + ((osndy[[c(i-1,1)]]+resid_peaks_y[i-1])/2)
     
-    #if(plot){
-    #  plot(1:(nrow(p)), p[,i], type = 'l', ylab = 'S/N/D sines')
-    #  lines(1:(nrow(p)),ss[[i-1]], col='red')
-    #  lines(1:(nrow(p)),ds[[i-1]], col='purple')
-    #  lines(1:(nrow(p)), n_y, col='green')
-    #}
+    if(plot){
+      plot(1:(nrow(p)), p[,i], type = 'l', ylab = 'S/N/D sines')
+      lines(1:(nrow(p)),ss[[i-1]], col='red')
+      lines(1:(nrow(p)),ds[[i-1]], col='purple')
+      lines(1:(nrow(p)), n_y, col='green')
+    }
     
     n_sine[[i-1]] <- n_y
     
