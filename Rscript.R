@@ -263,15 +263,14 @@ for(i in 1:length(osnd_x)){
   refit_osnd_x[[c(i,2)]] <- refitted_snd$s_x[i]
   refit_osnd_x[[c(i,3)]] <- refitted_snd$n_x[i]
   refit_osnd_x[[c(i,4)]] <- refitted_snd$d_x[i]
-}
-
-for(i in 1:length(osnd_y)){
   refit_osnd_y[[i]] <- c(NA, NA, NA, NA)
   refit_osnd_y[[c(i,1)]] <- osnd_y[[c(i,1)]]
   refit_osnd_y[[c(i,2)]] <- refitted_snd$s_y[i]
   refit_osnd_y[[c(i,3)]] <- refitted_snd$n_y[i]
   refit_osnd_y[[c(i,4)]] <- refitted_snd$d_y[i]
 }
+
+
 
 #Refit sines using the refitted SND values
 refit_sd_sines <- find_sd_sine(p = pulse2, wuvn = wuv, osndx = refit_osnd_x, osndy = refit_osnd_y, pw = poly_wave, plot=FALSE)
