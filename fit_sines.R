@@ -5,16 +5,19 @@ find_sd_sine <- function(p, wuvn, osndx, osndy, pw, plot=FALSE){
   d_sine <- list()
   
   for(i in 1:length(osndx)){
+    #Define the period of the sine curve as 3*V-U 
     period <- 3*(wuvn$v_x[i]-wuvn$u_x[i])
     #period = 25
     
+    #Define phi
     phi <- ((2*pi)/period)  * (x.-(wuvn$w[i]+(period/4)))
+    #The phi values that are above pi and below -pi are set to those values - this means we specify only the sine curve we want 
     phi[phi>(pi)] <- pi
     phi[phi<(-pi)] <- -pi
     
     # Finding first Sine
     y <-((osnd_y[[c(i, 2)]] -  osnd_y[[c(i, 1)]])/2) * cos(phi) + ((osnd_y[[c(i,1)]] + osnd_y[[c(i, 2)]])/2) 
-    #the last bit (s/2) only works if O is always 0 - otherwise should be (O+S)/2 
+    #The last term ((S+O)/2) can be simplified to S/2 if O is always set to 0
     
     #Defining phi for the D peak
     d_phi <- ((2*pi)/period)  * (x.-(osnd_x[[c(i,4)]]))
@@ -53,6 +56,8 @@ fit_n_sine <- function(p, ss, ds, osndx, osndy, wuvn, plot=FALSE){
   
   for(i in 2:ncol(p)){
     
+    #The constant needs to be added back in every time we subtract a sine from the PPG trace
+    #Create a residual of the PPG trace after subtracting the S and D peaks 
     const <- rep(ss[[i-1]][[length(ss[[i-1]])]],length(ss[[i-1]]))
     d_y_resid <- p[,i] - ss[[i-1]]
     d_y_resid <- d_y_resid + const
@@ -66,20 +71,24 @@ fit_n_sine <- function(p, ss, ds, osndx, osndy, wuvn, plot=FALSE){
       lines(1:(nrow(p)),d_y_resid, col='green')
     }
     
-    
+    #Define the period as 3*(x-V - x-U)
     period <- 3*(wuvn$v_x[i-1]-wuvn$u_x[i-1])
     #period <- 25
     
+    #Find the peaks on the residual between the x values of the S and D peaks
     pks <- findpeaks(d_y_resid[osndx[[c(i-1,2)]]:osndx[[c(i-1,4)]]])
+    #If no peaks are found, stick with the original N-values
     if(is.null(pks)){
       resid_peaks_x[i-1] <- osndx[[c(i-1,3)]]
       resid_peaks_y[i-1] <- osndy[[c(i-1,3)]]
+    #Otherwise, find the peak that is closest to our current estimate of the x-N value, and choose that one as the peak of the N-sine
     }else{
     pk_loc <- which(abs(osndx[[c(i-1,3)]] - (osndx[[c(i-1,2)]] + pks[,2]))==min(abs(osndx[[c(i-1,3)]] - (osndx[[c(i-1,2)]] + pks[,2]))))
     resid_peaks_x[i-1] <- osndx[[c(i-1,2)]] + pks[pk_loc,2]
     resid_peaks_y[i-1] <- pks[pk_loc,1]
     }
     
+    #Define phi for the n-sine
     n_phi <- ((2*pi)/period)  * (x.-(resid_peaks_x[i-1]))
     n_phi[n_phi>(pi)] <- pi
     n_phi[n_phi<(-pi)] <- -pi
