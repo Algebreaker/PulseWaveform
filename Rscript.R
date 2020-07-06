@@ -308,15 +308,6 @@ for(i in 1:length(osnd_y)){
 
 
 
-#Print all osnd's
-for(i in 1:length(osnd_y)){
-  osnd_correction <- osnd_y[[i]]
-  osnd_correction <- osnd_correction - osnd_correction[1]
-  osnd_y[[i]] <- osnd_correction
-  print(osnd_y[[i]])
-}
-
-
 
 ## Features (canonical waveform first):
 
