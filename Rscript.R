@@ -246,11 +246,65 @@ avg_period <- 3*(mean(wuv$v_x)-mean(wuv$u_x))
 refitted_snd <- refit_peaks(p=pulse2, ss= s_sines, ds= d_sines, ns= n_sines, period= avg_period)
 
 ##Plotting the refitted SND peaks back on the waveforms 
-for(i in 2:(ncol(pulse2))){
-  plot(1:nrow(pulse2), pulse2[,i], type='l')
-  points(refitted_snd$s_x[i-1], refitted_snd$s_y[i-1], pch = 19, col ='red')
-  points(refitted_snd$n_x[i-1], refitted_snd$n_y[i-1], pch = 19, col = 'blue')
-  points(refitted_snd$d_x[i-1], refitted_snd$d_y[i-1], pch = 19, col = 'yellow')
+#for(i in 2:(ncol(pulse2))){
+#  plot(1:nrow(pulse2), pulse2[,i], type='l')
+#  points(refitted_snd$s_x[i-1], refitted_snd$s_y[i-1], pch = 19, col ='red')
+#  points(refitted_snd$n_x[i-1], refitted_snd$n_y[i-1], pch = 19, col = 'blue')
+#  points(refitted_snd$d_x[i-1], refitted_snd$d_y[i-1], pch = 19, col = 'yellow')
+#}
+
+#Creating a new osnd_x/y list incorporating the reffited SND peaks 
+refit_osnd_x <- list()
+refit_osnd_y <- list()
+
+for(i in 1:length(osnd_x)){
+  refit_osnd_x[[i]] <- c(NA, NA, NA, NA)
+  refit_osnd_x[[c(i,1)]] <- osnd_x[[c(i,1)]]
+  refit_osnd_x[[c(i,2)]] <- refitted_snd$s_x[i]
+  refit_osnd_x[[c(i,3)]] <- refitted_snd$n_x[i]
+  refit_osnd_x[[c(i,4)]] <- refitted_snd$d_x[i]
+}
+
+for(i in 1:length(osnd_y)){
+  refit_osnd_y[[i]] <- c(NA, NA, NA, NA)
+  refit_osnd_y[[c(i,1)]] <- osnd_y[[c(i,1)]]
+  refit_osnd_y[[c(i,2)]] <- refitted_snd$s_y[i]
+  refit_osnd_y[[c(i,3)]] <- refitted_snd$n_y[i]
+  refit_osnd_y[[c(i,4)]] <- refitted_snd$d_y[i]
+}
+
+#Refit sines using the refitted SND values
+refit_sd_sines <- find_sd_sine(p = pulse2, wuvn = wuv, osndx = refit_osnd_x, osndy = refit_osnd_y, pw = poly_wave, plot=FALSE)
+refit_s_sines <- refit_sd_sines[1:(length(sd_sines)/2)]
+refit_d_sines <- refit_sd_sines[(length(sd_sines)/2+1):length(sd_sines)]
+
+refit_n_sines <- fit_n_sine(p=pulse2, ss = s_sines, ds = d_sines, osndx = refit_osnd_x, osndy = refit_osnd_y, wuvn = wuv, plot=FALSE)
+
+#Finding the residual after subtracting all the sines from the original pulse 
+sine_resid <- list()
+const <- c()
+for(i in 2:ncol(pulse2)){
+  const <- rep(refit_s_sines[[i-1]][[length(refit_s_sines[[i-1]])]],length(refit_s_sines[[i-1]]))
+  sine_resid[[i-1]] <- pulse2[,i]
+  sine_resid[[i-1]] <- (((((sine_resid[[i-1]] - refit_s_sines[[i-1]]) + const) - refit_d_sines[[i-1]]) + const) - refit_n_sines[[i-1]]) + const
+}
+
+#Plotting all the sines on the pulse trace, as well as the residual
+#for(i in 2:ncol(pulse2)){
+#  plot(1:(nrow(pulse2)), pulse2[,i], type = 'l')
+#  lines(1:(nrow(pulse2)), refit_s_sines[[i-1]], col='red')
+#  lines(1:(nrow(pulse2)), refit_d_sines[[i-1]], col='purple')
+#  lines(1:(nrow(pulse2)), refit_n_sines[[i-1]], col='green')
+#  lines(1:(nrow(pulse2)), sine_resid[[i-1]], col='yellow')
+#}
+
+
+#Correct all OSNDs so that O = 0
+for(i in 1:length(osnd_y)){
+  osnd_correction <- osnd_y[[i]]
+  osnd_correction <- osnd_correction - osnd_correction[1]
+  osnd_y[[i]] <- osnd_correction
+  print(osnd_y[[i]])
 }
 
 
