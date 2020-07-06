@@ -20,7 +20,7 @@ find_w <- function(undetrended_x){
       window[[i]] <- deriv1[(((i-1)*50)):((((i-1)*50) + 1) + 50)]
     }
     if(i > 2){                                                                                  # The third window and above is then based on p_p_distance
-      if((w_poly_peaks[length(w_poly_peaks)] + 1.25*p_p_distance) > length(deriv1)){            # This if loop is so that if the next window goes beyond the length of the data it will end the looping.
+      if((w_poly_peaks[length(w_poly_peaks)] + 100 > length(deriv1))){            # This if loop is so that if the next window goes beyond the length of the data it will end the looping.
         break
       }
       p_p_distance <- w_poly_peaks[length(w_poly_peaks)] - w_poly_peaks[length(w_poly_peaks)-1]                                                   # p_p_distance defined
@@ -122,5 +122,13 @@ find_w <- function(undetrended_x){
     w_poly_peaks[i] <- inflexion_points_deriv1[which(abs(inflexion_points_deriv1 - w_poly_peaks[i]) == min(abs(inflexion_points_deriv1 - w_poly_peaks[i])))]
   }
   w_poly_peaks_yval <- predict(deriv1_poly, w_poly_peaks)                                                                                                       # Find the y-values corresponding to w_poly_peaks
-  
+w_poly_peaks_yval_deriv1 <- predict(deriv1_poly, w_poly_peaks)
+
+for(i in c(1, 2)){
+  if(sum(which(inflexion_points < w_poly_peaks[1])) == 0){                    # This removes peaks in the first 2 windows if there weren't any actual peaks there
+    w_poly_peaks <- w_poly_peaks[-1]
+    w_poly_peaks_yval <- w_poly_peaks_yval[-1]
+    w_poly_peaks_yval_deriv1 <- w_poly_peaks_yval_deriv1[-1]
+  }
+ }
 }
