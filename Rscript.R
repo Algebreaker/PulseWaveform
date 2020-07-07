@@ -74,8 +74,8 @@ u_v_bc <- find_u_v(dat = baseline_corrected, wx = w_bc$w_poly_peaks, wy = w_bc$w
 v_minus_u <- u_v_bc$v_yval - u_v_bc$u_yval
 
 ## Find o points again:
-o_yval <- predict(spline_poly, inflexion_points[o])
-plot(spline_poly)
+o_yval <- predict(spline_poly_bc, inflexion_points[o])
+plot(spline_poly_bc)
 points(inflexion_points[o], o_yval, pch = 19)
 
 # Find o-w difference:
