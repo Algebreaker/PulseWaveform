@@ -91,13 +91,7 @@ for(i in 1:(length(inflexion_points[o])-1)){
   o_difference[i] <- inflexion_points[o[i+1]] - inflexion_points[o[i]]
 }
 
-source_data_column_length_precursor <- c(71, 81, 91, 101, 111, 121)
-new_vector <- which(abs(source_data_column_length_precursor - (mean(o_difference)+15)) == min(abs(source_data_column_length_precursor - (mean(o_difference)+15))))
-if((mean(o_difference)+15) > source_data_column_length_precursor[new_vector]){
-  source_data_column_length <- source_data_column_length_precursor[new_vector+1]
-}else{
-  source_data_column_length <- source_data_column_length_precursor[new_vector]
-}
+source_data_column_length <- round(max(o_difference)+15)   # Add 15 since we are starting the wave from before O
 
 
 ## Chopping up the original data_undetrended (now baseline_corrected) into individual waves:
@@ -107,39 +101,38 @@ if(w_bc$w_poly_peaks[1] < 15){
   w_bc  <- w_bc[-1,]      # First w peak should be greater than 10
   o_w_difference <- o_w_difference[-1]
   o_difference <- o_difference[-1]
+  v_minus_u <- v_minus_u[-1
 }
 #if the last element is less than length of baseline corrected
 if(w_bc$w_poly_peaks[length(w_bc$w_poly_peaks)] > (length(baseline_corrected) - 77)){
   w_bc <- w_bc[-length(w_bc$w_poly_peaks), ]
   o_w_difference <- o_w_difference[-length(o_w_difference)]
   o_difference <- o_difference[-length(o_difference)]
+  v_minus_u <- v_minus_u[-length(v_minus_u)]
 }
 
-## Create a stacked waveform first so that waves can be matched exactly according to w
+## Create a dataframe of waveforms
 
 sourcedata <- baseline_corrected[1:length(undetrended_data$undetrended)]
 
-pulse <- data.frame()
+pulse <- data.frame(seq((-141/750), ((source_data_column_length*10 -9)-142)/750, by = 1/750))  # First column of pulse is the x-axis (in seconds)
 
 # change this from 1:length(w_poly_peaks) to Q1 when averaging quartiles
 for(i in 1:(length(w_bc$w_poly_peaks))){              
-  #### Something isn't working in this (see intermediate_poly_Wave[[21]]) source 2 data....
-  spline_poly_wave_subset <- CubicInterpSplineAsPiecePoly((round(w_bc$w_poly_peaks[i])-15):(round(w_bc$w_poly_peaks[i]) +  (source_data_column_length-10)) , sourcedata[(round(w_bc$w_poly_peaks[i])-15):(round(w_bc$w_poly_peaks[i]) + (source_data_column_length-10))], "natural")
   
-  # Now get the y-values to fill the dataframe using the predict function
+  # Make a polynomial spline of rounded w - 15 : rounded w + source_data_column_length - 10
+  spline_poly_wave_subset <- CubicInterpSplineAsPiecePoly((round(w_bc$w_poly_peaks[i])-15):(round(w_bc$w_poly_peaks[i]) + (source_data_column_length-10)), sourcedata[(round(w_bc$w_poly_peaks[i])-15):(round(w_bc$w_poly_peaks[i]) + (source_data_column_length-10))], "natural")
   
-  xxxx <- predict(spline_poly_wave_subset, c(seq((round(w_bc$w_poly_peaks[i])-15), 
-                                                 (round(w_bc$w_poly_peaks[i])-1), 0.1),   # this is now 141 in length
-                                             w_bc$w_poly_peaks[i],                        # this is now number 142
-                                             seq((round(w_bc$w_poly_peaks[i])+1), 
-                                                 (round(w_bc$w_poly_peaks[i])+(source_data_column_length-10)), 0.1)))  
+  # Turn into discrete form
+  xxxx <- predict(spline_poly_wave_subset, c(seq((w_bc$w_poly_peaks[i]-14), (w_bc$w_poly_peaks[i]+(source_data_column_length-15)), 0.1)))  
+  
   xxxx <-  as.data.frame(xxxx)
-  xxxx <- cbind(xxxx, c(seq((round(w_bc$w_poly_peaks[i])-15), (round(w_bc$w_poly_peaks[i])-1), 0.1), w_bc$w_poly_peaks[i],  seq(   (round(w_bc$w_poly_peaks[i])+1), (round(w_bc$w_poly_peaks[i])+(source_data_column_length-10)), 0.1)))
+  xxxx <- cbind(xxxx, c(seq(c(seq((w_bc$w_poly_peaks[i]-14), (w_bc$w_poly_peaks[i]+(source_data_column_length-15)), 0.1)))))
   colnames(xxxx) <- c('y', 'x') 
   xxxx[, 2] <- xxxx[, 2] - (xxxx$x[1]-1) 
   xxxx$wave <- i 
   # Need to scale so that v-u = 1
-  xxxx$y <- xxxx$y/(v_minus_u[i])      ## scaling is an issue - did you calculate u and v?
+  xxxx$y <- xxxx$y/(v_minus_u[i])     
   # Need to calculate difference between this w point and the first w point
   y_axis_difference <- w_bc$w_poly_peaks_yval[1] - xxxx$y[142]
   xxxx$y <- xxxx$y + y_axis_difference
@@ -147,46 +140,27 @@ for(i in 1:(length(w_bc$w_poly_peaks))){
   x_axis_difference <- w_bc$w_poly_peaks[1] - xxxx$x[142]
   xxxx$x <- xxxx$x + x_axis_difference
   # Adjust such that w = 0 on x-axis
-  xxxx$x <- xxxx$x - xxxx$x[142]   # 92nd element of each wave is w
+  xxxx$x <- xxxx$x - xxxx$x[142]  
+  # Adjust such that w = 0.5 on y-axis
+  y_axis_difference <- xxxx$y[142] - 0.5
+  xxxx$y <- xxxx$y - y_axis_difference
   
-  pulse <- rbind(pulse, xxxx)
+  pulse <- cbind(pulse, xxxx$y)
 }
-
-
-## Create intermediate splines for converting to non-stacked data-frame:     
-intermediate_poly_wave <- list()
-for(i in 1:(length(w_bc$w_poly_peaks))){             
-  intermediate_poly_wave[[i]] <- CubicInterpSplineAsPiecePoly(pulse$x[(((i-1)*(
-    ((source_data_column_length*10)+33)))+1):((((i-1)*(
-      ((source_data_column_length*10)+33)))+1)+(
-        ((source_data_column_length*10)+32)))], pulse$y[(((i-1)*(
-          ((source_data_column_length*10)+33)))+1):((((i-1)*(
-            ((source_data_column_length*10)+33)))+1)+
-              ((source_data_column_length*10)+32))], "natural")  
+for(i in 1:(length(w_bc$w_poly_peaks))){ 
+  colnames(pulse)[i+1] <- paste("wave", i, sep = "_")       
 }
+colnames(pulse)[1] <- "x"
+                       
 
-pulse2 <- data.frame(-14:(source_data_column_length-11))      ## -9 isn't far back enough - o's are being missed... is - 14?
-for(i in 1:(length(w_bc$w_poly_peaks))){
-  
-  yval <- predict(intermediate_poly_wave[[i]], c(-14:(source_data_column_length-11)))   ## Since w = 0 on x-axis, you can specify relative to 0 
-  pulse2 <- cbind(pulse2, yval)
-  colnames(pulse2)[i+1] <- paste("wave", i, sep = "_") 
-  
-}
-colnames(pulse2)[1] <- 'x'
-
-# adjust such that w = 0.5 on y-axis
-pulse2[, -1] <- pulse2[, -1] - pulse2$wave_1[15] + 0.5
-
-
-## Now find average waveform by averaging each row in pulse2 + additional variance parameters:
+## Now find average waveform by averaging each row in pulse + additional variance parameters:
 average_wave <- c()
 sd_wave <- c()
 median_wave <- c()
-for(i in 1:nrow(pulse2)){
+for(i in 1:nrow(pulse)){
   row_vector <- c()
-  for(j in 2:(ncol(pulse2))){
-    row_vector[j-1] <- pulse2[i, j] 
+  for(j in 2:(ncol(pulse))){
+    row_vector[j-1] <- pulse[i, j] 
   }
   average_wave[i] <- mean(row_vector)
   sd_wave[i] <- sd(row_vector) 
@@ -196,54 +170,50 @@ for(i in 1:nrow(pulse2)){
 
 ## Can now stack and plot the mean +/- median wave 
 
-pulse_stacked <- gather(pulse2, key = "wave_ID", value = "values", -c("x"))
+pulse_stacked <- gather(pulse, key = "wave_ID", value = "values", -c("x"))
 
-average <- data.frame(-14:(source_data_column_length-11))    ## should differ depending on length of waveform
+average <- data.frame(seq((-141/750), ((source_data_column_length*10 -9)-142)/750, by = 1/750))  
 average <- cbind(average, average_wave)
 colnames(average)[1] <- "x"
 
-median <- data.frame(-14:(source_data_column_length-11))
-median <- cbind(median, median_wave)
-colnames(median)[1] <- "x"
-
 ggplot(data = pulse_stacked, aes(x, values, col = wave_ID), col = "black") +
-  scale_color_manual(values = rep("black", ncol(pulse2))) +  
+  scale_color_manual(values = rep("black", ncol(pulse))) +  
   geom_line(size = 1.5, alpha = ((1/length(w_bc$w_poly_peaks)*10)-(1/length(w_bc$w_poly_peaks)))) + geom_line(data = average, aes(x, average_wave), size = 1.125, color = "red") + ylim(-0.5, 1.75) +   # ylim will vary based on source data
-  theme(legend.position = "none")
+  theme(legend.position = "none") + labs( y= "PPG Output", x = "Time (Seconds)")
 
 
 ## Now data is scaled and y-axis normalized*, create a new polynomial spline for each wave
 
 poly_wave <- list()
-for(i in 2:ncol(pulse2)){
-  poly_wave[[i-1]] <-CubicInterpSplineAsPiecePoly(1:length(pulse2[, i]), pulse2[, i], "natural")
+for(i in 2:ncol(pulse)){
+  poly_wave[[i-1]] <-CubicInterpSplineAsPiecePoly(pulse$x, pulse[, i], "natural")
 }
 
 
 #Use new polynomial splines to find w/u/v/notch values for each waveform 
-wuv <- find_wuv(p=pulse2, col_len = source_data_column_length, p_w = poly_wave)
+wuv <- find_wuv(p=pulse, col_len = source_data_column_length, p_w = poly_wave)
 
 ## Find O, S, N, D on the new polynomial splines:
-osnd_xy <- find_osnd(p = pulse2, p_w = poly_wave, col_len = source_data_column_length, wuvn = wuv)
+osnd_xy <- find_osnd(p = pulse, p_w = poly_wave, col_len = source_data_column_length, wuvn = wuv)
 osnd_y <- osnd_xy[1:(length(osnd_xy)/2)]
 osnd_x <- osnd_xy[(length(osnd_xy)/2+1):length(osnd_xy)]
 
 
 #Fit S and D sines using the OSND points
 
-sd_sines <- find_sd_sine(p = pulse2, wuvn = wuv, osndx = osnd_x, osndy = osnd_y, pw = poly_wave, plot=FALSE)
+sd_sines <- find_sd_sine(p = pulse, wuvn = wuv, osndx = osnd_x, osndy = osnd_y, pw = poly_wave, plot=FALSE)
 s_sines <- sd_sines[1:(length(sd_sines)/2)]
 d_sines <- sd_sines[(length(sd_sines)/2+1):length(sd_sines)]
 
 #Fit N sines using the S and D sines
 
-n_sines <- fit_n_sine(p=pulse2, ss = s_sines, ds = d_sines, osndx = osnd_x, osndy = osnd_y, wuvn = wuv, plot=TRUE)
+n_sines <- fit_n_sine(p=pulse, ss = s_sines, ds = d_sines, osndx = osnd_x, osndy = osnd_y, wuvn = wuv, plot=TRUE)
 
 
 ##Refitting the SND peaks 
 
 avg_period <- 3*(mean(wuv$v_x)-mean(wuv$u_x))
-refitted_snd <- refit_peaks(p=pulse2, ss= s_sines, ds= d_sines, ns= n_sines, period= avg_period)
+refitted_snd <- refit_peaks(p=pulse, ss= s_sines, ds= d_sines, ns= n_sines, period= avg_period)
 
 ##Plotting the refitted SND peaks back on the waveforms 
 #for(i in 2:(ncol(pulse2))){
@@ -273,18 +243,18 @@ for(i in 1:length(osnd_x)){
 
 
 #Refit sines using the refitted SND values
-refit_sd_sines <- find_sd_sine(p = pulse2, wuvn = wuv, osndx = refit_osnd_x, osndy = refit_osnd_y, pw = poly_wave, plot=FALSE)
+refit_sd_sines <- find_sd_sine(p = pulse, wuvn = wuv, osndx = refit_osnd_x, osndy = refit_osnd_y, pw = poly_wave, plot=FALSE)
 refit_s_sines <- refit_sd_sines[1:(length(sd_sines)/2)]
 refit_d_sines <- refit_sd_sines[(length(sd_sines)/2+1):length(sd_sines)]
 
-refit_n_sines <- fit_n_sine(p=pulse2, ss = s_sines, ds = d_sines, osndx = refit_osnd_x, osndy = refit_osnd_y, wuvn = wuv, plot=FALSE)
+refit_n_sines <- fit_n_sine(p=pulse, ss = s_sines, ds = d_sines, osndx = refit_osnd_x, osndy = refit_osnd_y, wuvn = wuv, plot=FALSE)
 
 #Finding the residual after subtracting all the sines from the original pulse 
 sine_resid <- list()
 const <- c()
-for(i in 2:ncol(pulse2)){
+for(i in 2:ncol(pulse)){
   const <- rep(refit_s_sines[[i-1]][[length(refit_s_sines[[i-1]])]],length(refit_s_sines[[i-1]]))
-  sine_resid[[i-1]] <- pulse2[,i]
+  sine_resid[[i-1]] <- pulse[,i]
   sine_resid[[i-1]] <- (((((sine_resid[[i-1]] - refit_s_sines[[i-1]]) + const) - refit_d_sines[[i-1]]) + const) - refit_n_sines[[i-1]]) + const
 }
 
