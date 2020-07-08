@@ -101,7 +101,7 @@ if(w_bc$w_poly_peaks[1] < 15){
   w_bc  <- w_bc[-1,]      # First w peak should be greater than 10
   o_w_difference <- o_w_difference[-1]
   o_difference <- o_difference[-1]
-  v_minus_u <- v_minus_u[-1
+  v_minus_u <- v_minus_u[-1]
 }
 #if the last element is less than length of baseline corrected
 if(w_bc$w_poly_peaks[length(w_bc$w_poly_peaks)] > (length(baseline_corrected) - 77)){
