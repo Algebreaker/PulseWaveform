@@ -13,9 +13,9 @@ find_osnd <- function(p, p_w, col_len, wuvn, ow, plot=FALSE){
   
   for(i in 2:(ncol(p))){        
   
-  sfunction <- splinefun(1:(col_len+4), p[, i], method = "natural")
-  deriv1_wave <- sfunction(seq(1, (col_len+4)), deriv = 1)
-  deriv1_wave_poly <- CubicInterpSplineAsPiecePoly(1:(col_len+4), deriv1_wave, "natural") 
+  sfunction <- splinefun(p$x, p[, i], method = "natural")
+  deriv1_wave <- sfunction(p$x, deriv = 1)
+  deriv1_wave_poly <- CubicInterpSplineAsPiecePoly(p$x, deriv1_wave, "natural") 
   
   # Find inflexion points on deriv1_wave_poly
   inflexion_points_deriv1_wave_poly <- solve(deriv1_wave_poly, b = 0, deriv = 1)
@@ -29,7 +29,7 @@ find_osnd <- function(p, p_w, col_len, wuvn, ow, plot=FALSE){
   # Find OSND
   inflexion_points_new <- solve(p_w[[i-1]], b = 0, deriv = 1)
   inflexion_points_new_yval <- predict(p_w[[i-1]], inflexion_points_new)
-  o <- wuvn$w[i-1] - o_w_difference[i-1]
+  o <- wuvn$w[i-1] - (o_w_difference[i-1]/75)
   o_yval <- predict(p_w[[i-1]], o)
   
   if(length(inflexion_points_new) >= 4){
