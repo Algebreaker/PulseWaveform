@@ -94,9 +94,9 @@ find_wuv <- function(p, col_len, p_w){
   
   for(i in 2:(ncol(p))){        
     
-    sfunction <- splinefun(1:(col_len+4), p[, i], method = "natural")
-    deriv1_wave <- sfunction(seq(1, (col_len+4)), deriv = 1)
-    deriv1_wave_poly <- CubicInterpSplineAsPiecePoly(1:(col_len+4), deriv1_wave, "natural") 
+    sfunction <- splinefun(p$x, p[, i], method = "natural")
+    deriv1_wave <- sfunction(p$x, deriv = 1)
+    deriv1_wave_poly <- CubicInterpSplineAsPiecePoly(p$x, deriv1_wave, "natural") 
     
     # Find inflexion points on deriv1_wave_poly
     inflexion_points_deriv1_wave_poly <- solve(deriv1_wave_poly, b = 0, deriv = 1)
@@ -114,8 +114,10 @@ find_wuv <- function(p, col_len, p_w){
     
     
     # Finding the 'notch' (renal wave)    
-    notch <- inflexion_points_deriv1_wave_poly[(which(inflexion_points_deriv1_wave_poly_yval == min(inflexion_points_deriv1_wave_poly_yval)))+1]
-    notch_poly_yval <- predict(p_w[[i-1]], notch)
+    notch_range <- which(inflexion_points_deriv1_wave_poly < (0.25*max(inflexion_points_deriv1_wave_poly)))  ## Look for the notch in the first quarter of the range from W to the max inflexion point
+    notch <- inflexion_points_deriv1_wave_poly[(which(inflexion_points_deriv1_wave_poly_yval[notch_range] == min(inflexion_points_deriv1_wave_poly_yval[notch_range])))+1]
+    #Find corresponding y value on poly_wave
+    notch_poly_yval <- predict(poly_wave[[i-1]], notch)
     
     
     #Find U and V
