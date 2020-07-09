@@ -1,4 +1,4 @@
-find_w <- function(dat, d1p){
+find_w_r <- function(dat, d1p){
   
   inflexion_points_deriv1 <- solve(d1p, b = 0, deriv = 1)                                       # Find inflexion points 1st deriv
   inflexion_points_deriv1_yval <- predict(d1p, inflexion_points_deriv1)
