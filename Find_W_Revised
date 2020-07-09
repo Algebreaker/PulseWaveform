@@ -1,12 +1,7 @@
-##################### Finding W (revised) ##########################################
-
-undetrended_x <- undetrended_data$undetrended # Function doesn't seem to accept $ symbol        
-
-find_w <- function(undetrended_x){
+find_w <- function(dat, d1p){
   
-  deriv1_poly <- CubicInterpSplineAsPiecePoly(1:length(undetrended_x), deriv1, "natural")       # Make a spline of 1st deriv
-  inflexion_points_deriv1 <- solve(deriv1_poly, b = 0, deriv = 1)                               # Find inflexion points 1st deriv
-  inflexion_points_deriv1_yval <- predict(deriv1_poly, inflexion_points_deriv1)
+  inflexion_points_deriv1 <- solve(d1p, b = 0, deriv = 1)                                       # Find inflexion points 1st deriv
+  inflexion_points_deriv1_yval <- predict(d1p, inflexion_points_deriv1)
   w_poly_peaks <- c()                                                                           # Create vectors for w values to be stored
   w_poly_peaks_yval <- c()
   window <- list()                                                                              # Define 'window' as the timeframe you will look for peaks in
@@ -121,14 +116,18 @@ find_w <- function(undetrended_x){
   for(i in 1:length(w_poly_peaks)){                                                                                                                             # Find the inflexion points on 1st deriv that correspond to w_poly_peaks (this is to correct for any minor differences in W value due to different scales of splines being used)
     w_poly_peaks[i] <- inflexion_points_deriv1[which(abs(inflexion_points_deriv1 - w_poly_peaks[i]) == min(abs(inflexion_points_deriv1 - w_poly_peaks[i])))]
   }
-  w_poly_peaks_yval <- predict(deriv1_poly, w_poly_peaks)                                                                                                       # Find the y-values corresponding to w_poly_peaks
-w_poly_peaks_yval_deriv1 <- predict(deriv1_poly, w_poly_peaks)
-
-for(i in c(1, 2)){
-  if(sum(which(inflexion_points < w_poly_peaks[1])) == 0){                    # This removes peaks in the first 2 windows if there weren't any actual peaks there
-    w_poly_peaks <- w_poly_peaks[-1]
-    w_poly_peaks_yval <- w_poly_peaks_yval[-1]
-    w_poly_peaks_yval_deriv1 <- w_poly_peaks_yval_deriv1[-1]
+  w_poly_peaks_yval <- predict(d1p, w_poly_peaks)                                                                                                       # Find the y-values corresponding to w_poly_peaks
+  w_poly_peaks_yval_deriv1 <- predict(d1p, w_poly_peaks)
+  
+  for(i in c(1, 2)){
+    if(sum(which(inflexion_points < w_poly_peaks[1])) == 0){                    # This removes peaks in the first 2 windows if there weren't any actual peaks there
+      w_poly_peaks <- w_poly_peaks[-1]
+      w_poly_peaks_yval <- w_poly_peaks_yval[-1]
+      w_poly_peaks_yval_deriv1 <- w_poly_peaks_yval_deriv1[-1]
+    }
   }
- }
+  w <- data.frame(w_poly_peaks, w_poly_peaks_yval, w_poly_peaks_yval_deriv1)
+ return(w)
 }
+  
+
