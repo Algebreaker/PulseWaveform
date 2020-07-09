@@ -30,7 +30,7 @@ deriv1_poly <- CubicInterpSplineAsPiecePoly(1:length(undetrended_data$undetrende
 inflexion_points <- solve(spline_poly, b = 0, deriv = 1)
 inflexion_points_yval <- predict(spline_poly, inflexion_points)
 
-w <- find_w(dat=undetrended_data$undetrended, d1p = deriv1_poly)
+w <- find_w_r(dat=undetrended_data$undetrended, d1p = deriv1_poly)
 
 u_v <- find_u_v(dat = undetrended_data$undetrended, wx = w$w_poly_peaks, wy = w$w_poly_peaks_yval, d1 = deriv1, d1p = deriv1_poly, plot=FALSE)
 
