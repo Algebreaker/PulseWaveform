@@ -30,7 +30,7 @@ deriv1_poly <- CubicInterpSplineAsPiecePoly(1:length(undetrended_data$undetrende
 inflexion_points <- solve(spline_poly, b = 0, deriv = 1)
 inflexion_points_yval <- predict(spline_poly, inflexion_points)
 
-w <- find_w_r(dat=undetrended_data$undetrended, d1p = deriv1_poly)
+w <- find_w(dat=undetrended_data$undetrended, d1p = deriv1_poly)
 
 u_v <- find_u_v(dat = undetrended_data$undetrended, wx = w$w_poly_peaks, wy = w$w_poly_peaks_yval, d1 = deriv1, d1p = deriv1_poly, plot=FALSE)
 
@@ -66,7 +66,7 @@ spline_poly_bc <- CubicInterpSplineAsPiecePoly(1:length(baseline_corrected), bas
 deriv1_poly_bc <- CubicInterpSplineAsPiecePoly(1:length(baseline_corrected), deriv1_bc, "natural") 
 
 
-w_bc <- find_w(dat=baseline_corrected, d1 = deriv1_bc, d1p = deriv1_poly_bc, sp = spline_poly_bc, plot = FALSE)
+w_bc <- find_w(dat=baseline_corrected, d1p = deriv1_poly_bc)
 
 u_v_bc <- find_u_v(dat = baseline_corrected, wx = w_bc$w_poly_peaks, wy = w_bc$w_poly_peaks_yval, d1 = deriv1_bc, d1p = deriv1_poly_bc, plot = FALSE)
 
