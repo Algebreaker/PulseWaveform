@@ -14,6 +14,7 @@ source("spectrum.R")
 source("wuv.R")
 source("sines.R")
 source("refit_peaks.R")
+source("Find_W_Revised.R")
 
 
 #Preprocessing which involves downsampling data and undetrending 
@@ -29,7 +30,7 @@ deriv1_poly <- CubicInterpSplineAsPiecePoly(1:length(undetrended_data$undetrende
 inflexion_points <- solve(spline_poly, b = 0, deriv = 1)
 inflexion_points_yval <- predict(spline_poly, inflexion_points)
 
-w <- find_w(dat=undetrended_data$undetrended, d1 = deriv1, d1p = deriv1_poly, sp = spline_poly, plot=FALSE)
+w <- find_w(dat=undetrended_data$undetrended, d1p = deriv1_poly)
 
 u_v <- find_u_v(dat = undetrended_data$undetrended, wx = w$w_poly_peaks, wy = w$w_poly_peaks_yval, d1 = deriv1, d1p = deriv1_poly, plot=FALSE)
 
