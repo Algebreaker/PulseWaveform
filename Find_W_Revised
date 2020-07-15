@@ -65,11 +65,9 @@ for(i in 3:length(inflexion_points_deriv1)){
       #plot(window[[i]])
       #points(window_poly_peaks, window_poly_peaks_yval, pch = 19)
       
-      if(length(window_poly_peaks) == 2){                                                                                                # If two peaks are found, and they are not next to each other, add them both
-        if((window_poly_peaks[2] - window_poly_peaks[1]) > 10){
+    if(length(window_poly_peaks) == 2 & (window_poly_peaks[2] - window_poly_peaks[1]) > 10){                                            # If two peaks are found, and they are not next to each other, add them both
           w_poly_peaks[(length(w_poly_peaks)+1):(length(w_poly_peaks) + length(window_poly_peaks))] <-  window_poly_peaks 
           w_poly_peaks_yval[(length(w_poly_peaks)+1):(length(w_poly_peaks) + length(window_poly_peaks))] <- window_poly_peaks_yval
-        }
       }
       
       if(length(window_poly_peaks) == 1){                                                                                                # If one peak is found:
