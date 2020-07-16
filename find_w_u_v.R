@@ -46,7 +46,7 @@ find_u_v <- function(dat, wx, wy, d1, d1p, plot = FALSE){
   half_heights <- c()
   half_heights_yval <- c()
   for(i in 1:length(w_half_height)){ 
-    deriv1_poly_peak_subset <- CubicInterpSplineAsPiecePoly((wx[i]-10):(wx[i]+10), d1[(wx[i]-10):(wx[i]+10)], "natural") 
+    deriv1_poly_peak_subset <- CubicInterpSplineAsPiecePoly((wx[i]-9):(wx[i]+9), d1[(wx[i]-9):(wx[i]+9)], "natural") 
     half_heights_precursor <- solve(deriv1_poly_peak_subset, b = w_half_height[i])
     half_heights[c((2*(i)-1), (2*(i)))] <- half_heights_precursor
     half_heights_yval[c((2*(i)-1), (2*(i)))] <- predict(deriv1_poly_peak_subset, half_heights[c((2*(i)-1), (2*(i)))])
