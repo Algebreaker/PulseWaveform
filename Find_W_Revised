@@ -37,49 +37,50 @@ while(length(w_poly_peaks) < 2){
 
 
 # Find remaining peaks based on p_p distance:
-
-for(i in 3:length(inflexion_points_deriv1)){  #length(inflexion_points_deriv1)
+artefacts <- c()
+for(i in 3:length(inflexion_points_deriv1)){   
     if((w_poly_peaks[length(w_poly_peaks)] + 100 > length(deriv1))){                            # If the next window goes beyond the length of the data, break the loop
       break
     }                                      
     p_p_distance <- w_poly_peaks[length(w_poly_peaks)] - w_poly_peaks[length(w_poly_peaks)-1]   # p_p_distance defined as distance between two previous peaks
     window_poly_peaks <- c()
     
-    window_extension <- 1.35                                                # Define the window beginning and end point in units of p_p_distance
-    window_beginning <- 0.5                                                 # These, rather than the threshold, will now change if a peak is not found
+    window_extension <- 1.35
+    window_beginning <- 0.5
     printed <- NA
     while(length(window_poly_peaks) < 1){
       
       
-       window[[i]] <- data.frame((w_poly_peaks[length(w_poly_peaks)] + window_beginning*p_p_distance):(w_poly_peaks[length(w_poly_peaks)] + window_extension*p_p_distance),  deriv1[(w_poly_peaks[length(w_poly_peaks)] + window_beginning*p_p_distance):(w_poly_peaks[length(w_poly_peaks)] + window_extension*p_p_distance)])    
+       window[[i]] <- data.frame((w_poly_peaks[length(w_poly_peaks)] + window_beginning*p_p_distance):(w_poly_peaks[length(w_poly_peaks)] + window_extension*p_p_distance),  deriv1[(w_poly_peaks[length(w_poly_peaks)] + window_beginning*p_p_distance):(w_poly_peaks[length(w_poly_peaks)] + window_extension*p_p_distance)])    # window defined as (the previous peak + 0.75*p_p_distance) to (previous peak + 1.25*p_p_distance)
        
        inflexion_points_window_yval <- inflexion_points_deriv1_yval[which(inflexion_points_deriv1 > window[[i]][1, 1] & inflexion_points_deriv1 < window[[i]][length(window[[i]][, 1]), 1])]
        inflexion_points_window <- inflexion_points_deriv1[which(inflexion_points_deriv1 > window[[i]][1, 1] & inflexion_points_deriv1 < window[[i]][length(window[[i]][, 1]), 1])]                          
        threshold <- quantile(window[[i]][, 2], probs=c(0.95))                                            
-       window_poly_peaks <- which(inflexion_points_window_yval > threshold)                       # Lines 56-63 are equivalent to 14-22
+       window_poly_peaks <- which(inflexion_points_window_yval > threshold)                      
        window_poly_peaks_yval <- inflexion_points_window_yval[window_poly_peaks]
        window_poly_peaks <- inflexion_points_window[window_poly_peaks]     
        #plot(window[[i]])
        #points(window_poly_peaks, window_poly_peaks_yval, pch = 19)
        
-       if(length(window_poly_peaks) > 2){                                    # So far from what I have seen, if there are more than 3 'peaks' picked up 
-         window_beginning <- window_beginning + 0.5                          # within a window its because a peak is not in the window.                                                                                                        
-         window_extension <- window_extension + 0.5                          # The general idea is that the windows start small and get bigger. 
-         window_poly_peaks <- c()                                            
+       if(length(window_poly_peaks) > 2){    # for cases where 3 incorrect peaks are picked up
+         window_beginning <- window_beginning + 0.5                                                                                                                            # If the these criteria are met, go to the next loop
+         window_extension <- window_extension + 0.5
+         window_poly_peaks <- c()
        }
        
        if(length(window_poly_peaks) == 2){
-         if((window_poly_peaks[2] - window_poly_peaks[1]) > (p_p_distance/4) & window_poly_peaks_yval[1] > m){                              # If two peaks are found, check they are 1. not too close together, 
-           w_poly_peaks[(length(w_poly_peaks)+1):(length(w_poly_peaks) + length(window_poly_peaks))] <-  window_poly_peaks                  # and 2. above the mean, to confirm them as peaks. 
+         if((window_poly_peaks[2] - window_poly_peaks[1]) > (p_p_distance/4) & window_poly_peaks_yval[1] > m){
+           w_poly_peaks[(length(w_poly_peaks)+1):(length(w_poly_peaks) + length(window_poly_peaks))] <-  window_poly_peaks 
            w_poly_peaks_yval[(length(w_poly_peaks)+1):(length(w_poly_peaks) + length(window_poly_peaks))] <- window_poly_peaks_yval
          }else if(length(window_poly_peaks) == 2){
            window_poly_peaks <- c()
          }
        }
           
-       if(length(window_poly_peaks) == 1){                                                                                                  # If one peak is found, check if its a secondary peak by  
-         if(window_poly_peaks_yval < (m+sd) & window_poly_peaks_yval < (w_poly_peaks[length(w_poly_peaks)]/2)){                             # 1. being below the SD, and 2. being less than half the height of the previous peak
-           window_beginning <- window_beginning + 0.5                                                                                       # If it is identified as a secondary peak, move the window further along the x-axis.                                  
+      
+       if(length(window_poly_peaks) == 1){                                                                                                # If one peak is found:
+         if(window_poly_peaks_yval < (m+sd) & window_poly_peaks_yval < (w_poly_peaks[length(w_poly_peaks)]/2)){    # Assume peak is spurious if it is not the maximum value and the distance of the found peak from the last peak is less than 0.75*p_p_distance (i.e likely to be a secondary peak) # window_poly_peaks_yval < max(window[[i]][2]) & (window_poly_peaks - w_poly_peaks[length(w_poly_peaks)]) < p_p_distance*0.5
+           window_beginning <- window_beginning + 0.5                                                                                                                            # If the these criteria are met, go to the next loop
            window_extension <- window_extension + 0.5
            window_poly_peaks <- c()
            }else{
@@ -87,17 +88,18 @@ for(i in 3:length(inflexion_points_deriv1)){  #length(inflexion_points_deriv1)
          }
        }
        
-       window_extension <- window_extension + 0.1                          # extend the window every time a correct peak is not found 
+       window_extension <- window_extension + 0.1
        
-       if(window_extension > 2 & is.na(printed)){                          # If the window has had to be adjusted significantly, this could be because of an artefact; mark it as such. 
-         cat('\n','Potential artefact at', w_poly_peaks[i], ', plot(', (w_poly_peaks[i]-200), ':', (w_poly_peaks[i]+200), ', deriv1[', (w_poly_peaks[i]-200), ':', (w_poly_peaks[i]+200), '], type = "l") ?')
+       if(window_extension > 2 & is.na(printed)){
+         cat('\n','Potential artefact at', w_poly_peaks[i], ', plot(', (w_poly_peaks[i]-200), ':', (w_poly_peaks[i]+200), ', deriv1[', (w_poly_peaks[i]-200), ':', (w_poly_peaks[i]+200), '], type = "l") ,', 'wave', i, 'removed')
          printed <- 1 
+         artefacts[length(artefacts) + 1] <- i
        }
     }
-    
 }                                                                                                                         
 w_poly_peaks_yval <- predict(d1p, w_poly_peaks)                                                                                                              
 w_poly_peaks_yval_deriv1 <- predict(d1p, w_poly_peaks)
 Ws <- data.frame(w_poly_peaks, w_poly_peaks_yval, w_poly_peaks_yval_deriv1)
+Ws <- Ws[-artefacts, ]
  return(Ws)
 }
