@@ -69,7 +69,7 @@ for(i in 3:length(inflexion_points_deriv1)){  #length(inflexion_points_deriv1)
        }
        
        if(length(window_poly_peaks) == 2){
-         if((window_poly_peaks[2] - window_poly_peaks[1]) > (p_p_distance/2) & window_poly_peaks_yval[1] > m){                              # If two peaks are found, check they are 1. not too close together, 
+         if((window_poly_peaks[2] - window_poly_peaks[1]) > (p_p_distance/4) & window_poly_peaks_yval[1] > m){                              # If two peaks are found, check they are 1. not too close together, 
            w_poly_peaks[(length(w_poly_peaks)+1):(length(w_poly_peaks) + length(window_poly_peaks))] <-  window_poly_peaks                  # and 2. above the mean, to confirm them as peaks. 
            w_poly_peaks_yval[(length(w_poly_peaks)+1):(length(w_poly_peaks) + length(window_poly_peaks))] <- window_poly_peaks_yval
          }else if(length(window_poly_peaks) == 2){
