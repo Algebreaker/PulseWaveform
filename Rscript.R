@@ -66,7 +66,7 @@ spline_poly_bc <- CubicInterpSplineAsPiecePoly(1:length(baseline_corrected), bas
 deriv1_poly_bc <- CubicInterpSplineAsPiecePoly(1:length(baseline_corrected), deriv1_bc, "natural") 
 
 
-w_bc <- find_w(dat=baseline_corrected, d1p = deriv1_poly_bc)
+w_bc <- find_w(d1p = deriv1_poly_bc)
 
 u_v_bc <- find_u_v(dat = baseline_corrected, wx = w_bc$w_poly_peaks, wy = w_bc$w_poly_peaks_yval, d1 = deriv1_bc, d1p = deriv1_poly_bc, plot = FALSE)
 
