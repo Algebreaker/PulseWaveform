@@ -92,7 +92,7 @@ for(i in 1:(length(inflexion_points[o])-1)){
   o_difference[i] <- inflexion_points[o[i+1]] - inflexion_points[o[i]]
 }
 
-source_data_column_length <- round(max(o_difference)+15)   # Add 15 since we are starting the wave from before O
+source_data_column_length <- round(mean(o_difference)+15)   # Add 15 since we are starting the wave from before O
 
 
 ## Chopping up the original data_undetrended (now baseline_corrected) into individual waves:
