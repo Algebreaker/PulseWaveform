@@ -48,10 +48,10 @@ artefacts <- c()
 m <- mean(inflexion_points_deriv1_yval)       
 sd <- sd(inflexion_points_deriv1_yval)
 for(i in 3:length(inflexion_points_deriv1)){  
+    p_p_distance <- w_poly_peaks[length(w_poly_peaks)] - w_poly_peaks[length(w_poly_peaks)-1]   # p_p_distance defined as distance between two previous peaks
     if((w_poly_peaks[length(w_poly_peaks)] + (4*p_p_distance) > length(deriv1))){                            # If the next window goes beyond the length of the data, break the loop
       break
     }                                      
-    p_p_distance <- w_poly_peaks[length(w_poly_peaks)] - w_poly_peaks[length(w_poly_peaks)-1]   # p_p_distance defined as distance between two previous peaks
     window_poly_peaks <- c()
     window_extension <- 1.35
     window_beginning <- 0.5
