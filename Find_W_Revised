@@ -35,6 +35,11 @@ while(length(w_poly_peaks) < 2){
     window_poly_peaks[2] <- peaks_missed[1]
   }
   
+  # Also very occassionely, the first peak is double-peaked, so make sure peaks are not too close together:
+  if(length(window_poly_peaks) == 2 & window_poly_peaks[2] - window_poly_peaks[1] < 5){
+    window_poly_peaks <- window_poly_peaks[-2]   # this line removes the second element, allowing a third to become the second
+  }
+  
   # Find which inflection points are above threshold
   window_poly_peaks_yval <- inflexion_points_window_yval[window_poly_peaks]
   window_poly_peaks <- inflexion_points_window[window_poly_peaks]     
