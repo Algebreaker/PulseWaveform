@@ -144,8 +144,8 @@ o_yval <- predict(spline_poly_bc, inflexion_points[o])
 
 # Find o-w difference:
 o_w_difference <- c()
-for(i in 1:length(w_bc$w_poly_peaks)){
-  o_w_difference[i] <- w_bc$w_poly_peaks[i] - inflexion_points[o[i]]
+for(i in 1:length(w$w_poly_peaks)){
+  o_w_difference[i] <- w$w_poly_peaks[i] - inflexion_points[o[i]]
 }
 
 # Find distance between o_points:
