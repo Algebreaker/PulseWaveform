@@ -39,14 +39,14 @@ find_w <- function(dat, d1, d1p, sp, plot = FALSE){
 }
 
 
-find_u_v <- function(dat, wx, wy, d1, d1p, plot = FALSE){
+find_u_v <- function(dat, wx, wy, d1, d1p, spline_o, plot = FALSE){
   # Find half the height of w (on derivative y-axis)
   w_half_height <- predict(d1p, wx)/2
   # Find u and v:
   half_heights <- c()
   half_heights_yval <- c()
   for(i in 1:length(w_half_height)){ 
-    deriv1_poly_peak_subset <- CubicInterpSplineAsPiecePoly((wx[i]-9):(wx[i]+9), d1[(wx[i]-9):(wx[i]+9)], "natural") 
+    deriv1_poly_peak_subset <- CubicInterpSplineAsPiecePoly((wx[i]-5):(wx[i]+5), d1[(wx[i]-5):(wx[i]+5)], "natural") 
     half_heights_precursor <- solve(deriv1_poly_peak_subset, b = w_half_height[i])
     half_heights[c((2*(i)-1), (2*(i)))] <- half_heights_precursor
     half_heights_yval[c((2*(i)-1), (2*(i)))] <- predict(deriv1_poly_peak_subset, half_heights[c((2*(i)-1), (2*(i)))])
@@ -61,14 +61,14 @@ find_u_v <- function(dat, wx, wy, d1, d1p, plot = FALSE){
   u <- half_heights[seq_along(half_heights) %%2 != 0] 
   v <- half_heights[seq_along(half_heights) %%2 == 0]   
   # Find u and v y-values for spline_poly
-  u_v_yval <- c()
-  for(i in 1:length(wx)){
-    spline_poly_peak_subset <- CubicInterpSplineAsPiecePoly((wx[i]-10):(wx[i]+10), dat[(wx[i]-10):(wx[i]+10)], "natural") 
-    u_v_yval[c((2*(i)-1), (2*(i)))] <- predict(spline_poly_peak_subset, half_heights[c((2*(i)-1), (2*(i)))])
+  u_yval <- c()
+  for(i in 1:length(u)){
+    u_yval[i] <- predict(spline, u[i])
   }
-  u_yval <- u_v_yval[seq_along(u_v_yval) %%2 != 0] 
-  
-  v_yval <- u_v_yval[seq_along(u_v_yval) %%2 == 0]  
+  v_yval <- c()
+  for(i in 1:length(v)){
+    v_yval[i] <- predict(spline, v[i])
+  }
   # Plot u's and v's on spline_poly
   if(plot){
     plot(spline_poly)
