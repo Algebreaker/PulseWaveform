@@ -6,6 +6,9 @@ lab.ppg = "Detrended"
 lab.dt = "interval (s)"
 
 config.rate = 0.95
+config.a.b = 0.999
+config.optimum.width = 0.3
+config.penalty.width = 10
 
 const.pi = 3.1415926535897932384626433
 
@@ -41,77 +44,136 @@ model2.LoadPPG <- function(file){
   return(result)
 }
 
-model2.ChiSq <- function(data,params,optional=NULL){
-  residue <- model2.Residue(data,params)
-  return(sum(residue*residue))
+model2.ChiSq <- function(data,params,optional=NULL,debug=FALSE){
+  nPar <- length(params)
+  fixed <- params
+  penalty <- 0
+  tMax <- data[nrow(data),1]
+  
+  p <- 1:10*0
+  
+  if (!is.null(optional) & length(optional) == 5){
+    meanDTime = optional[2]
+    sdDTime = optional[3]
+    meanNTime = optional[4]
+    sdNTime = optional[5]
+  }
+
+  if (params[3] < 0){
+    fixed[3] <- 0
+    penalty <- penalty + params[3]*params[3]
+    p[1] <- params[3]*params[3]
+  }
+  
+  if (nPar >= 7){
+    if (!is.null(optional) & length(optional) >= 3){
+      meanTime <- optional[2]
+      sdTime <- optional[3]
+     
+      if (nPar == 7 & length(optional) >= 5){
+        if (abs((params[5] - optional[4])/optional[5]) <  abs((params[5] - optional[2])/optional[3])){
+          meanTime <- optional[4]
+          sdTime <- optional[5]
+        }
+      }
+
+      dTime <- (params[5] - meanTime) / sdTime
+      penalty <- penalty + optional[1] * dTime*dTime
+      p[2] <- optional[1] * dTime*dTime
+    }
+
+    if (params[6] < 0){
+      fixed[6] <- 0
+      penalty <- penalty + params[6]*params[6]
+      p[3] <- params[6]*params[6]
+    }
+    
+    fixed[7] <- max( 0.05, min( params[7], 0.5 ) )
+    delta <- fixed[7] - params[7]
+    penalty <- penalty + delta*delta
+    p[4] <- delta*delta
+    
+    fixed[5] <- max( 0.1, min( params[5], (tMax - params[2]) + 0.4*fixed[7] ) )
+    delta <- fixed[5] - params[5]
+    penalty <- penalty + delta*delta
+    p[5] <- delta*delta
+  }
+  
+  if (nPar >= 10){
+    if (!is.null(optional) & length(optional) >= 5){
+      meanTime <- optional[4]
+      sdTime <- optional[5]
+      dTime <- (params[8] - meanTime) / sdTime
+      penalty <- penalty + optional[1] * dTime*dTime
+      p[6] <- optional[1] * dTime*dTime
+    }
+    
+    if (params[9] < 0){
+      fixed[9] <- 0
+      penalty <- penalty + params[9]*params[9]
+      p[7] <- params[9]*params[9]
+    }
+    
+    fixed[10] <- max( 0.05, min( params[10], 0.5 ) )
+    delta <- fixed[10] - params[10]
+    penalty <- penalty + delta*delta
+    p[8] <- delta*delta
+    
+    fixed[8] <- max( 0.1, min( params[8], (tMax - params[2]) + 0.4*fixed[10] ) )
+    delta <- fixed[8] - params[8]
+    penalty <- penalty + delta*delta
+    p[9] <- delta*delta
+    
+    delta <- params[5] - params[8]
+    if (delta < 0.1){
+      delta <- (0.1 - delta) / 0.1
+      penalty <- penalty + delta*delta
+      p[10] <- delta*delta
+    }
+  }
+
+  fit <- model2.Rebuild(data,data[1,2],fixed)
+  residue <- data[,2] - fit
+  
+  if (debug){
+    print(sum(residue*residue))
+    print(p)
+  }
+
+  return(sum(residue*residue) + as.numeric(penalty))
 }
 
-model2.ChiSqPPG <- function(data,params,optional=NULL){
-  fit <- model2.Rebuild(data,data[1,2],params)
-  residue <- data[,2] - fit
-  return(sum(residue*residue))
-}
+model2.FindPeak <- function(ppg,time){
+  nppg <- nrow(ppg)
 
-model2.ChiSqPPGBound <- function(data,params,optional){
-  penaltyScale = optional[1]
-  meanDTime = optional[2]
-  sdDTime = optional[3]
-  meanNTime = optional[4]
-  sdNTime = optional[5]
-  
-  dD = (params[5]-meanDTime)/sdDTime
-  dN = (params[8]-meanNTime)/sdNTime
-  negS = min(0,params[3])
-  negD = min(0,params[6])
-  negN = min(0,params[9])
-  sWs = min(0.1,max(0.001,params[4]))
-  sWd = min(0.1,max(0.001,params[7]))
-  sWn = min(0.1,max(0.001,params[10]))
-  
-  par <- params
-  par[3] <- max(0,params[3])
-  par[6] <- max(0,params[6])
-  par[9] <- max(0,params[9])
-  
-  penalty =
-    penaltyScale * (dD*dD + dN*dN) +
-    (negS*negS + negD*negD + negN*negN) +
-    (1/sWs + 1/sWd + 1/sWn - 3/0.1)
-  
-  fit <- model2.Rebuild(data,data[1,2],par)
-  residue <- data[,2] - fit
-  return(penalty + sum(residue*residue))
-}
+  w0 <- min(which(ppg[[lab.time]]>time))
+  wLim <- c(max(1,w0-75),min(nppg,w0+75))
 
-model2.ChiSqZeroN <- function(data,params,optional){
-  #print("0N")
-  penaltyScale = optional[1]
-  meanDTime = optional[2]
-  sdDTime = optional[3]
+  a <- c(0,w0 - wLim[1],0)
+  a[1] <- max(1,a[2]-20)
+  a[3] <- a[2]+min(nppg-w0,10)
 
-  dD = (params[5]-meanDTime)/sdDTime
-  negS = min(0,params[3])
-  negD = min(0,params[6])
-  sWs = min(0.1,max(0.001,params[4]))
-  sWd = min(0.1,max(0.001,params[7]))
+  t_time <- ppg[[lab.time]][wLim[1]:(wLim[2]-1)]
+  t_ppg <- ppg[[lab.ppg]][wLim[1]:(wLim[2]-1)]
+  grad <- ppg[[lab.ppg]][(wLim[1]+1):wLim[2]] - ppg[[lab.ppg]][wLim[1]:(wLim[2]-1)]
+  w0 <- min(which(grad[a[1]:a[3]] == max(grad[a[1]:a[3]])) + wLim[1] + a[1] - 1)
 
-  ## Append zero-amplitude N peak
-  par <- c(params,params[5],0,0.1)
-  par[3] <- max(0,params[3])
-  par[6] <- max(0,params[6])
+  while (w0 > wLim[1] && grad[w0-wLim[1]-1] > grad[w0-wLim[1]]){
+    w0 <- w0 - 1
+  }
+  while (w0 < wLim[2] && grad[w0-wLim[1]+1] > grad[w0-wLim[1]]){
+    w0 <- w0 + 1
+  }
 
-  penalty =
-    penaltyScale * (dD*dD) +
-    (negS*negS + negD*negD) +
-    (1/sWs + 1/sWd - 2/0.1)
-  #print(paste("Penalty:",penaltyScale * (dD*dD),",",
-  #              (negS*negS + negD*negD),",",
-  #              (1/sWs + 1/sWd - 2/0.1)))
-  
-  fit <- model2.Rebuild(data,data[1,2],par)
-  residue <- data[,2] - fit
-  #print(paste("/0N:",penalty,sum(residue*residue)))
-  return(penalty + sum(residue*residue))
+  wLow <- w0-1
+  while (wLow > wLim[1] && ppg[[lab.ppg]][wLow-1] < ppg[[lab.ppg]][wLow]){
+    wLow <- wLow - 1
+  }
+  if (wLow > wLim[1]){
+    wLow <- wLow - 1
+  }
+
+  return( c(wLow,w0) )
 }
 
 model2.FindSegment <- function(ppg,beats,index){
@@ -119,19 +181,37 @@ model2.FindSegment <- function(ppg,beats,index){
     return(c(0,0))
   }
   
-  tThis <- beat[[index,lab.time]]
-  if (nrow(beat)>index){
-    tNext <- beat[[index+1,lab.time]]
-  }else{
-    tNext <- tThis + 2.0
-  }
-  w <- which(ppg[[lab.time]]>tThis-0.125 & ppg[[lab.time]]<tNext-0.125)
+  nppg <- nrow(ppg)
+  nbeat <- nrow(beats)
 
-  return(c(min(w),max(w)))
+  w <- model2.FindPeak( ppg, beats[[index,lab.time]] )
+  wLow <- w[1]
+  w0 <- w[2]
+  if (index < nbeat){
+    w <- model2.FindPeak( ppg, beats[[index+1,lab.time]] )
+    wHigh <- w[1]
+  }else{
+    wHigh <- min(nppg,w0 + 75)
+    grad <- ppg[[lab.ppg]][(wLow+1):wHigh] - ppg[[lab.ppg]][wLow:(wHigh-1)]
+    split <- 2*(w0-wLow)
+    peakVal <- max(grad[1:split])
+    nextPeakVal <- max(grad[split:length(grad)])
+    nextPeak <- which(grad[split:length(grad)] == nextPeakVal) + split - 1
+
+    if (nextPeakVal > 0.75 * peakVal){
+      # Assume we're trimming off an incomplete beat
+      w <- model2.FindPeak( ppg, ppg[[lab.time]][wLow+nextPeak] )
+      wHigh <- w[1]
+    } else {
+      wHigh <- min(nppg,w0 + 75)
+    }
+  }
+
+  return( c(wLow,w0,wHigh) )
 }
 
 model2.GetSegment <- function(ppg,limits){
-  w <- c(limits[1]:limits[2])
+  w <- c(limits[1]:limits[3])
   
   result <- matrix(nrow=length(w),ncol=2)
   
@@ -149,18 +229,23 @@ model2.EstimateParams <- function(xy,yPrev,beat){
 
   residue <- model2.Excess(xy[,2],yPrev,result[1])
   #plot(data[,1],residue)
-
+  
   ## S peak
-  peak.w <- which(data[,1] > beatTime-0.1 & data[,1] < beatTime+0.1)
+  peak.w <- which(data[,1] > beatTime-0.2 & data[,1] < beatTime+0.2)
   peak.t <- data[peak.w,1]
   peak.y <- residue[peak.w]
 
+  #print(beatTime)
+  #plot(peak.t,peak.y)
+  #stop()
+  
+  
   result[3] <- max(peak.y)
   result[2] <- peak.t[which(peak.y==result[3])]
   result[4] <- 0.25
   residue <- model2.SubtractExcessPeak(data[,1],residue,result[2:4])
   #lines(data[,1],residue)
-
+  
   ## D peak
   peak.w <- which(data[,1] > beatTime+0.2 & data[,1] < beatTime+0.4)
   peak.t <- data[peak.w,1]
@@ -185,6 +270,17 @@ model2.EstimateParams <- function(xy,yPrev,beat){
   residue <- model2.SubtractExcessPeak(data[,1],residue,result[8:10])
   #lines(data[,1],residue)
 
+  # Fix possibly broken values
+  result[3] <- max( 0.05, result[3] )
+  result[6] <- max( 0.05, result[6] )
+  result[9] <- max( 0.05, result[9] )
+  if (result[5] < 0.15){
+    result[5] <- 0.30
+  }
+  if (result[8] < 0.05){
+    result[8] <- 0.15
+  }
+  
   return(result)
 }
 
@@ -248,37 +344,25 @@ model2.Plot <- function(xy,yPrev,params){
 model2.Rebuild <- function(xy,offset,params){
   excess <- 1:nrow(xy) * 0.0
   excess <- excess + model2.Peak(xy[,1],params[2:4])
-  excess <- excess + model2.Peak(xy[,1],params[5:7]+c(params[2],0,0))
-  excess <- excess + model2.Peak(xy[,1],params[8:10]+c(params[2],0,0))
-  
+  if (length(params)>=7){
+    excess <- excess + model2.Peak(xy[,1],params[5:7]+c(params[2],0,0))
+  }
+  if (length(params)>=10){
+    excess <- excess + model2.Peak(xy[,1],params[8:10]+c(params[2],0,0))
+  }
+
   result <- model2.Excess.Inv(excess,offset,params[1])
 }
 
 model2.Residue <- function(xy,params){
   result <- model2.Excess(xy[,2],params[1],params[1])
   result <- model2.SubtractExcessPeak(xy[,1],result,params[2:4])
-  result <- model2.SubtractExcessPeak(xy[,1],result,params[5:7]+c(params[2],0,0))
-  result <- model2.SubtractExcessPeak(xy[,1],result,params[8:10]+c(params[2],0,0))
-  return(result)
-}
-
-model2.CleanParams <- function(params){
-  result <- params
-  
-  if (mean(result[,7]-result[,4])>0){
-    result[,7] <- result[,7] - result[,4]
-    result[,10] <- result[,10] - result[,4]
+  if (length(params) >= 7){
+    result <- model2.SubtractExcessPeak(xy[,1],result,params[5:7]+c(params[2],0,0))
   }
-  
-  result[,5] <- pmax(0,result[,5])
-  result[,6] <- pmax(0.1,result[,6])
-  result[,7] <- pmax(0,result[,7])
-  result[,8] <- pmax(0,result[,8])
-  result[,9] <- pmax(0.1,result[,9])
-  result[,10] <- pmax(0,result[,10])
-  result[,11] <- pmax(0,result[,11])
-  result[,12] <- pmax(0.1,result[,12])
-  
+  if (length(params) >= 10){
+    result <- model2.SubtractExcessPeak(xy[,1],result,params[8:10]+c(params[2],0,0))
+  }
   return(result)
 }
 
@@ -287,10 +371,8 @@ model2.Load <- function(filename){
     params <- read.csv(filename)
     # Erase line index column
     params["X"] <- NULL
-    
-    result <- model2.CleanParmas(data.matrix(params))
-    
-    return(result)
+
+    return(data.matrix(params))
   }
   
   return(NULL)

@@ -1,4 +1,5 @@
-simplex.MakeSimplex <- function(data,param,f,inScale,inTol,optional=NULL){
+simplex.MakeSimplex <- function(data,param,f,inScale,directions=NULL,inTol=-1,optional=NULL,debug=FALSE){
+  if (debug){print("MakeSimplex -- debug")}
   nPar <- length(param)
   nScale <- length(inScale)
   if (nScale == 0)
@@ -9,47 +10,67 @@ simplex.MakeSimplex <- function(data,param,f,inScale,inTol,optional=NULL){
   } else if (length(inScale) == nPar){
     scale <- inScale
   } else {
-    print("Invalid scale vector length")
-    return()
+    #print("Invalid scale vector length")
+    return("Error: Invalid scale vector length")
   }
   if (length(inTol) == 1 & inTol > 0){
     tol <- inTol[1]
   } else {
-    tol <- f(data,param,optional=optional)
+    tol <- min(1,f(data,param,optional=optional))
   }
 
   chiSq <- 1:(nPar+1) * 0.0
   chiSq[1] <- f(data,param,optional=optional)
+  
+  if (debug){ print(paste("Root chi-squared:",chiSq[1]))}
  
   result <- matrix(nrow=nPar+1,ncol=nPar)
   result[1,] <- param
   
+  useDirections = !is.null(directions)
+  if (useDirections){ useDirections <- nrow(directions) == nPar & ncol(directions) == nPar }
+
   for (i in 1:nPar){
-    delta <- scale[i]
+    if (debug){ print(paste("Parameter",i)) }
     tParam <- param
     
     # Pick a direction
-    tParam[i] <- param[i] - delta
+    delta <- 1:nPar * 0
+    if (useDirections){
+      delta <- scale[i] * directions[i,]
+    } else {
+      delta[i] <- scale[i]
+    }
+
+    tParam <- param - delta
     chiSqMinus <- f(data,tParam,optional=optional)
-    tParam[i] <- param[i] + delta
+    tParam <- param + delta
     chiSq[i+1] <- f(data,tParam,optional=optional)
 
+    if (debug){
+      print(paste("chi^2(",param[i],") =",chiSq[1]))
+      print(paste("chi^2(",param[i] - delta,") =",chiSqMinus))
+      print(paste("chi^2(",param[i] + delta,") =",chiSq[i+1]))
+    }
+    
     if (chiSqMinus < chiSq[i+1]){
       delta <- -delta
-      tParam[i] <- param[i] + delta
+      tParam <- param + delta
       chiSq[i+1] <- chiSqMinus
     }
     
     iKill <- 10
  
     if (chiSq[i+1] < chiSq[1]){
+      if (debug){ print("Extending as best point") }
       while (chiSq[i+1] < chiSq[1] + tol){
         delta <- 2*delta
-        tParam[i] <- param[i] + delta
+        tParam <- param + delta
         oldScore <- chiSq[i+1]
         chiSq[i+1] <- f(data,tParam,optional=optional)
+        if (debug){ print(paste("chi^2(",tParam[i],") =",chiSq[i+1])) }
         if (chiSq[i+1] > oldScore){
-          delta <- 0.5*delta
+          tParam <- param + 0.5*delta
           chiSq[i+1] <- oldScore
           break
         }
@@ -60,41 +81,47 @@ simplex.MakeSimplex <- function(data,param,f,inScale,inTol,optional=NULL){
         }
       }
     } else if (chiSq[i+1] < chiSq[1] + tol){
+      if (debug){ print("Extending below tolerance") }
       while (chiSq[i+1] < chiSq[1] + tol){
         delta <- 2*delta
-        tParam[i] <- param[i] + delta
+        tParam <- param + delta
         oldScore <- chiSq[i+1]
         chiSq[i+1] <- f(data,tParam,optional=optional)
+        if (debug){ print(paste("chi^2(",tParam[i],") =",chiSq[i+1])) }
         if (chiSq[i+1] - oldScore < oldScore - chiSq[1]){
-          delta <- 0.5*delta
+          tParam <- param + 0.5*delta
           chiSq[i+1] <- oldScore
           break
         }
         iKill <- iKill - 1
         if (iKill < 0){
-          print("Failed to construct simplex")
-          return()
+          #print("Failed to construct simplex")
+          return(paste("Error: param[",i,"]",sep=""))
         }
       }
     } else {
+      if (debug){ print("Shrinking above tolerance") }
       while (chiSq[i+1] > chiSq[1] + tol){
         delta <- 0.5*delta
-        tParam[i] <- param[i] + delta
+        tParam <- param + delta
+        lastChiSq <- chiSq[i+1]
         chiSq[i+1] <- f(data,tParam,optional=optional)
+        if (debug){ print(paste("chi^2(",tParam[i],") =",chiSq[i+1])) }
         #print(paste(i,"-",delta,":",chiSq[i+1]))
-        iKill <- iKill - 1
-        if (iKill < 0){
-          print("Failed to construct simplex")
-          return()
+        if (iKill < 0 & (chiSq[i+1]-chiSq[1]) > 0.75 * (lastChiSq-chiSq[1])){
+          #print("Failed to construct simplex")
+          return(paste("Error: param[",i,"]",sep=""))
         }
+        iKill <- iKill - 1
       }
-      delta <- 0.5*delta
-      tParam[i] <- param[i] + delta
+      tParam <- param + 0.5 * delta
     }
     
+    if(debug){ print(paste("Param[",i,"] =",tParam[i]))}
     result[i+1,] = tParam
   }
 
+  if (debug){ print("/MakeSimplex") }
   return(result)
 }
 
@@ -105,7 +132,7 @@ simplex.Run <- function(data,simplexParam,f,optional=NULL){
   debugRtol <- 1:(MAX_STEP+1) * 0.0
   debugMin <- 1:(MAX_STEP+1) * 0.0
   debugMax <- 1:(MAX_STEP+1) * 0.0
-  
+
   result <- simplexParam
   nPar <- ncol(result)
   chiSq <- 0:nPar * 0.0
@@ -250,28 +277,4 @@ simplex.SortHighLow <- function(vec_ChiSq){
   }
 
   return(c(low,nHigh,high))  
-}
-
-simplex.Update <- function(data,mat_Param,vec_ChiSq,f,extrema){
-  nPar <- ncol(mat_Param)
-  
-  
-  result.index <- extrema.high
-  result.chiSq <- vec_chiSq[extrema.high]
-  result.value <- mat_Param[extrema.high,]
-  
-  centrum <- 1:nPar * 0.0
-  for (i in 1:(nPar+1)){
-    if (i != extrema.high){
-      centrum <- centrum + mat_Param[i,]
-    }
-  }
-  centrum <- centrum / nPar
-  
-  scale <- -1
-  test <- f(data,centrum + scale * (mat_Param[extrema.high,] - centrum))
-  if (test < result.chiSq){
-    
-  }
-  
 }
