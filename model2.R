@@ -27,7 +27,7 @@ model2.LoadBeat <- function(file){
   result <- read.csv(filename)
   names(result)[1] <- lab.time
   names(result)[2] <- lab.dt
-  
+
   return(result)
 }
 
@@ -36,11 +36,11 @@ model2.LoadPPG <- function(file){
   if (regexpr(".csv$",file)<0){
     filename <- paste(filename,".csv",sep="")
   }
-  
+
   result <- read.csv(filename)
   names(result)[1] <- lab.time
   names(result)[2] <- lab.ppg
-  
+
   return(result)
 }
 
@@ -49,9 +49,9 @@ model2.ChiSq <- function(data,params,optional=NULL,debug=FALSE){
   fixed <- params
   penalty <- 0
   tMax <- data[nrow(data),1]
-  
+
   p <- 1:10*0
-  
+
   if (!is.null(optional) & length(optional) == 5){
     meanDTime = optional[2]
     sdDTime = optional[3]
@@ -64,12 +64,12 @@ model2.ChiSq <- function(data,params,optional=NULL,debug=FALSE){
     penalty <- penalty + params[3]*params[3]
     p[1] <- params[3]*params[3]
   }
-  
+
   if (nPar >= 7){
     if (!is.null(optional) & length(optional) >= 3){
       meanTime <- optional[2]
       sdTime <- optional[3]
-     
+
       if (nPar == 7 & length(optional) >= 5){
         if (abs((params[5] - optional[4])/optional[5]) <  abs((params[5] - optional[2])/optional[3])){
           meanTime <- optional[4]
@@ -87,18 +87,18 @@ model2.ChiSq <- function(data,params,optional=NULL,debug=FALSE){
       penalty <- penalty + params[6]*params[6]
       p[3] <- params[6]*params[6]
     }
-    
+
     fixed[7] <- max( 0.05, min( params[7], 0.5 ) )
     delta <- fixed[7] - params[7]
     penalty <- penalty + delta*delta
     p[4] <- delta*delta
-    
+
     fixed[5] <- max( 0.1, min( params[5], (tMax - params[2]) + 0.4*fixed[7] ) )
     delta <- fixed[5] - params[5]
     penalty <- penalty + delta*delta
     p[5] <- delta*delta
   }
-  
+
   if (nPar >= 10){
     if (!is.null(optional) & length(optional) >= 5){
       meanTime <- optional[4]
@@ -107,23 +107,23 @@ model2.ChiSq <- function(data,params,optional=NULL,debug=FALSE){
       penalty <- penalty + optional[1] * dTime*dTime
       p[6] <- optional[1] * dTime*dTime
     }
-    
+
     if (params[9] < 0){
       fixed[9] <- 0
       penalty <- penalty + params[9]*params[9]
       p[7] <- params[9]*params[9]
     }
-    
+
     fixed[10] <- max( 0.05, min( params[10], 0.5 ) )
     delta <- fixed[10] - params[10]
     penalty <- penalty + delta*delta
     p[8] <- delta*delta
-    
+
     fixed[8] <- max( 0.1, min( params[8], (tMax - params[2]) + 0.4*fixed[10] ) )
     delta <- fixed[8] - params[8]
     penalty <- penalty + delta*delta
     p[9] <- delta*delta
-    
+
     delta <- params[5] - params[8]
     if (delta < 0.1){
       delta <- (0.1 - delta) / 0.1
@@ -134,10 +134,67 @@ model2.ChiSq <- function(data,params,optional=NULL,debug=FALSE){
 
   fit <- model2.Rebuild(data,data[1,2],fixed)
   residue <- data[,2] - fit
-  
+
   if (debug){
+    plot(data[,1],data[,2])
+    lines(data[,1],fit)
     print(sum(residue*residue))
     print(p)
+  }
+
+  return(sum(residue*residue) + as.numeric(penalty))
+}
+
+model2.ChiSqAmp <- function(data,params,optional=NULL,debug=FALSE){
+  penalty <- 0
+  p <- 1:3 * 0
+
+  fixed <- c(
+    params[1],   # Baseline
+    params[2],   # S timing
+    params[3],   # S amplitude
+    optional[1], # S width
+    optional[2], # D timing
+    params[4],   # D amplitude
+    optional[3] # D width
+  )
+
+  if (params[3] < 0){
+    fixed[3] <- 0
+    penalty <- penalty + params[3]*params[3]
+    p[1] <- params[3]*params[3]
+  }
+
+  if (params[4] < 0){
+    fixed[6] <- 0
+    penalty <- penalty + params[4]*params[4]
+    p[2] <- params[4]*params[4]
+  }
+
+  if (length(params) >= 5){
+    fixed <- c(
+      fixed,
+      optional[4], # N timing
+      params[5],   # N amplitude
+      optional[5] # N width
+    )
+
+    if (params[5] < 0){
+      fixed[9] <- 0
+      penalty <- penalty + params[5]*params[5]
+      p[3] <- params[5]*params[5]
+    }
+  }
+
+  fit <- model2.Rebuild(data,data[1,2],fixed)
+  residue <- data[,2] - fit
+  
+  if (debug){
+    plot(data[,1],data[,2])
+    lines(data[,1],fit)
+    print(sum(residue*residue))
+    print(p)
+    print(as.numeric(penalty))
   }
 
   return(sum(residue*residue) + as.numeric(penalty))
@@ -176,19 +233,14 @@ model2.FindPeak <- function(ppg,time){
   return( c(wLow,w0) )
 }
 
-model2.FindSegment <- function(ppg,beats,index){
-  if (index < 1 | index > nrow(beats)){
-    return(c(0,0))
-  }
-  
+model2.FindSegment <- function(ppg,beatTime,nextBeatTime=NA){
   nppg <- nrow(ppg)
-  nbeat <- nrow(beats)
 
-  w <- model2.FindPeak( ppg, beats[[index,lab.time]] )
+  w <- model2.FindPeak( ppg, beatTime )
   wLow <- w[1]
   w0 <- w[2]
-  if (index < nbeat){
-    w <- model2.FindPeak( ppg, beats[[index+1,lab.time]] )
+  if (!is.na(nextBeatTime)){
+    w <- model2.FindPeak( ppg, nextBeatTime )
     wHigh <- w[1]
   }else{
     wHigh <- min(nppg,w0 + 75)
@@ -212,63 +264,59 @@ model2.FindSegment <- function(ppg,beats,index){
 
 model2.GetSegment <- function(ppg,limits){
   w <- c(limits[1]:limits[3])
-  
+
   result <- matrix(nrow=length(w),ncol=2)
-  
+
   result[,1] <- ppg[[lab.time]][w]
   result[,2] <- ppg[[lab.ppg]][w]
-  
+
   return(result)
 }
 
 model2.EstimateParams <- function(xy,yPrev,beat){
+  data <- NULL
   beatTime <- beat[[lab.time]]
 
   result <- 1:10
-  result[1] <- min(data[,2])-0.326
+  result[1] <- min(xy[,2])-0.326
 
   residue <- model2.Excess(xy[,2],yPrev,result[1])
-  #plot(data[,1],residue)
-  
+  #plot(xy[,1],residue)
+
   ## S peak
-  peak.w <- which(data[,1] > beatTime-0.2 & data[,1] < beatTime+0.2)
-  peak.t <- data[peak.w,1]
+  peak.w <- which(xy[,1] > beatTime-0.2 & xy[,1] < beatTime+0.2)
+  peak.t <- xy[peak.w,1]
   peak.y <- residue[peak.w]
 
-  #print(beatTime)
-  #plot(peak.t,peak.y)
-  #stop()
-  
-  
   result[3] <- max(peak.y)
   result[2] <- peak.t[which(peak.y==result[3])]
   result[4] <- 0.25
-  residue <- model2.SubtractExcessPeak(data[,1],residue,result[2:4])
-  #lines(data[,1],residue)
-  
+  residue <- model2.SubtractExcessPeak(xy[,1],residue,result[2:4])
+  #lines(xy[,1],residue)
+
   ## D peak
-  peak.w <- which(data[,1] > beatTime+0.2 & data[,1] < beatTime+0.4)
-  peak.t <- data[peak.w,1]
+  peak.w <- which(xy[,1] > beatTime+0.2 & xy[,1] < beatTime+0.4)
+  peak.t <- xy[peak.w,1]
   peak.y <- residue[peak.w]
-  
+
   result[6] <- max(peak.y)
   result[5] <- peak.t[which(peak.y==result[6])]-result[2]
   result[7] <- 0.25
-  
-  residue <- model2.SubtractExcessPeak(data[,1],residue,result[5:7])
-  #lines(data[,1],residue)
-  
+
+  residue <- model2.SubtractExcessPeak(xy[,1],residue,result[5:7])
+  #lines(xy[,1],residue)
+
   ## N peak
-  peak.w <- which(data[,1] > beatTime+0. & data[,1] < beatTime+0.2)
-  peak.t <- data[peak.w,1]
+  peak.w <- which(xy[,1] > beatTime+0. & xy[,1] < beatTime+0.2)
+  peak.t <- xy[peak.w,1]
   peak.y <- residue[peak.w]
 
   result[9]  <- max(peak.y)
   result[8]  <- peak.t[which(peak.y==result[9])]-result[2]
   result[10] <- 0.25
-  
-  residue <- model2.SubtractExcessPeak(data[,1],residue,result[8:10])
-  #lines(data[,1],residue)
+
+  residue <- model2.SubtractExcessPeak(xy[,1],residue,result[8:10])
+  #lines(xy[,1],residue)
 
   # Fix possibly broken values
   result[3] <- max( 0.05, result[3] )
@@ -280,7 +328,7 @@ model2.EstimateParams <- function(xy,yPrev,beat){
   if (result[8] < 0.05){
     result[8] <- 0.15
   }
-  
+
   return(result)
 }
 
@@ -289,15 +337,15 @@ model2.Excess <- function(y,offset,baseline){
   if (length(offset) == 0){
     print("Help")
   }
-  
+
   result <- 1:count * 0.0
-  
+
   result[1] = y[1] - (baseline + config.rate*(offset-baseline))
 
   for (j in 2:count){
     result[j] = y[j] - (baseline + config.rate*(y[j-1]-baseline))
   }
-  
+
   return(result)
 }
 
@@ -306,15 +354,15 @@ model2.Excess.Inv <- function(excess,offset,baseline){
   if (nX == 0){
     print("Help")
   }
-  
+
   result <- 1:nX * 0.0
 
   result[1] = excess[1] + (baseline + config.rate*(offset-baseline))
-  
+
   for (j in 2:nX){
     result[j] = excess[j] + (baseline + config.rate*(result[j-1]-baseline))
   }
-  
+
   return(result)
 }
 
@@ -323,7 +371,7 @@ model2.Peak <- function(time,peakParams){
   temp[which(temp < -const.pi)] = -const.pi
   temp[which(temp >  const.pi)] =  const.pi
   result <- peakParams[2] * (0.5 * (1+cos(temp)))^2
-  
+
   return(result)
 }
 
@@ -341,17 +389,21 @@ model2.Plot <- function(xy,yPrev,params){
   lines(xy[,1],model2.Residue(xy,params))
 }
 
-model2.Rebuild <- function(xy,offset,params){
-  excess <- 1:nrow(xy) * 0.0
-  excess <- excess + model2.Peak(xy[,1],params[2:4])
+model2.Rebuild <- function(xy,offset,params,invert=TRUE){
+  result <- 1:nrow(xy) * 0.0
+  result <- result + model2.Peak(xy[,1],params[2:4])
   if (length(params)>=7){
-    excess <- excess + model2.Peak(xy[,1],params[5:7]+c(params[2],0,0))
+    result <- result + model2.Peak(xy[,1],params[5:7]+c(params[2],0,0))
   }
   if (length(params)>=10){
-    excess <- excess + model2.Peak(xy[,1],params[8:10]+c(params[2],0,0))
+    result <- result + model2.Peak(xy[,1],params[8:10]+c(params[2],0,0))
   }
 
-  result <- model2.Excess.Inv(excess,offset,params[1])
+  if (invert){
+    result <- model2.Excess.Inv(result,offset,params[1])
+  }
+
+  return(result)
 }
 
 model2.Residue <- function(xy,params){
@@ -374,13 +426,13 @@ model2.Load <- function(filename){
 
     return(data.matrix(params))
   }
-  
+
   return(NULL)
 }
 
 model2.Save <- function(filename,params){
   names <- c(
-    "Start Time (s)","Start PPG",
+    "Start Time (s)","Segment start","Start PPG",
     "Baseline",
     "S-peak time(s)","S-peak amplitude","S-peak width",
     "D-peak time(s)","D-peak amplitude","D-peak width",

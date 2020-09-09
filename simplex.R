@@ -21,19 +21,19 @@ simplex.MakeSimplex <- function(data,param,f,inScale,directions=NULL,inTol=-1,op
 
   chiSq <- 1:(nPar+1) * 0.0
   chiSq[1] <- f(data,param,optional=optional)
-  
+
   if (debug){ print(paste("Root chi-squared:",chiSq[1]))}
- 
+
   result <- matrix(nrow=nPar+1,ncol=nPar)
   result[1,] <- param
-  
+
   useDirections = !is.null(directions)
   if (useDirections){ useDirections <- nrow(directions) == nPar & ncol(directions) == nPar }
 
   for (i in 1:nPar){
     if (debug){ print(paste("Parameter",i)) }
     tParam <- param
-    
+
     # Pick a direction
     delta <- 1:nPar * 0
     if (useDirections){
@@ -48,19 +48,21 @@ simplex.MakeSimplex <- function(data,param,f,inScale,directions=NULL,inTol=-1,op
     chiSq[i+1] <- f(data,tParam,optional=optional)
 
     if (debug){
+      print("Select direction:")
+      print(paste("chi^2(",param[i] - delta[i],") =",chiSqMinus))
       print(paste("chi^2(",param[i],") =",chiSq[1]))
-      print(paste("chi^2(",param[i] - delta,") =",chiSqMinus))
-      print(paste("chi^2(",param[i] + delta,") =",chiSq[i+1]))
+      print(paste("chi^2(",param[i] + delta[i],") =",chiSq[i+1]))
+      print("---")
     }
-    
+
     if (chiSqMinus < chiSq[i+1]){
       delta <- -delta
       tParam <- param + delta
       chiSq[i+1] <- chiSqMinus
     }
-    
+
     iKill <- 10
- 
+
     if (chiSq[i+1] < chiSq[1]){
       if (debug){ print("Extending as best point") }
       while (chiSq[i+1] < chiSq[1] + tol){
@@ -116,7 +118,7 @@ simplex.MakeSimplex <- function(data,param,f,inScale,directions=NULL,inTol=-1,op
       }
       tParam <- param + 0.5 * delta
     }
-    
+
     if(debug){ print(paste("Param[",i,"] =",tParam[i]))}
     result[i+1,] = tParam
   }
@@ -128,7 +130,7 @@ simplex.MakeSimplex <- function(data,param,f,inScale,directions=NULL,inTol=-1,op
 simplex.Run <- function(data,simplexParam,f,optional=NULL){
   MAX_STEP <- 5000
   FTOL <- 1e-5
-  
+
   debugRtol <- 1:(MAX_STEP+1) * 0.0
   debugMin <- 1:(MAX_STEP+1) * 0.0
   debugMax <- 1:(MAX_STEP+1) * 0.0
@@ -145,13 +147,13 @@ simplex.Run <- function(data,simplexParam,f,optional=NULL){
     low <- extrema[1]
     nHigh <- extrema[2]
     high <- extrema[3]
-    
+
     chiSqMax <- chiSq[high]
     chiSqMin <- chiSq[low]
-    
+
     #print(paste("chi^2_min =",chiSqMin))
     #print(paste("argMax = ",high,"[",chiSqMax,"]",sep=""))
-    
+
     rtol <- 2 * (chiSqMax - chiSqMin)/(chiSqMax + chiSqMin + 1e-10)
     if (rtol < FTOL){
       bestParam <- result[low,]
@@ -163,13 +165,13 @@ simplex.Run <- function(data,simplexParam,f,optional=NULL){
     debugMin[iStep] <- chiSqMin
     debugMax[iStep] <- chiSqMax
     #print(paste("Continuing: rtol = ",rtol,", min = ",chiSqMin,", max = ",chiSqMax,sep=""))
-    
+
     factor <- -1
     node <- simplex.HypoCentre(result,high)
     apex <- result[high,]
     test <- node - (apex - node)
     score <- f(data,test,optional=optional)
-    
+
     if (score < chiSqMin){
       test2 <- node - 2 * (apex - node)
       score2 <- f(data,test2,optional=optional)
@@ -216,13 +218,13 @@ simplex.Run <- function(data,simplexParam,f,optional=NULL){
       chiSq[high] <- score
     }
   }
-  
+
   extrema <- simplex.SortHighLow(chiSq)
   low <- extrema[1]
   bestParam <- result[low,]
   result[low,] <- result[1,]
   result[1,] <- bestParam
-  
+
   chiSqMax <- chiSq[extrema[3]]
   chiSqMin <- chiSq[low]
   rtol <- 2 * (chiSqMax - chiSqMin)/(chiSqMax + chiSqMin + 1e-10)
@@ -231,7 +233,7 @@ simplex.Run <- function(data,simplexParam,f,optional=NULL){
   debugMax[MAX_STEP+1] <- chiSqMax
   plot(debugMax,type='l')
   lines(debugMin)
-  
+
 
   print(paste("Terminated downhill simplex after",MAX_STEP,"iterations."))
   print(paste("rtol =",rtol))
