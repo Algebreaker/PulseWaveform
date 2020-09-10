@@ -41,6 +41,7 @@ preproc <- function(data){
       iVal <- iVal + 1
     } else {
       iSrc <- iSrc + 4
+      list$lengths[iVal] <- list$lengths[iVal] - 4
     }
   }
 
