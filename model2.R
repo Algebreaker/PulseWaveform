@@ -17,8 +17,8 @@ const.pi = 3.1415926535897932384626433
 
 model2.LoadBeat <- function(file){
   filename <- file
-  if (regexpr("_intervals.csv$",file)<0){
-    if (regexpr(".csv$",file)>=0){
+  if (regexpr("_intervals\\.csv$",file)<0){
+    if (regexpr("\\.csv$",file)>=0){
       filename <- substring(file,0,nchar(file)-4)
     }
     filename <- paste(filename,"_intervals.csv",sep="")
@@ -33,8 +33,11 @@ model2.LoadBeat <- function(file){
 
 model2.LoadPPG <- function(file){
   filename <- file
-  if (regexpr(".csv$",file)<0){
-    filename <- paste(filename,".csv",sep="")
+  if (regexpr("_ppg\\.csv$",file)<0){
+    if (regexpr("\\.csv$",file)>=0){
+      filename <- substring(file,0,nchar(file)-4)
+    }
+    filename <- paste(filename,"_ppg.csv",sep="")
   }
 
   result <- read.csv(filename)

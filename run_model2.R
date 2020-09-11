@@ -1,5 +1,60 @@
+source("Find_W_Revised.R")
 source("model2.R")
+source("preproc.R")
 source("simplex.R")
+
+source("SplinesUtils.R") # install as library how?
+
+Import <- function(filename){
+  if (!file.exists(filename)){
+    print(paste("File does not exist:",filename))
+    return(NULL)
+  }
+  
+  data <- read.csv(filename, header = TRUE)
+
+
+  #downsampling data and undetrending 
+  undetrended_data <- data.frame(preproc(data=data))
+  
+  outPPG <- paste( filename, "_ppg.csv", sep="" )
+  outBeat <- paste( filename, "_intervals.csv", sep="" )
+  if (regexpr("\\.csv$",filename)){
+    root <- substr(filename,0,nchar(filename)-4)
+    outPPG <- paste( root, "_ppg.csv", sep="" )
+    outBeat <- paste( root, "_intervals.csv", sep="" )
+  }
+  
+  nPPG <- nrow(undetrended_data)
+  ppg <- matrix(nrow=nPPG,ncol=2)
+  ppg[,1] <- 0:(nPPG-1)/75.
+  ppg[,2] <- undetrended_data$undetrended
+  
+  write.table( ppg, col.names=c("Elapsed Time","Pulse Detrended"), file=outPPG, row.names=FALSE, sep="," )
+  print(paste("Downsampled PPG trace written to",outPPG))
+  
+  
+  #finding beats
+  sfunction <- splinefun(1:length(undetrended_data$undetrended), undetrended_data$undetrended[1:length(undetrended_data$undetrended)], method = "natural")
+  deriv1 <- sfunction(seq(1, length(undetrended_data$undetrended)), deriv = 1)
+  #spline_1 <-  sfunction(seq(1, length(undetrended_data$undetrended)), deriv = 0)
+  
+  # Create polynomial splines: 
+  spline_poly <- CubicInterpSplineAsPiecePoly(1:length(undetrended_data$undetrended), undetrended_data$undetrended[1:length(undetrended_data$undetrended)], "natural")
+  deriv1_poly <- CubicInterpSplineAsPiecePoly(1:length(undetrended_data$undetrended), deriv1, "natural") 
+
+  # Find W:
+  w <- find_w(d1p = deriv1_poly, deriv1 = deriv1, sp = spline_poly)
+  
+  nBeats <- nrow(w)
+  beat <- matrix(nrow=nBeats,ncol=2)
+  beat[,1] <- w$w_poly_peaks / 75.
+  beat[1,2] <- -1000
+  beat[2:nBeats,2] <- (w$w_poly_peaks[2:nBeats] - w$w_poly_peaks[1:(nBeats-1)])*1000/75.
+  
+  write.table( beat, col.names=c("Pulse Time (s)","Pulse Interval (ms)"), file=outBeat, row.names=FALSE, sep="," )
+  print(paste("Beat times and intervals written to",outBeat))
+}
 
 CalculateParams <- function(input){
   ppg <- model2.LoadPPG(input)
@@ -11,8 +66,17 @@ CalculateParams <- function(input){
   residue <- 1:count * 0
   baseline <- 1:count * 0
   tLim <- c(1e32,-1e32)
-
-  params <- model2.Load(paste(input,"_params_a.csv",sep=""))
+  
+  # File names
+  root <- input
+  if (regexpr("\\.csv$",input)){
+    root <- substr(input,0,nchar(input)-4)
+  }
+  parFileA <- paste(root,"_params_a.csv",sep="")
+  parFileB <- paste(root,"_params_b.csv",sep="")
+  
+  # Load existing parameters
+  params <- model2.Load(parFileA)
 
   if (is.null(params)){
     print("Estimating fitting parameters...")
@@ -98,7 +162,7 @@ CalculateParams <- function(input){
     }
 
     print("Completed initial parameter generation")
-    model2.Save(paste(input,"_params_a.csv",sep=""),params)
+    model2.Save(parFileA,params)
   } else {
     print("Using estimated fitting parameters...")
   }
@@ -301,7 +365,7 @@ CalculateParams <- function(input){
   }
   print("Completed parameter generation")
 
-  model2.Save(paste(input,"_params_b.csv",sep=""),params)
+  model2.Save(parFileB,params)
 
   # Make 'smooth' time axis
   time <- ppg[1,1] + (1:nrow(ppg) - 1) / 75
@@ -313,8 +377,17 @@ CalculateParams <- function(input){
 }
 
 CalculateFixedPeakParams <- function(input){
+  # File names
+  root <- input
+  if (regexpr("\\.csv$",input)){
+    root <- substr(input,0,nchar(input)-4)
+  }
+  parFileB <- paste(root,"_params_b.csv",sep="")
+  parFileC <- paste(root,"_params_c.csv",sep="")
+
+  # Load data and existing parameters
   ppg <- model2.LoadPPG(input)
-  params <- model2.Load(paste(input,"_params_b.csv",sep=""))
+  params <- model2.Load(parFileB)
   
   if (is.null(params)){
     print("No fitting parameters found")
@@ -348,6 +421,7 @@ CalculateFixedPeakParams <- function(input){
 
   print("Refining fitting parameters with fixed peak width...")
   startClock <- Sys.time()
+  reportClock <- 10
   for (i in 1:nBeats){
     if (as.double(difftime(Sys.time(),startClock,unit="secs"))>reportClock){
       min <- as.integer(reportClock/60)
@@ -394,7 +468,7 @@ CalculateFixedPeakParams <- function(input){
     #best <- sim[1,]
     #model2.ChiSqAmp(data,sim[1,],optional=fixedParams,debug=TRUE)
     best <- c(sim[1,1:3],fixedParams[1:2],sim[1,4],fixedParams[3:4])
-    if (nPar >= 5){
+    if (ncol(sim) >= 5){
       best <- c(best,sim[1,5],fixedParams[5])
     } else {
       best <- c(best,0,fixedParams[5])
@@ -422,7 +496,7 @@ CalculateFixedPeakParams <- function(input){
   }
   print("Completed parameter generation")
 
-  model2.Save(paste(input,"_params_c.csv",sep=""),params)
+  model2.Save(parFileC,params)
 
   # Make 'smooth' time axis
   time <- ppg[1,1] + (1:nrow(ppg) - 1) / 75
@@ -435,26 +509,31 @@ CalculateFixedPeakParams <- function(input){
 
 
 PlotFit <- function(input,ver=-1,pch=-1,xlim=NULL,xoff=0,ylim=NULL,yres=NULL){
-  ppg <- model2.LoadPPG(input)
-  
-  filename <- ""
+  # File names
+  root <- input
+  if (regexpr("\\.csv$",input)>0){
+    root <- substr(input,0,nchar(input)-4)
+  }
 
-  vLim <- c(ver,ver)
+  parFile <- ""
+
   vLim <- if (ver < 0){c(1,5)} else {c(ver,ver)}
 
   for (c in unlist(strsplit("abcde",""))[vLim[1]:vLim[2]]){
-    test <- paste(input,"_params_",c,".csv",sep="")
+    test <- paste(root,"_params_",c,".csv",sep="")
     if (file.exists(test)){
-      filename <- test
+      parFile <- test
     }
   }
 
-  if (nchar(filename) == 0){
+  if (nchar(parFile) == 0){
     print("No parameter files found")
     return()
   }
 
-  params <- model2.Load(filename)
+  # Load data and parameters
+  ppg <- model2.LoadPPG(input)
+  params <- model2.Load(parFile)
   nBeats <- nrow(params)
 
   count <- nrow(ppg)
@@ -606,38 +685,25 @@ PlotFit <- function(input,ver=-1,pch=-1,xlim=NULL,xoff=0,ylim=NULL,yres=NULL){
 }
 
 #for (c in unlist(strsplit("ABCDEFGH",""))){
-#  CalculateParams(paste("anon/",c))
+#  CalculateParams(paste("data/",c))
 #}
 #for (c in unlist(strsplit("ABCDEFGH",""))){
-#  CalculateFixedPeakParams(paste("anon/",c,sep=""))
+#  CalculateFixedPeakParams(paste("data/",c,sep=""))
 #}
 
 ver <- 3
 
-if (ver == 2){
-  pdf("Model2_%03d.pdf",width=12,height=8,onefile=FALSE)
-  PlotFit("anon/A",ver=ver,xlim=c(0,30),xoff=620,ylim=c(78.5,82.7,-3,30,-2,32),yres=78.8)
-  PlotFit("anon/B",ver=ver,xlim=c(0,30),xoff=10,ylim=c(76.5,82.5,-2,42),yres=77.5)
-  PlotFit("anon/C",ver=ver,xlim=c(0,30),xoff=10,ylim=c(70,88,-2,162),yres=71)
-  PlotFit("anon/D",ver=ver,xlim=c(0,30),xoff=20,ylim=c(74,85,-2,102),yres=74.5)
-  PlotFit("anon/E",ver=ver,xlim=c(0,30),xoff=10,ylim=c(77.7,81.5,-2,27),yres=78.2)
-  PlotFit("anon/F",ver=ver,xlim=c(0,30),xoff=2580,ylim=c(83,88.3,-2,42),yres=83.3)
-  PlotFit("anon/G",ver=ver,xlim=c(0,30),xoff=300,ylim=c(77.4,81,-2,27.5),yres=77.5)
-  PlotFit("anon/H",ver=ver,xlim=c(0,30),xoff=10,ylim=c(77.8,82,-2,45),yres=78)
-  dev.off()
-}
-
-if (ver == 3){
+if (ver > 0){
   dt <- c(0,1.4)
-  pdf("Model2_%03d.pdf",width=12,height=8,onefile=FALSE)
-  PlotFit("anon/A",ver=ver,xlim=c(0,30,5.45+dt),xoff=620,ylim=c(78.5,82.7,-3,30,-2,32),yres=78.8)
-  PlotFit("anon/B",ver=ver,xlim=c(0,30,2.25+dt),xoff=10,ylim=c(76.5,82.5,-2,42),yres=77.5)
-  PlotFit("anon/C",ver=ver,xlim=c(0,30,2.5+dt),xoff=10,ylim=c(70,88,-2,162),yres=71)
-  PlotFit("anon/D",ver=ver,xlim=c(0,30,2.3+dt),xoff=20,ylim=c(74,85,-2,102),yres=74.5)
-  PlotFit("anon/E",ver=ver,xlim=c(0,30,1.3+dt),xoff=10,ylim=c(77.7,81.5,-2,27),yres=78.2)
-  PlotFit("anon/F",ver=ver,xlim=c(0,30,1.35+dt),xoff=2580,ylim=c(83,88.3,-2,42),yres=83.3)
-  PlotFit("anon/G",ver=ver,xlim=c(0,30,1.1+dt),xoff=300,ylim=c(77.4,81,-2,27.5),yres=77.5)
-  PlotFit("anon/H",ver=ver,xlim=c(0,30,1.8+dt),xoff=10,ylim=c(77.8,82,-2,45),yres=78)
+  pdf(paste("Model2_",ver,"_%03d.pdf",sep=""),width=12,height=8,onefile=FALSE)
+  #PlotFit("data/A",ver=ver,xlim=c(0,30,5.45+dt),xoff=620,ylim=c(78.5,82.7,-3,30,-2,32),yres=78.8)
+  #PlotFit("data/B",ver=ver,xlim=c(0,30,2.25+dt),xoff=10,ylim=c(76.5,82.5,-2,42),yres=77.5)
+  #PlotFit("data/C",ver=ver,xlim=c(0,30,2.5+dt),xoff=10,ylim=c(70,88,-2,162),yres=71)
+  #PlotFit("data/D",ver=ver,xlim=c(0,30,2.3+dt),xoff=20,ylim=c(74,85,-2,102),yres=74.5)
+  #PlotFit("data/E",ver=ver,xlim=c(0,30,1.3+dt),xoff=10,ylim=c(77.7,81.5,-2,27),yres=78.2)
+  PlotFit("data/F",ver=ver,xlim=c(0,30,1.75+dt),xoff=10,ylim=c(78,82,-2,35),yres=78.5)
+  #PlotFit("data/G",ver=ver,xlim=c(0,30,1.1+dt),xoff=300,ylim=c(77.4,81,-2,27.5),yres=77.5)
+  #PlotFit("data/H",ver=ver,xlim=c(0,30,1.8+dt),xoff=10,ylim=c(77.8,82,-2,45),yres=78)
   dev.off()
 }
 
