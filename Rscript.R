@@ -29,6 +29,16 @@ source("find_average.R")
 data <- read.csv("~/Desktop/PulseAnalysis/Data/Craig/Source.csv", header = T)
 #downsampling data and undetrending 
 undetrended_data <- data.frame(preproc(dat=data))
+sampling_rate <- 75
+
+#### Mimic database (sample) ####
+data <- read.csv("~/Desktop/data.csv", header = T)
+data <- data[, c(1, 6)]
+undetrended_data <- data
+colnames(undetrended_data)[2] <- "undetrended"
+plot(undetrended_data$undetrended[1:10000], type = "l")
+undetrended_data <- undetrended_data[1:10000, ]
+sampling_rate <- 60
 
 
 #### ISO-3 (finger) #### 
@@ -36,6 +46,7 @@ data <- read.delim(file.choose(), header = T)
 data <- cbind(data, (1:nrow(data)))
 undetrended_data <- data
 colnames(undetrended_data)[1] <- "undetrended"
+sampling_rate <- 40
 
 
 #### Intero-battery (ear) ####
@@ -46,7 +57,7 @@ undetrended_data <- data
 colnames(undetrended_data)[2] <- "undetrended"
 # Most ear PPG traces have large periods of nothing followed by large artefact followed by waveforms, remove the first two:
 undetrended_data <- undetrended_data[-c(1:(max(which(undetrended_data$undetrended == max(undetrended_data$undetrended)))+1000)), ]  
-
+sampling_rate <- 20
 
 ########################################################################    
 
@@ -98,6 +109,15 @@ for(i in 1:length(w$w_poly_peaks)){
 }
 #plot(w$w_poly_peaks, percentage_distance_to_v, type = "l")
 
+# Make a vector of abnormal pdtv (allowing any values between 35 and 65): 
+sdpdtv <- sd(percentage_distance_to_v)
+pdtv_waves <- c(which(percentage_distance_to_v > (sdpdtv + median(percentage_distance_to_v)) & percentage_distance_to_v > 65), which(percentage_distance_to_v < (median(percentage_distance_to_v) - sdpdtv) & percentage_distance_to_v < 35))
+
+# Remove pdtv_waves:
+if(length(pdtv_waves) > 0){
+  w <- w[-pdtv_waves, ]
+  u_v <- u_v[-pdtv_waves, ]
+}
 
 ########################################################################    
 
@@ -135,6 +155,14 @@ if(length(which(v_minus_u == 0)) > 0){
   w <- w[-dup, ]
   u_v <- u_v[-dup, ]
   v_minus_u <- v_minus_u[-dup]
+}
+
+# Make a vector of waves with abnormally small scale factors and remove them:
+false_scale_waves <- which(v_minus_u < (median(v_minus_u) - 4*(sd(v_minus_u))))
+if(length(false_scale_waves) > 1){
+  w <- w[-false_scale_waves, ]
+  u_v <- u_v[-false_scale_waves, ]
+  v_minus_u <- v_minus_u[-false_scale_waves]
 }
 
 ## Find o points again:
@@ -191,8 +219,7 @@ source_data_column_length <- round(median(o_difference)+15)
 sourcedata <- baseline_corrected[1:length(undetrended_data$undetrended)]
 
 # Define a dataframe to contain individual waves (first column is the x-axis (in seconds) - currently set for bioradio data):
-sampling_rate <- 75
-pulse <- data.frame(seq((-141/(sampling_rate*10)), ((source_data_column_length*10 -9)-142)/(sampling_rate*10), by = 1/(sampling_rate*10))) 
+pulse <- data.frame(seq((-141/(sampling_rate*10)), ((source_data_column_length*10 -9)-142)/(sampling_rate*10), by = 1/(sampling_rate*10)))   
 
 # Add waves to the dataframe:
 after_o <- list()
@@ -249,7 +276,45 @@ for(i in 1:(length(w$w_poly_peaks))){
   for(i in 1:nrow(xxxx2)){
     xxxx3[i+1] <- xxxx2$y[i]
   }
-  xxxx3 <- xxxx3[-length(xxxx3)]
+
+  # Following lines probably inefficient way of getting everything aligned
+  
+  # If xxxx3 and nrow(pulse) are the same length, you need only adjust after_o
+  if(length(xxxx3) == nrow(pulse)){
+    if(length(after_o[[i]]) > 0){
+      diff2 <- length(xxxx3) - max(after_o[[i]])
+      for(j in 1:diff2){
+        after_o[[i]] <- c(after_o[[i]], (max(after_o[[i]]) + 1))
+      }
+    }
+  }
+  
+  # Or
+  # Adjust such that xxxx3 is the same length as pulse
+  if(length(xxxx3) > nrow(pulse)){
+    diff <- length(xxxx3) - nrow(pulse)
+    len <- length(xxxx3)
+    xxxx3 <- xxxx3[-((len - (diff-1)):len)]
+    if(diff > 1){     # must correct the after_o values so that they also do not contain values beyond the length of xxxx3 (include case where length of after_o[[i]] is one so the code works...)
+      if(length(after_o[[i]]) > 1 ){
+        after_o[[i]] <- after_o[[i]][-(which(after_o[[i]] > length(xxxx3)))]  #after_o[[i]][1:(which(after_o[[i]] == (len - (diff-1))) - 1) 
+      }else{
+       after_o[[i]] <- after_o[[i]][-(which(after_o[[i]] > length(xxxx3)))]
+      }
+    }
+  }
+  
+  if(length(xxxx3) < nrow(pulse)){
+    diff <- nrow(pulse) - length(xxxx3)
+    xxxx3 <- c(xxxx3, rep(NA, diff))
+    if(length(after_o[[i]]) > 0){
+      diff2 <- length(xxxx3) - max(after_o[[i]])
+      for(j in 1:diff2){
+        after_o[[i]] <- c(after_o[[i]], (max(after_o[[i]]) + 1))
+      }
+    }
+  }
+  
   
   # Add column to dataframe
   pulse <- cbind(pulse, xxxx3)
@@ -302,6 +367,55 @@ for(i in 2:ncol(pulse)){
 #                     Step 5 : Find O, S, N and D                      #
 
 ########################################################################
+
+# Find the diastolic peak on the average wave to inform OSND finding (also some adjusment of x-values for removal of NA values):
+average_wave <- average_wave[!is.na(average_wave)]
+# Need to find new W position (0.5) after removing NAs
+x_shift1 <- which(abs(average_wave-0.5) == min(abs(average_wave - 0.5)))
+average_wave_poly <- CubicInterpSplineAsPiecePoly(1:length(average_wave), average_wave, "natural")
+inflexion_points_av <- solve(average_wave_poly, b = 0, deriv = 1)
+inflexion_points_av_yval <- predict(average_wave_poly, inflexion_points_av)
+#plot(average_wave_poly)
+#points(inflexion_points_av, inflexion_points_av_yval)
+peaks <- order(inflexion_points_av_yval, decreasing = TRUE)
+diastolic_peak <- inflexion_points_av[peaks[2]]  
+# diastolic_peak will be NA for class 3 waveforms, in which case set a default value
+if(is.na(diastolic_peak) | diastolic_peak < inflexion_points_av[peaks[1]]){
+  diastolic_peak <- 5*sampling_rate
+}
+# Find OSND, then extend range as necessary (class 3 + waveforms only)
+osnd <- osnd_of_average(average_wave, dp = diastolic_peak, diff = 0)
+if(diastolic_peak == 5*sampling_rate){
+  diastolic_peak <- osnd$x[4]*1.2 
+}
+# artefacts causing sharp inclines can create a step effect which can be falsely detected as a notch
+# if N and D are too close together e.g < 1.5, reduce the diastolic peak value
+#  most of these artefacts are at the end of the average wave when waves start to drop off
+if((osnd$x[4]-osnd$x[3]) < 1.5 & (osnd$x[4]-osnd$x[3]) > 0){
+  diastolic_peak <- diastolic_peak*0.95
+  osnd <- osnd_of_average(average_wave, dp = diastolic_peak, diff = 0)
+}
+
+# Make a list of OSND for each individual wave in pulse:
+osnd_all <- list()
+for(i in 2:ncol(pulse)){  #ncol(pulse)
+  wave_no_nas <- pulse[, i][!is.na(pulse[, i])]
+  x_shift2 <- (which(abs(wave_no_nas - 0.5) == min(abs(wave_no_nas - 0.5))))  # the new 0.5 
+  diff <- x_shift1 - x_shift2
+  dpa <- diastolic_peak - diff
+  osnd_all[[i-1]] <- osnd_of_average(aw = wave_no_nas, dp = dpa, diff = diff)
+}
+
+# Can plot all OSND values against the average to see if there are any obvious anomalies:
+for(i in 1:length(osnd_all)){
+  points(osnd_all[[i]][4, 1], osnd_all[[i]][4, 2])
+}
+
+
+##########################################################################################################
+
+
+
 
 
 #Use new polynomial splines to find w/u/v/notch values for each waveform 
