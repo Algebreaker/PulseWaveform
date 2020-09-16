@@ -16,6 +16,7 @@ source("fit_sines.R")
 source("refit_peaks.R")
 source("Find_W_Revised.R")
 source("find_average.R")
+source("osnd_of_average.R")
 
 
 ########################################################################    
