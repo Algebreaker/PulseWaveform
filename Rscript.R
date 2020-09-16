@@ -90,17 +90,24 @@ o <- c()
 for(i in 1:length(w$w_poly_peaks)){
   o[i] <- max(which(inflexion_points < w$w_poly_peaks[i]))
 }
-#plot(spline_poly)
-#points(inflexion_points[o], inflexion_points_yval[o], pch = 19)
+# Adjust for early O points:
+# First find O based on inflection point on first deriv:
+inflexion_points_d1 <- solve(deriv1_poly, b = 0, deriv = 1)
+points(inflexion_points_d1, predict(deriv1_poly, inflexion_points_d1))
+o2 <- c()
+for(i in 1:length(w$w_poly_peaks)){
+  o2[i] <- max(which(inflexion_points_d1 < w$w_poly_peaks[i]))
+}
+# Use the O derived from 1st deriv if its y-val is above 0: 
+for(i in 1:length(w$w_poly_peaks)){
+  if((inflexion_points[o][i] - inflexion_points_d1[o2][i]) < 0){
+    inflexion_points[o][i] <- inflexion_points_d1[o2][i]
+    inflexion_points_yval[o][i] <- predict(spline_poly, inflexion_points[o][i]) 
+  }
+}
+#plot(spline_1[1:500], type = "l")
+#points(inflexion_points[o], inflexion_points_yval[o])
 
-# Adjust for early O points: #Simon will figure this bit out 
-#for(i in 1:length(w$w_poly_peaks)){
-#  o_decider <- w$w_poly_peaks[i] - 2*(w$w_poly_peaks[i] - u_v$u[i])
-#  if(abs(o_decider - inflexion_points[o[i]]) > 1.5){
-#    inflexion_points[o[i]] <- o_decider
-#    inflexion_points_yval[o[i]] <- predict(spline_poly, o_decider)
-#  }
-#}
 
 # Find where W lies from U to V on the x-axis, for each wave:
 percentage_distance_to_v <- c()
@@ -144,6 +151,13 @@ w$w_poly_peaks_yval <- predict(spline_poly_bc, w$w_poly_peaks)
 # Refind U and V (y_values):
 u_v$u_yval <- predict(spline_poly_bc, u_v$u)
 u_v$v_yval <- predict(spline_poly_bc, u_v$v)
+
+# Remove u values that are implausibly far from baseline
+false_u_vals <- which(u_v$u_yval > (median(u_v$u_yval) + sd(u_v$u_yval)) | u_v$u_yval < -50)
+if(length(false_u_vals) > 1){
+  w <- w[-false_u_vals, ]
+  u_v <- u_v[-false_u_vals, ]
+}
 
 # Find v-u differences:
 v_minus_u <- u_v$v_yval - u_v$u_yval
@@ -339,6 +353,16 @@ if(length(extra_long_wave) > 0){
   pulse <- pulse[, -(extra_long_wave + 1)]
 }
 
+# Remove extra tall waves:
+tall_waves <- c()
+for(i in 2:ncol(pulse)){
+  if(max(abs(pulse[, i][!is.na(pulse[, i])])) > 1.5){
+    tall_waves[i] <- i
+  }
+}
+tall_waves <- tall_waves[!is.na(tall_waves)]
+pulse <- pulse[, -c(tall_waves)]
+
 # Find the average wave:
 average_wave <- find_average(p = pulse, ao = after_o)
 
@@ -368,6 +392,7 @@ for(i in 2:ncol(pulse)){
 
 ########################################################################
 
+## Find OSND on the average wave:
 # Find the diastolic peak on the average wave to inform OSND finding (also some adjusment of x-values for removal of NA values):
 average_wave <- average_wave[!is.na(average_wave)]
 # Need to find new W position (0.5) after removing NAs
@@ -377,17 +402,18 @@ inflexion_points_av <- solve(average_wave_poly, b = 0, deriv = 1)
 inflexion_points_av_yval <- predict(average_wave_poly, inflexion_points_av)
 #plot(average_wave_poly)
 #points(inflexion_points_av, inflexion_points_av_yval)
-peaks <- order(inflexion_points_av_yval, decreasing = TRUE)
-diastolic_peak <- inflexion_points_av[peaks[2]]  
+# Specify limitations for where the diastolic peak can first be found i.e between 120:230 on x-axis, and below 1 on y-axis:
+peaks <- order(inflexion_points_av_yval[which(inflexion_points_av < 230 & inflexion_points_av > 120 & inflexion_points_av_yval < 1)], decreasing = TRUE)
+diastolic_peak <- inflexion_points_av[which(inflexion_points_av < 230 & inflexion_points_av > 120 & inflexion_points_av_yval < 1)][peaks[1]]
 # diastolic_peak will be NA for class 3 waveforms, in which case set a default value
 if(is.na(diastolic_peak) | diastolic_peak < inflexion_points_av[peaks[1]]){
-  diastolic_peak <- 5*sampling_rate
-}
-# Find OSND, then extend range as necessary (class 3 + waveforms only)
-osnd <- osnd_of_average(average_wave, dp = diastolic_peak, diff = 0)
-if(diastolic_peak == 5*sampling_rate){
-  diastolic_peak <- osnd$x[4]*1.2 
-}
+    diastolic_peak <- 10*sampling_rate
+  }
+  # Find OSND, then extend range as necessary (class 3 + waveforms only)
+  osnd <- osnd_of_average(average_wave, dp = diastolic_peak, diff = 0)
+  if(diastolic_peak == 5*sampling_rate){
+    diastolic_peak <- osnd$x[4]*1.2 
+  }
 # artefacts causing sharp inclines can create a step effect which can be falsely detected as a notch
 # if N and D are too close together e.g < 1.5, reduce the diastolic peak value
 #  most of these artefacts are at the end of the average wave when waves start to drop off
@@ -396,6 +422,8 @@ if((osnd$x[4]-osnd$x[3]) < 1.5 & (osnd$x[4]-osnd$x[3]) > 0){
   osnd <- osnd_of_average(average_wave, dp = diastolic_peak, diff = 0)
 }
 
+
+## Find OSND for each individual wave:
 # Make a list of OSND for each individual wave in pulse:
 osnd_all <- list()
 for(i in 2:ncol(pulse)){  #ncol(pulse)
