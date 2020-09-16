@@ -94,7 +94,6 @@ for(i in 1:length(w$w_poly_peaks)){
 # Adjust for early O points:
 # First find O based on inflection point on first deriv:
 inflexion_points_d1 <- solve(deriv1_poly, b = 0, deriv = 1)
-points(inflexion_points_d1, predict(deriv1_poly, inflexion_points_d1))
 o2 <- c()
 for(i in 1:length(w$w_poly_peaks)){
   o2[i] <- max(which(inflexion_points_d1 < w$w_poly_peaks[i]))
@@ -362,8 +361,10 @@ for(i in 2:ncol(pulse)){
   }
 }
 tall_waves <- tall_waves[!is.na(tall_waves)]
-pulse <- pulse[, -c(tall_waves)]
-
+if(length(tall_waves) > 0){
+  pulse <- pulse[, -c(tall_waves)]
+}
+  
 # Find the average wave:
 average_wave <- find_average(p = pulse, ao = after_o)
 
