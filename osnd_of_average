@@ -1,0 +1,184 @@
+# aw <- average_wave
+# dp <- diastolic peak
+# diff <- diff
+
+osnd_of_average <- function(aw, dp, diff){
+  
+  switch <- 0
+  aw <- aw[!is.na(aw)]
+  
+  # Average wave doesn't need a for loop...
+  average_wave_poly <- CubicInterpSplineAsPiecePoly(1:length(aw), aw, "natural")
+  
+  sfunction <- splinefun(1:length(aw), aw, method = "natural")
+  deriv1_wave <- sfunction(1:length(aw), deriv = 1)
+  deriv1_wave_poly <- CubicInterpSplineAsPiecePoly(1:length(aw), deriv1_wave, "natural") 
+
+  
+  # Find inflexion points on deriv1_wave_poly
+  inflexion_points_deriv1_wave_poly <- solve(deriv1_wave_poly, b = 0, deriv = 1)
+  inflexion_points_deriv1_wave_poly_yval <- predict(deriv1_wave_poly, inflexion_points_deriv1_wave_poly)
+  
+  # Find OSND
+  inflexion_points_new <- solve(average_wave_poly, b = 0, deriv = 1)
+  inflexion_points_new_yval <- predict(average_wave_poly, inflexion_points_new)
+  
+  # You might not have to worry about correcting o with this wave since the inflection point in likely to be correct
+  
+  # Finding notch based on x-axis:
+  # Find inflexion point closest to where the notch usually is (aka 75-80)
+  notch_range <- which(inflexion_points_deriv1_wave_poly > (3.104572*sampling_rate - diff) & inflexion_points_deriv1_wave_poly < dp) # 3.104572 used to be 3.5! #  dp used to be 5*sampling rate!
+  # If there is no inflexion point detected within the notch range, this could be because there is a plateu rather than a peak
+  # In this case, taking the mean value of the notch range boundaries gives a reasonable approximation
+  if(length(notch_range) < 1 | (length(notch_range) == 1 & inflexion_points_deriv1_wave_poly_yval[notch_range][1] < -0.02)){
+    new.n <- ((3.104572*sampling_rate) + dp)/2
+  }else{
+    a. <- which(inflexion_points_deriv1_wave_poly_yval[notch_range] == max(inflexion_points_deriv1_wave_poly_yval[notch_range]))
+    # In cases where the renal peak is higher on 1st deriv than the notch peak, make sure the notch peak is limited by x-axis
+    while(inflexion_points_deriv1_wave_poly[notch_range[a.]] < 115){
+      b. <- 2
+      a. <- order(inflexion_points_deriv1_wave_poly_yval[notch_range], decreasing = TRUE)[b.]
+      b. <- 3
+    }
+    # Make sure the 1st peak is not the notch:
+    if(which(inflexion_points_deriv1_wave_poly_yval == max(inflexion_points_deriv1_wave_poly_yval)) == notch_range[a.]){
+      notch_range <- notch_range[which(notch_range > notch_range[a.])]
+    }
+    new.n <- inflexion_points_deriv1_wave_poly[notch_range[a.]]
+  }
+  new.ny <- predict(average_wave_poly, new.n)
+  #plot(deriv1_wave_poly)
+  #points(new.n, predict(deriv1_wave_poly, new.n))
+  
+  # Find renal wave by same merit as the notch (aka 40-60):
+  # The renal wave often doesn't appear as a distinct peak in the first deriv, so try looking in the second...
+  deriv2_wave <- sfunction(1:length(aw), deriv = 2)
+  deriv2_wave_poly <- CubicInterpSplineAsPiecePoly(1:length(aw), deriv2_wave, "natural") 
+  inflexion_points_deriv2_wave_poly <- solve(deriv2_wave_poly, b = 0, deriv = 1)
+  inflexion_points_deriv2_wave_poly_yval <- predict(deriv2_wave_poly, inflexion_points_deriv2_wave_poly)
+  renal_range <- which(inflexion_points_deriv2_wave_poly > (2*sampling_rate) & inflexion_points_deriv2_wave_poly < (3*sampling_rate))
+  b. <- which(inflexion_points_deriv2_wave_poly_yval[renal_range] == max(inflexion_points_deriv2_wave_poly_yval[renal_range]))
+  r. <- inflexion_points_deriv2_wave_poly[renal_range[b.]]
+  r.y <- predict(average_wave_poly, r.)
+  #plot(deriv2_wave_poly)
+  #points(r., predict(deriv2_wave_poly, r.))
+  
+  
+  # After having found the notch on all waves, you can see if there are inflexion points either side:
+  # If inflexion point before is lower and inflexion point after is higher (on y axis), this must mean a second peak aka canonical wave
+  # Thus if this criterion is fulfilled you can create N and D separately 
+  if(length(inflexion_points_new) > 1 & inflexion_points_new_yval[max(which(inflexion_points_new < new.n))] < new.ny){
+    new.n <- inflexion_points_new[max(which(inflexion_points_new < new.n))]
+    new.ny <-  predict(average_wave_poly, new.n)
+    d. <- inflexion_points_new[min(which(inflexion_points_new > new.n))]
+    d.y <- predict(average_wave_poly, d.)
+    # If no inflexion point after the notch, take instead the closest value to 0 on the 1st deriv wave after it (the next inflexion point on deriv1)
+    if(is.na(d.)){
+      d. <- inflexion_points_deriv1_wave_poly[notch_range[a.+1]]
+      d.y <- predict(average_wave_poly, d.)
+    }
+    switch <- 1
+  }
+  
+  plot(average_wave_poly)
+  points(r., r.y, col = "green")
+  points(inflexion_points_new, inflexion_points_new_yval)
+  points(new.n, new.ny, col = "red")
+  if(switch == 1){
+    points(d., d.y, col = "blue")
+  }
+    
+  
+  # Find W: the max inflection point on first deriv:
+  w. <- inflexion_points_deriv1_wave_poly[which( inflexion_points_deriv1_wave_poly_yval ==  max(inflexion_points_deriv1_wave_poly_yval) & inflexion_points_deriv1_wave_poly[which(inflexion_points_deriv1_wave_poly_yval ==  max(inflexion_points_deriv1_wave_poly_yval))] < new.n)]
+  w._yval <- predict(average_wave_poly, w.)
+  points(w., w._yval)
+  
+  # Find U and V:
+  # Find half the height of w (on derivative y-axis)
+  hhaw <- max(inflexion_points_deriv1_wave_poly_yval)/2
+  # Find u and v for derivative:
+  half_heights_wave_new <- solve(deriv1_wave_poly, b = hhaw)
+  #half_heights_wave_new_yval <- predict(deriv1_wave_poly, half_heights_wave_new)
+  
+  # If more than one half height detected:
+  if(length(half_heights_wave_new) > 2){
+    # Find the distance between each detected half height, compare their xvals to the peak, and keep only the two that have the most similar distance to the peak... 
+    # bear in mind one has to be either side of w...
+    a <- half_heights_wave_new - w.
+    right_of_w <- which(a > 0)
+    left_of_w <- which(a < 0)
+    half_heights_wave_new <- c(  min(half_heights_wave_new[right_of_w]),  max(half_heights_wave_new[left_of_w]))
+    #a <- abs(half_heights_wave_new - w.)
+    #b <- c()
+    #for(j in 1:(length(a)-1)){
+    #  b[j] <- abs(a[j] - a[j+1])
+    #} 
+    #b[length(b) + 1] <- abs(a[1] - a[length(a)])
+    #c <- which(abs(b) == min(abs(b)))
+    #if(c == length(b)){
+    #  half_heights_wave_new <- c(half_heights_wave_new[c], half_heights_wave_new[1])
+    #}else{
+    #  half_heights_wave_new <- c(half_heights_wave_new[c], half_heights_wave_new[c+1])
+  }
+  
+  u <- half_heights_wave_new[1]
+  v <- half_heights_wave_new[2] 
+  # Find u and v y-values for original wave:
+  u_v_yval_wave <- predict(average_wave_poly, half_heights_wave_new)
+  u_yval <- u_v_yval_wave[1]
+  v_yval <- u_v_yval_wave[2]
+  points(u, u_yval)
+  points(v, v_yval)
+  
+  # Find 0: the inflection point before W:
+  # If there is no inflexion point before w, take the first value to be o. 
+  
+  if(length(which(inflexion_points_new < w.)) < 1){
+    o. <- inflexion_points_deriv1_wave_poly[max(which(inflexion_points_deriv1_wave_poly < w.))]
+  }else{
+    o. <- inflexion_points_new[max(which(inflexion_points_new < w.))]
+  }
+  o._yval <- predict(average_wave_poly, o.)
+  points(o., o._yval, pch = 19)
+  
+  
+  
+# Find S: the inflection point after W:   # this bit isn't working for Paul-forms - need to add in a new-s bit. 
+  #s. <- inflexion_points_new[min(which(inflexion_points_new > w.))]
+  #s._yval <- predict(average_wave_poly, s.)
+  #points(s., s._yval, pch = 19)
+  
+  ## Find S:
+  # Find new S:
+  s.new <- w. + 2*(abs(v - w.))
+  s.new_y <- predict(average_wave_poly, s.new)
+  #points(s.new, s.new_y)
+  # Define old s:
+  s.old_y <- max(inflexion_points_new_yval)
+  s.old <- inflexion_points_new[which(inflexion_points_new_yval == max(inflexion_points_new_yval))]
+  # Decide which S to use...
+  if((s.old - w.) < (s.new - w.)){
+    s. <- s.old
+    s.y <- s.old_y
+  }else{
+    s. <- s.new
+    s.y <- s.new_y
+  }
+  points(s., s.y, pch = 19)
+    
+  if(switch == 0){
+    x <- c(o., s., new.n, new.n)
+  }else{
+    x <- c(o., s., new.n, d.)
+  }
+  
+  if(switch == 0){
+    y <- c(o._yval, s.y, new.ny, new.ny)
+  }else{
+    y <- c(o._yval, s.y, new.ny, d.y)
+  }
+  
+  osnd <- data.frame(x, y)
+  return(osnd)
+}
