@@ -50,19 +50,6 @@ osnd_of_average <- function(aw, dp, diff){
   #plot(deriv1_wave_poly)
   #points(new.n, predict(deriv1_wave_poly, new.n))
   
-  # Find renal wave by same merit as the notch (aka 40-60):
-  # The renal wave often doesn't appear as a distinct peak in the first deriv, so try looking in the second...
-  deriv2_wave <- sfunction(1:length(aw), deriv = 2)
-  deriv2_wave_poly <- CubicInterpSplineAsPiecePoly(1:length(aw), deriv2_wave, "natural") 
-  inflexion_points_deriv2_wave_poly <- solve(deriv2_wave_poly, b = 0, deriv = 1)
-  inflexion_points_deriv2_wave_poly_yval <- predict(deriv2_wave_poly, inflexion_points_deriv2_wave_poly)
-  renal_range <- which(inflexion_points_deriv2_wave_poly > (2*sampling_rate) & inflexion_points_deriv2_wave_poly < (3*sampling_rate))
-  b. <- which(inflexion_points_deriv2_wave_poly_yval[renal_range] == max(inflexion_points_deriv2_wave_poly_yval[renal_range]))
-  r. <- inflexion_points_deriv2_wave_poly[renal_range[b.]]
-  r.y <- predict(average_wave_poly, r.)
-  #plot(deriv2_wave_poly)
-  #points(r., predict(deriv2_wave_poly, r.))
-  
   
   # After having found the notch on all waves, you can see if there are inflexion points either side:
   # If inflexion point before is lower and inflexion point after is higher (on y axis), this must mean a second peak aka canonical wave
@@ -81,7 +68,6 @@ osnd_of_average <- function(aw, dp, diff){
   }
   
   plot(average_wave_poly)
-  points(r., r.y, col = "green")
   points(inflexion_points_new, inflexion_points_new_yval)
   points(new.n, new.ny, col = "red")
   if(switch == 1){
