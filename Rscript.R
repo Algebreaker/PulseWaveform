@@ -405,8 +405,8 @@ inflexion_points_av_yval <- predict(average_wave_poly, inflexion_points_av)
 #plot(average_wave_poly)
 #points(inflexion_points_av, inflexion_points_av_yval)
 # Specify limitations for where the diastolic peak can first be found i.e between 120:230 on x-axis, and below 1 on y-axis:
-peaks <- order(inflexion_points_av_yval[which(inflexion_points_av < 230 & inflexion_points_av > 120 & inflexion_points_av_yval < 1)], decreasing = TRUE)
-diastolic_peak <- inflexion_points_av[which(inflexion_points_av < 230 & inflexion_points_av > 120 & inflexion_points_av_yval < 1)][peaks[1]]
+peaks <- order(inflexion_points_av_yval[which(inflexion_points_av < 215 & inflexion_points_av > 120 & inflexion_points_av_yval < 1)], decreasing = TRUE)
+diastolic_peak <- inflexion_points_av[which(inflexion_points_av < 215 & inflexion_points_av > 120 & inflexion_points_av_yval < 1)][peaks[1]]
 # diastolic_peak will be NA for class 3 waveforms, in which case set a default value
 if(is.na(diastolic_peak) | diastolic_peak < inflexion_points_av[peaks[1]]){
     diastolic_peak <- 10*sampling_rate
