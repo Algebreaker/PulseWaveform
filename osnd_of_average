@@ -118,10 +118,13 @@ osnd_of_average <- function(aw, dp, diff){
   points(v, v_yval)
   
   # Find 0: the inflection point before W:
-  # If there is no inflexion point before w, take the first value to be o. 
-  
   if(length(which(inflexion_points_new < w.)) < 1){
-    o. <- inflexion_points_deriv1_wave_poly[max(which(inflexion_points_deriv1_wave_poly < w.))]
+    # If there are no inflexion points on deriv1 before w., or if the max of inflexion points on first deriv is above 0 on the original y-axis, use the first value as O:
+    if((length(which(inflexion_points_deriv1_wave_poly < w.)) < 1) | (predict(average_wave_poly, inflexion_points_deriv1_wave_poly[max(which(inflexion_points_deriv1_wave_poly < w.))]) > 0)){
+      o. <- 1
+    }else{        # Otherwise, make O the maximum deriv1 inflection point before w.
+      o. <- inflexion_points_deriv1_wave_poly[max(which(inflexion_points_deriv1_wave_poly < w.))]
+    }
   }else{
     o. <- inflexion_points_new[max(which(inflexion_points_new < w.))]
   }
