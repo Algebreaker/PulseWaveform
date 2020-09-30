@@ -39,7 +39,7 @@ find_w <- function(dat, d1, d1p, sp, plot = FALSE){
 }
 
 
-find_u_v <- function(dat, wx, wy, d1, d1p, spline_o, plot = FALSE){
+find_u_v <- function(dat, wx, wy, d1, d1p, spline, spline_o, plot = FALSE){
   # Find half the height of w (on derivative y-axis)
   w_half_height <- predict(d1p, wx)/2
   # Find u and v:
