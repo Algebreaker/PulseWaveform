@@ -41,15 +41,36 @@ find_w <- function(dat, d1, d1p, sp, plot = FALSE){
 
 find_u_v <- function(dat, wx, wy, d1, d1p, spline, spline_o, plot = FALSE){
   # Find half the height of w (on derivative y-axis)
-  w_half_height <- predict(d1p, wx)/2
+  w_half_height <- predict(d1p, wx)/2   # should change this to w$w_poly_peaks_deriv1_yval
   # Find u and v:
   half_heights <- c()
   half_heights_yval <- c()
-  for(i in 1:length(w_half_height)){ 
-    deriv1_poly_peak_subset <- CubicInterpSplineAsPiecePoly((wx[i]-5):(wx[i]+5), d1[(wx[i]-5):(wx[i]+5)], "natural") 
-    half_heights_precursor <- solve(deriv1_poly_peak_subset, b = w_half_height[i])
-    half_heights[c((2*(i)-1), (2*(i)))] <- half_heights_precursor
-    half_heights_yval[c((2*(i)-1), (2*(i)))] <- predict(deriv1_poly_peak_subset, half_heights[c((2*(i)-1), (2*(i)))])
+  for(i in 1:length(w_half_height)){    #length(w_half_height)
+    deriv1_poly_peak_subset <- CubicInterpSplineAsPiecePoly((round(wx[i])-5):(round(wx[i])+5), d1[(round(wx[i])-5):(round(wx[i])+5)], "natural")   # Making a smaller spline for just the peak
+    half_heights_precursor <- solve(deriv1_poly_peak_subset, b = w_half_height[i])   # finding the points on the small spline where the heights are half the peak
+    # If only one half height detected, extend window for finding half heights:
+    if(length(half_heights_precursor) < 2){
+      deriv1_poly_peak_subset <- CubicInterpSplineAsPiecePoly((round(wx[i])-10):(round(wx[i])+10), d1[(round(wx[i])-10):(round(wx[i])+10)], "natural")   # Making a smaller spline for just the peak
+      half_heights_precursor <- solve(deriv1_poly_peak_subset, b = w_half_height[i]) 
+    }
+    # If more than one half height detected:
+    if(length(half_heights_precursor) > 2){
+      # Find the distance between each detected half height, compare their xvals to the peak, and keep only the two that have the most similar distance to the peak... 
+      a <- half_heights_precursor - wx[i]
+      b <- c()
+      for(j in 1:(length(a)-1)){
+        b[j] <- a[j] - a[j+1]
+      } 
+      b[length(b) + 1] <- a[1] - a[length(a)]
+      c <- which(abs(b) == min(abs(b)))
+      if(c == length(b)){
+        half_heights_precursor <- c(half_heights_precursor[c], half_heights_precursor[1])
+      }else{
+        half_heights_precursor <- c(half_heights_precursor[c], half_heights_precursor[c+1])
+      }
+    }
+    half_heights[c((2*(i)-1), (2*(i)))] <- half_heights_precursor     # assigning half heights to a vector
+    half_heights_yval[c((2*(i)-1), (2*(i)))] <- predict(deriv1_poly_peak_subset, half_heights[c((2*(i)-1), (2*(i)))])  # finding the y_values from those half heights on the smaller spline
   }
   
   # Plot u's and v's on deriv1_poly
@@ -57,23 +78,23 @@ find_u_v <- function(dat, wx, wy, d1, d1p, spline, spline_o, plot = FALSE){
     plot(d1p)
     points(half_heights, half_heights_yval, pch = 19)
   }
+  
   # Find u and v 
   u <- half_heights[seq_along(half_heights) %%2 != 0] 
-  v <- half_heights[seq_along(half_heights) %%2 == 0]   
+  v <- half_heights[seq_along(half_heights) %%2 == 0]
+  
+  
   # Find u and v y-values for spline_poly
   u_yval <- c()
   for(i in 1:length(u)){
     u_yval[i] <- predict(spline, u[i])
   }
+  
   v_yval <- c()
   for(i in 1:length(v)){
     v_yval[i] <- predict(spline, v[i])
   }
-  # Plot u's and v's on spline_poly
-  if(plot){
-    plot(spline_poly)
-    points(half_heights, u_v_yval, pch = 19)
-  }  
+  
   df <- data.frame(u, u_yval, v, v_yval)
   return(df)
 }
@@ -88,9 +109,9 @@ find_wuv <- function(p, col_len, p_w){
   u_y <- c()
   v_y <- c()
   w <- c()
-  w_y <- c()
-  notch_x <- c()
-  notch_y <- c()
+  wy <- c()
+  #notch_x <- c()
+  #notch_y <- c()
   
   for(i in 2:(ncol(p))){        
     
@@ -104,20 +125,24 @@ find_wuv <- function(p, col_len, p_w){
     
     # Find correct threshold using histogram
     # hdat_2<-hist(deriv1_wave)
-    quantiles_2 <- quantile(deriv1_wave, probs=c(.025,.95))
-    threshold_2 <- quantiles_2[2]
+    #quantiles_2 <- quantile(deriv1_wave, probs=c(.025,.95))
+    #threshold_2 <- quantiles_2[2]
     
     # Identifying peaks of deriv1_poly:
-    w_poly_peaks_wave <- predict(deriv1_wave_poly, inflexion_points_deriv1_wave_poly)
-    w_poly_peaks_wave <- which(w_poly_peaks_wave > threshold_2)     
-    w_poly_peaks_wave <- inflexion_points_deriv1_wave_poly[w_poly_peaks_wave]
+    #w_poly_peaks_wave <- predict(deriv1_wave_poly, inflexion_points_deriv1_wave_poly)
+    #w_poly_peaks_wave <- which(w_poly_peaks_wave > threshold_2)     
+    #w_poly_peaks_wave <- inflexion_points_deriv1_wave_poly[w_poly_peaks_wave]
     
+    # Peak will be max inflexion point: (so above not necessary):
+    w. <- inflexion_points_deriv1_wave_poly[which(inflexion_points_deriv1_wave_poly_yval == max(inflexion_points_deriv1_wave_poly_yval))]
+    w.y <- predict(p_w[[i-1]], w.)
     
+    # Don't try to find the notch here, if that's cool
     # Finding the 'notch' (renal wave)    
-    notch_range <- which(inflexion_points_deriv1_wave_poly < (0.25*max(inflexion_points_deriv1_wave_poly)))  ## Look for the notch in the first quarter of the range from W to the max inflexion point
-    notch <- inflexion_points_deriv1_wave_poly[(which(inflexion_points_deriv1_wave_poly_yval[notch_range] == min(inflexion_points_deriv1_wave_poly_yval[notch_range])))+1]
+    #notch_range <- which(inflexion_points_deriv1_wave_poly < (0.25*max(inflexion_points_deriv1_wave_poly)))  ## Look for the notch in the first quarter of the range from W to the max inflexion point
+    #notch <- inflexion_points_deriv1_wave_poly[(which(inflexion_points_deriv1_wave_poly_yval[notch_range] == min(inflexion_points_deriv1_wave_poly_yval[notch_range])))+1]
     #Find corresponding y value on poly_wave
-    notch_poly_yval <- predict(poly_wave[[i-1]], notch)
+    #notch_poly_yval <- predict(poly_wave[[i-1]], notch)
     
     
     #Find U and V
@@ -138,13 +163,14 @@ find_wuv <- function(p, col_len, p_w){
     v_y[i-1] <- v_yval
     u_x[i-1] <- u
     v_x[i-1] <- v
-    w[i-1] <- w_poly_peaks_wave[1]
-    notch_x[i-1] <- notch
-    notch_y[i-1] <- notch_poly_yval
+    w[i-1] <- w.
+    wy[i-1] <- w.y
+    #notch_x[i-1] <- notch
+    #notch_y[i-1] <- notch_poly_yval
     
     
   }
-  wuv <- data.frame(w, u_x, u_y, v_x, v_y, notch_x, notch_y)
+  wuv <- data.frame(w, wy, u_x, u_y, v_x, v_y)  # notch_x, notch_y
   return(wuv)
 }
 
