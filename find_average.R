@@ -66,14 +66,19 @@ find_average <- function(p, ao){
     ux <- unique(x)
     ux[which.max(tabulate(match(x, ux)))]
   }
-  average_end <- mode(round(end[!is.na(end)], digits = 2))
-  
-  # Remove elements of average wave after where its end should be:
-  below_o <- which(average_wave < average_end)
-  # Find the first point in the last quarter of the wave that goes below baseline
-  b. <- below_o[min(which(below_o > (length(average_wave)/(4/3))))]
-  # remove those elements from the average:
-  average_wave[b.:length(average_wave)] <- NA
+  # Made this into a for loop because there can be waves that have no values after o, and if all waves are like that, end will be null
+  if(length(end) > 1){     
+    average_end <- mode(round(end[!is.na(end)], digits = 2))
+    # Remove elements of average wave after where its end should be:
+    below_o <- which(average_wave < average_end)
+    # Find the first point in the last quarter of the wave that goes below baseline
+    b. <- below_o[min(which(below_o > (length(average_wave)/(4/3))))]
+    # If the wave doesn't go below baseline, don't remove any 
+    if(is.na(b.) == FALSE){
+      # otherwise, remove those elements from the average:
+      average_wave[b.:length(average_wave)] <- NA
+    }
+  }
   
   # Find the median of the first x-values - make that the start of average:
   first_element <- c()
@@ -84,6 +89,7 @@ find_average <- function(p, ao){
   }
   start <- median(first_element)-2
   average_wave[1:start] <- NA
+  
   
   return(as.vector(average_wave))
 }
