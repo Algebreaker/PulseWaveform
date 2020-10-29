@@ -36,7 +36,7 @@ while(length(w_poly_peaks) < 2){
   }
   
   # Also very occassionely, the first peak is double-peaked, so make sure peaks are not too close together:
-  if(length(window_poly_peaks) == 2 & window_poly_peaks[2] - window_poly_peaks[1] < 5){
+  if(length(window_poly_peaks) == 2 & window_poly_peaks[2] - window_poly_peaks[1] < 4){  
     window_poly_peaks <- window_poly_peaks[-2]   # this line removes the second element, allowing a third to become the second
   }
   
@@ -55,8 +55,8 @@ while(length(w_poly_peaks) < 2){
   sd <- sd(inflexion_points_deriv1_yval[1:(1+a)])
   
   if(length(window_poly_peaks) == 2){                    # If two peaks are found, confirm that they are both significantly higher than surrounding inflection points,                                                                                  
-    if(window_poly_peaks_yval[1] > (m + (1.5*sd)) & window_poly_peaks_yval[1] > (mean(deriv1)+sd(deriv1))){      # and that the second peak is greater than half the height of the first peak (unless the first peak is an artefact)
-      w_poly_peaks[1] <-  window_poly_peaks[1]   
+    if(window_poly_peaks_yval[1] > (m + (1.5*sd)) & window_poly_peaks_yval[1] > (median(deriv1[1:100])+sd(deriv1[1:100]))){      # and that the second peak is greater than half the height of the first peak (unless the first peak is an artefact)       #MOST RECENT CHANGE 14/10/20: changed the | to & and changed so that only first 100 samples of deriv1 are looked at (rather than all of deriv1)
+      w_poly_peaks[1] <-  window_poly_peaks[1]                                                                              
       if(window_poly_peaks_yval[2] > (m + (1.5*sd)) & window_poly_peaks_yval[2] > (window_poly_peaks_yval[1]/2) | window_poly_peaks_yval[1] > (mean(deriv1) + (5*sd(deriv1)))){  
         w_poly_peaks[2] <-  window_poly_peaks[2]                                                                                                                          
       }
@@ -64,8 +64,8 @@ while(length(w_poly_peaks) < 2){
   }
   
   if(length(window_poly_peaks) > 3){      # If more than 3 peaks identified, assume the time series begins with an artefact and skip forward
-    inflexion_points_deriv1 <- inflexion_points_deriv1[-c(1:100)]
-    inflexion_points_deriv1_yval <- inflexion_points_deriv1_yval[-c(1:100)]
+    inflexion_points_deriv1 <- inflexion_points_deriv1[-c(1:(sampling_rate*(100/75)))]      
+    inflexion_points_deriv1_yval <- inflexion_points_deriv1_yval[-c(1:(sampling_rate*(100/75)))]
     a <- -3  # reset a
   }
   
