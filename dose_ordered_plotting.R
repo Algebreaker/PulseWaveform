@@ -1,4 +1,4 @@
-# Sorting out the ISO3 data so that the dosage levels are ordered and plotted:
+# Sorting out the ISO3 data so that the dosage levels are ordered and plotted:   
 
 library(pracma)
 library(SplinesUtils) 
@@ -7,9 +7,8 @@ library(reshape)
 library(ggplot)
 library(dplyr)
 library(tidyverse)
+library(gtools)
 
-source("/Users/simonwilliamson/Desktop/Scripts/Find_W_Revised.R")
-source("/Users/simonwilliamson/Desktop/Scripts/Rscript_as_function.R")
 source("/Users/simonwilliamson/Desktop/Scripts/preproc.R")
 source("/Users/simonwilliamson/Desktop/Scripts/find_osnd.R")
 source("/Users/simonwilliamson/Desktop/Scripts/spectrum.R")
@@ -39,6 +38,7 @@ test <- list()
 for(i in 1:length(direc)){
   p <- list.files(direc[i], pattern="ECG_", full.names = TRUE)
   p <- subset(p, !(grepl("REST", p)), drop = TRUE)
+  p <- mixedsort(sort(p))
   if (length(p) == 6){
     varnam = substr(direc[i], start= 3, stop = 7)
     order <- unlist(strsplit(dose[dose[,1]==varnam,3], ","))
@@ -152,11 +152,13 @@ for(i in 1:nrow(run_orders)){
 # Run through the main R script to get averaged waves, then arrange and plot the averaged waves in order:
 # Black = 0mg, blue = 0.5mg, red = 2mg
 
-for(k in 99:99){   # 1:length(test)       
+zero_mg_dose <- list()
+two_mg_dose <- list()
+for(k in 1:length(test)){   # 1:length(test)       
   len = length(test[[k]])   
   # Make a list of the average waves 
   dose_ordered_average_waves <- list()
-  for(l in 1:len){         
+  for(l in 1:len){       # 1:len  
     data <- data.frame(test[[c(k, l)]])
     data <- cbind(data, (1:length(data)))
     undetrended_data <- data
@@ -513,8 +515,115 @@ for(k in 99:99){   # 1:length(test)
   dose_ordered_average_waves <- dose_ordered_average_waves[dose_orders[[k]]]
   plot(dose_ordered_average_waves[[1]], type = "l", main = nam[k], ylab = "averaged values", xlab = "")
   lines(dose_ordered_average_waves[[2]])
-  lines(dose_ordered_average_waves[[3]], col = "blue")
-  lines(dose_ordered_average_waves[[4]], col = "blue")
+  #lines(dose_ordered_average_waves[[3]], col = "blue")
+  #lines(dose_ordered_average_waves[[4]], col = "blue")
   lines(dose_ordered_average_waves[[5]], col = "red")
   lines(dose_ordered_average_waves[[6]], col = "red")
+  
+  ## assign the 0mg and 2mg waves to their own lists:
+  #zero_mg_dose[[k]] <- dose_ordered_average_waves[[2]]       
+  #two_mg_dose[[k]] <- dose_ordered_average_waves[[6]]
+  
+  # Find the average 2mg and the average 0mg waves:
+  mean_0mg <- c()
+  for(i in 1:500){
+    mean_0mg[i] <- (dose_ordered_average_waves[[1]][i] + dose_ordered_average_waves[[2]][i])/2
+  }
+  mean_2mg <- c()
+  for(i in 1:500){
+    mean_2mg[i] <- (dose_ordered_average_waves[[5]][i] + dose_ordered_average_waves[[6]][i])/2
+  }
+  
+  zero_mg_dose[[k]] <- mean_0mg
+  two_mg_dose[[k]] <- mean_2mg
 }
+
+# The next thing would be to extend it to find osnd for each averaged wave...
+
+
+# Now you have two averaged waves for each of the 110 participants in test. 
+
+# Can plot all of them but no obvious differences revealed by visualizing that way:
+plot(zero_mg_dose[[1]], type = "l", ylim = c(-0.4, 1.15), xlim = c(80, 520))
+for(i in 2:110){
+  lines(zero_mg_dose[[i]])
+}
+for(i in 1:110){
+  lines(two_mg_dose[[i]], col = "red")
+}
+
+# Calculate the change_waves and plot those instead:
+change_waves <- list()
+for(i in 1:110){
+  change_waves[[i]] <-  two_mg_dose[[i]] - zero_mg_dose[[i]]
+}
+
+plot(change_waves[[1]], type = "l", ylim = c(-0.5, 0.75), xlim = c(80, 520))
+for(i in 2:110){
+  lines(change_waves[[i]])
+}
+lines(100:500, rep(0, 401), col = "red")
+#lines(100:500, rep(0.05, 401), col = "red")
+
+
+# (Optional) Run a t-test for all points along the x-axis:
+# Every point Welch's t-test:
+p_values <- c()
+for(j in 1:400){ # 209
+  val <- c()
+  for(i in 1:length(change_waves)){
+    wave <- change_waves[[i]]
+    if(is.na(wave[j])){
+      next
+    }else{
+      val[i] <- wave[j]
+    }
+  }
+  val <- val[!is.na(val)]
+  if(length(val) > 10){
+    s <- shapiro.test(val)
+    if(s$p.value < 0.05){
+      w <- wilcox.test(val, mu = 0, alternative = "two.sided")
+      p_values[j] <- w$p.value
+    }else{
+      t <- t.test(val, mu = 0, alternative = "two.sided")
+      p_values[j] <- t$p.value
+    }
+  }else{
+    next
+  }
+}
+
+
+## Now ggplot it:
+
+# Make p_values a data-frame:
+signif_values <- data.frame(p_values)
+signif_values <- cbind(signif_values, (1:length(p_values)))
+signif_values <- cbind(signif_values, rep("p_values", nrow(signif_values)))
+colnames(signif_values) <- c("V1", "V2", "V3")
+
+# Make change_waves a data-frame:
+change_waves_dataframe <- data_frame()
+for(i in 1:length(change_waves)){
+  if(length(change_waves[[i]]) < 1){
+    next
+  }
+  temp <- data.frame()
+  temp[1:length(change_waves[[i]]),1] <- change_waves[[i]]
+  temp[1:length(change_waves[[i]]),2] <- c(1:length(change_waves[[i]]))
+  temp[1:length(change_waves[[i]]),3] <- i
+  change_waves_dataframe <- rbind(change_waves_dataframe, temp)
+}
+
+# Plot them (p-values commented out currently):
+ggplot(data = change_waves_dataframe, aes(V2, V1, group = V3)) +
+  geom_line(alpha = 0.1, size = 1.5) + xlim(75, 500) + ylim(-0.5, 0.5) +
+  #geom_line(data = signif_values, aes(V2, V1), col = "red", size = 0.8) +
+  #geom_hline(yintercept = 0.05, color = "black", size = 0.5) + 
+  ylab("2mg wave - 0mg wave") + 
+  geom_hline(yintercept = 0, color = "black", size = 0.5) +
+  scale_color_manual(values = c('#FF8181', '#000000')) #+
+  #scale_y_continuous(breaks = c(c(0, 0.5, 1), 0.05))
+  
+
