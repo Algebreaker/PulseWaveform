@@ -26,7 +26,7 @@ pulse_stacked_nonas <- pulse_stacked[!is.na(pulse_stacked$values), ]
 # Create the plot to be animated:
 p <- ggplot(pulse_stacked_nonas, aes(x = x, y = values), col = wave_ID) + geom_line() 
 # Create the animation:
-anim_p <- p + transition_states(wave_ID, transition_length = 2, state_length = 2) + ggtitle('Wave {closest_state}'
+anim_p <- p + transition_states(wave_ID, transition_length = 2, state_length = 2) + ggtitle('Wave {closest_state}')
 # Render as a gif:
 a_gif <- animate(anim_p, renderer = gifski_renderer(), nframes = (length(w$w_poly_peaks)*4))
 
@@ -36,7 +36,7 @@ a_gif <- animate(anim_p, renderer = gifski_renderer(), nframes = (length(w$w_pol
 
 # Create a dataframe with RIP values:
 RIP_z <- data_frame(1:length(w$w_poly_peaks))
-RIP_z <- cbind(RIP_z, undetrended_data$[w$w_poly_peaks])   # note respiration values are those that correspond in time to the PPGs w peaks
+RIP_z <- cbind(RIP_z, undetrended_data$RIP[w$w_poly_peaks])   # note respiration values are those that correspond in time to the PPGs w peaks
 colnames(RIP_z)[1] <- "waveID"
 colnames(RIP_z)[2] <- "RIP"
 # Create plot:
