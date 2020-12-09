@@ -8,16 +8,7 @@ library(SplinesUtils) #SplinesUtils is best downloaded directly from Github
 library(spectral)
 library(seewave)
 
-source("preproc.R")
-source("find_osnd.R")
-source("spectrum.R")
-source("find_w_u_v.R")
-source("fit_sines.R")
-source("refit_peaks.R")
-source("Find_W_Revised.R")
-source("find_average.R")
-source("osnd_of_average.R")
-
+source("PPG_funcs.R")
 
 ########################################################################    
 
