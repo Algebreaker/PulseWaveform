@@ -1,4 +1,4 @@
-setwd("/Users/luciedaniel-watanabe/Desktop/")
+setwd("xxxxx")
 
 library(tidyverse)                                 
 library(TeachingDemos)
@@ -116,7 +116,6 @@ baseCor <- baseline(inx = inflexX, iny = inflexY, o = o, dat = undetrended, sp =
 # Redefine discrete splines:
 sfunctionBC <- splinefun(1:length(baseCor), baseCor, method = "natural")
 deriv1BC <- sfunctionBC(seq(1, length(baseCor)), deriv = 1)
-deriv2BC <- sfunctionBC(seq(1, length(baseCor)), deriv = 2)
 spline1BC <- sfunctionBC(seq(1, length(baseCor)), deriv = 0)
 
 # Redefine polynomial splines: 
@@ -131,178 +130,42 @@ uv$uY <- predict(splinePolyBC, uv$uX)
 uv$vY <- predict(splinePolyBC, uv$vX)
 
 wuv <- cbind(w, uv)
-wuv <- clean_wuv(wuv = wuv, sp = splinePolyBC, inx = inflexX, o = o)
-
+tmp <- clean_wuv(wuv = wuv, sp = splinePolyBC, inx = inflexX, o = o)
+wuv <- tmp[[1]]
+ibi <- tmp[[2]]
+oDiff <- tmp[[3]]
+rm(tmp, w, uv)
 
 ########################################################################    
 
 #       Step 4 : Find individual waves and the average wave            #
 
-######################################################################## 
-
+########################################################################
 # Find the average length of a wave (and 15 since we are starting the wave from before O):
-waveLen <- round(median(o_difference)+15) 
+waveLen <- round(median(oDiff)+15) 
 
-# Redefine baseline corrected data:
-sourcedata <- baseCor[1:length(undetrended)]
-
-# Define a dataframe to contain individual waves (first column is the x-axis (in seconds) - currently set for bioradio data):
-pulse <- data.frame(seq((-141/(samplingRate*10)), ((waveLen*10 -9)-142)/(samplingRate*10), by = 1/(samplingRate*10)))   
-
-
-##Finding waves can be put in a function? 
-
-
-# Add waves to the dataframe:
-afterO <- list()
-beforeO <- list()
-extra_long_wave <- c()
-for(i in 1:(length(w$wX))){  
-  
-  # Make a polynomial spline of rounded u - 15 : rounded u + waveLen - 10:   # Now row 141 in xxxx = 0, therefore u = 0 
-  spline_poly_wave_subset <- CubicInterpSplineAsPiecePoly((round(uv$uX[i])-15):(round(uv$uX[i]) + (waveLen-10)), sourcedata[(round(uv$uX[i])-15):(round(uv$uX[i]) + (waveLen-10))], "natural")
-  
-  # Turn into discrete form
-  xxxx <- predict(spline_poly_wave_subset, c(seq((uv$uX[i]-14), (uv$uX[i]+(waveLen-15)), 0.1)))  
-  
-  # Make into dataframe:
-  xxxx <-  as.data.frame(xxxx)
-  xxxx <- cbind(xxxx, c(seq((uv$uX[i]-14), (uv$uX[i]+(waveLen-15)), 0.1)))
-  colnames(xxxx) <- c('y', 'x') 
-  # Scale so that v-u = 1
-  xxxx$y <- xxxx$y/(wuv$diffVU[i])     
-  # Adjust such that u = 0, v = 1 on y-axis
-  y_axis_difference <- xxxx$y[141]           
-  xxxx$y <- xxxx$y - y_axis_difference
-  
-  # Find the x-value for each wave that corresponds to when it = 0.5 in height (this requires making a spline):
-  spline_poly_wave_subset_2 <- CubicInterpSplineAsPiecePoly(xxxx$x, xxxx$y, "natural")
-  half_crossing <- solve(spline_poly_wave_subset_2, b = 0.5, deriv = 0)
-  half_crossing <- half_crossing[which(abs(half_crossing - w$wX[i]) == min(abs(half_crossing - w$wX[i])))]    
-  
-  # Convert to discrete form again: (need to redefine xxxx)
-  xxxx2 <- predict(spline_poly_wave_subset, c(seq((half_crossing-14), (half_crossing+(waveLen-15)), 0.1)))  
-  xxxx2 <-  as.data.frame(xxxx2)
-  xxxx2 <- cbind(xxxx2, c(seq((half_crossing-14), (half_crossing+(waveLen-15)), 0.1)))  
-  colnames(xxxx2) <- c('y', 'x') 
-  
-  # Scale again
-  xxxx2$y <- xxxx2$y/(wuv$diffVU[i]) 
-  # Adjust y-axis such that u = 0, v = 1
-  y_axis_difference <- uv$uY[i] / wuv$diffVU[i]
-  xxxx2$y <- xxxx2$y - y_axis_difference
-  
-  # Find next_o
-  afterO[[i]] <- which(xxxx2$x > inflexX[o][min(which(inflexX[o] > w$wX[i]))])
-  
-  # Occassionely can get some unusually long waves that have been baseline corrected i.e two systolic peaks merged, these will return integer(o) for the above line - the below checks if o-o difference is unusally large for a wave
-  if( (inflexX[o][min(which(inflexX[o] > w$wX[i]))]) -  (inflexX[o][max(which(inflexX[o] < w$wX[i]))]) > (median(ibi)*1.3)  ){
-    extra_long_wave[length(extra_long_wave) + 1] <- i
-  }
-  
-  # Find values before the o of the wave itself 
-  beforeO[[i]] <- which(xxxx2$x < inflexX[o][max(which(inflexX[o] < w$wX[i]))])
-  
-  # Correct such that x column and wave column are correctly aligned
-  xxxx3 <- c()
-  for(i in 1:nrow(xxxx2)){
-    xxxx3[i+1] <- xxxx2$y[i]
-  }
-  
-  # Following lines probably inefficient way of getting everything aligned
-  
-  # If xxxx3 and nrow(pulse) are the same length, you need only adjust afterO
-  if(length(xxxx3) == nrow(pulse)){
-    if(length(afterO[[i]]) > 0){
-      diff2 <- length(xxxx3) - max(afterO[[i]])
-      for(j in 1:diff2){
-        afterO[[i]] <- c(afterO[[i]], (max(afterO[[i]]) + 1))
-      }
-    }
-  }
-  
-  # Or
-  # Adjust such that xxxx3 is the same length as pulse
-  if(length(xxxx3) > nrow(pulse)){
-    diff <- length(xxxx3) - nrow(pulse)
-    len <- length(xxxx3)
-    xxxx3 <- xxxx3[-((len - (diff-1)):len)]
-    if(diff > 1){     # must correct the afterO values so that they also do not contain values beyond the length of xxxx3 (include case where length of afterO[[i]] is one so the code works...)
-      if(length(afterO[[i]]) > 1 ){
-        afterO[[i]] <- afterO[[i]][-(which(afterO[[i]] > length(xxxx3)))]  #afterO[[i]][1:(which(afterO[[i]] == (len - (diff-1))) - 1) 
-      }else{
-        afterO[[i]] <- afterO[[i]][-(which(afterO[[i]] > length(xxxx3)))]
-      }
-    }
-  }
-  
-  if(length(xxxx3) < nrow(pulse)){
-    diff <- nrow(pulse) - length(xxxx3)
-    xxxx3 <- c(xxxx3, rep(NA, diff))
-    if(length(afterO[[i]]) > 0){
-      diff2 <- length(xxxx3) - max(afterO[[i]])
-      for(j in 1:diff2){
-        afterO[[i]] <- c(afterO[[i]], (max(afterO[[i]]) + 1))
-      }
-    }
-  }
-  
-  
-  # Add column to dataframe
-  pulse <- cbind(pulse, xxxx3)
-}
-for(i in 1:(ncol(pulse) -1)){ 
-  colnames(pulse)[i+1] <- paste("wave", i, sep = "_")       
-}
-colnames(pulse)[1] <- "x"
-
-# Remove any values after O for each wave:
-for(i in 2:(ncol(pulse))){
-  pulse[, i][afterO[[(i-1)]][-1]] <- NA  
-}
-
-# Remove values before O before each wave:
-for(i in 2:(ncol(pulse))){
-  pulse[, i][beforeO[[(i-1)]][-1]] <- NA  
-}
-
-# Remove any extra long waves (i.e where a distance of 2 Os has been counted as one wave):
-if(length(extra_long_wave) > 0){
-  pulse <- pulse[, -(extra_long_wave + 1)]
-}
-
-# Remove extra tall waves:
-tall_waves <- c()
-for(i in 2:ncol(pulse)){
-  if(max(abs(pulse[, i][!is.na(pulse[, i])])) > 1.5){
-    tall_waves[i] <- i
-  }
-}
-tall_waves <- tall_waves[!is.na(tall_waves)]
-if(length(tall_waves) > 0){
-  pulse <- pulse[, -c(tall_waves)]
-}
-
-# Find the average wave:
-average_wave <- find_average(p = pulse, ao = afterO)
+tmp <- sep_beats(odiff = oDiff, bc = baseCor, samp = samplingRate, wuv = wuv, wvlen = waveLen) 
+pulse <- tmp[[2]]
+avWave <- tmp[[1]]
+rm(tmp)
 
 # Can now stack and plot the mean +/- median wave 
 
 pulse_stacked <- gather(pulse, key = "wave_ID", value = "values", -c("x"))
 
 average <- data.frame(seq((-141/(samplingRate*10)), ((waveLen*10 -9)-142)/(samplingRate*10), by = 1/(samplingRate*10)))  
-average <- cbind(average, average_wave)
+average <- cbind(average, avWave)
 colnames(average)[1] <- "x"
 
 ggplot(data = pulse_stacked, aes(x, values, col = wave_ID), col = "black") +
   scale_color_manual(values = rep("black", ncol(pulse))) +  
-  geom_line(size = 1.5, alpha = ((1/length(w$wX)*10)-(1/length(w$wX)))) + geom_line(data = average, aes(x, average_wave), size = 1.125, color = "red") +  # ylim will vary based on source data    
-  theme(legend.position = "none") + labs( y= "PPG Output", x = "Time (Seconds)")  # + xlim(c(pulse$x[max(which(is.na(average_wave)))], pulse$x[length(average_wave)])) + ylim(range(average_wave[!is.na(average_wave)]*1.5)) 
+  geom_line(size = 1.5, alpha = ((1/length(wuv$wX)*10)-(1/length(wuv$wX)))) + geom_line(data = average, aes(x, avWave), size = 1.125, color = "red") +  # ylim will vary based on source data    
+  theme(legend.position = "none") + labs( y= "PPG Output", x = "Time (Seconds)")  # + xlim(c(pulse$x[max(which(is.na(avWave)))], pulse$x[length(avWave)])) + ylim(range(avWave[!is.na(avWave)]*1.5)) 
 
 # Create a polynomial spline for each wave:
-poly_wave <- list()
+polyWave <- list()
 for(i in 2:ncol(pulse)){
-  poly_wave[[i-1]] <-CubicInterpSplineAsPiecePoly(pulse$x, pulse[, i], "natural")
+  polyWave[[i-1]] <-CubicInterpSplineAsPiecePoly(pulse$x, pulse[, i], "natural")
 }
 
 
@@ -314,13 +177,13 @@ for(i in 2:ncol(pulse)){
 
 ## Find OSND on the average wave:
 # Find the diastolic peak on the average wave to inform OSND finding (also some adjusment of x-values for removal of NA values):
-average_wave <- average_wave[!is.na(average_wave)]
+avWave <- avWave[!is.na(avWave)]
 # Need to find new W position (0.5) after removing NAs
-x_shift1 <- which(abs(average_wave-0.5) == min(abs(average_wave - 0.5)))
-average_wave_poly <- CubicInterpSplineAsPiecePoly(1:length(average_wave), average_wave, "natural")
-inflexion_points_av <- solve(average_wave_poly, b = 0, deriv = 1)
-inflexion_points_av_yval <- predict(average_wave_poly, inflexion_points_av)
-#plot(average_wave_poly)
+x_shift1 <- which(abs(avWave-0.5) == min(abs(avWave - 0.5)))
+avWavePoly <- CubicInterpSplineAsPiecePoly(1:length(avWave), avWave, "natural")
+inflexion_points_av <- solve(avWavePoly, b = 0, deriv = 1)
+inflexion_points_av_yval <- predict(avWavePoly, inflexion_points_av)
+#plot(avWavePoly)
 #points(inflexion_points_av, inflexion_points_av_yval)
 # Specify limitations for where the diastolic peak can first be found i.e between 120:230 on x-axis, and below 1 on y-axis:
 peaks <- order(inflexion_points_av_yval[which(inflexion_points_av < 215 & inflexion_points_av > 120 & inflexion_points_av_yval < 1)], decreasing = TRUE)
@@ -330,7 +193,7 @@ if(is.na(diastolic_peak) | diastolic_peak < inflexion_points_av[peaks[1]]){
   diastolic_peak <- 10*samplingRate
 }
 # Find OSND, then extend range as necessary (class 3 + waveforms only)
-osnd <- osnd_of_average(average_wave, dp = diastolic_peak, diff = 0)
+osnd <- osnd_of_average(avWave, dp = diastolic_peak, diff = 0)
 if(diastolic_peak == 5*samplingRate){
   diastolic_peak <- osnd$x[4]*1.2 
 }
@@ -339,7 +202,7 @@ if(diastolic_peak == 5*samplingRate){
 #  most of these artefacts are at the end of the average wave when waves start to drop off
 if((osnd$x[4]-osnd$x[3]) < 1.5 & (osnd$x[4]-osnd$x[3]) > 0){
   diastolic_peak <- diastolic_peak*0.95
-  osnd <- osnd_of_average(average_wave, dp = diastolic_peak, diff = 0)
+  osnd <- osnd_of_average(avWave, dp = diastolic_peak, diff = 0)
 }
 
 
@@ -365,7 +228,7 @@ for(i in 1:length(osnd_all)){
 
 
 #Use new polynomial splines to find w/u/v/notch values for each waveform 
-wuv <- find_wuv(p=pulse, col_len = waveLen, p_w = poly_wave)
+change____var____name <- find_wuv(p=pulse, col_len = waveLen, p_w = poly_wave)
 
 ## Find O, S, N, D on the new polynomial splines:
 osnd_xy <- find_osnd(p = pulse, p_w = poly_wave, col_len = waveLen, wuvn = wuv)
