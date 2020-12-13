@@ -1,3 +1,154 @@
+sep_beats <- function(odiff, bc, dat, samp, wuv, wvlen){
+  
+  
+  # Redefine baseline corrected data:
+  sourcedata <- baseCor[1:length(undetrended)]
+  
+  # Define a dataframe to contain individual waves (first column is the x-axis (in seconds) - currently set for bioradio data):
+  pulse <- data.frame(seq((-141/(samplingRate*10)), ((waveLen*10 -9)-142)/(samplingRate*10), by = 1/(samplingRate*10)))   
+  
+  
+  afterO <- list()
+  beforeO <- list()
+  extra_long_wave <- c()
+  for(i in 1:(length(wuv$wX))){  
+    
+    # Make a polynomial spline of rounded u - 15 : rounded u + waveLen - 10:   # Now row 141 in xxxx = 0, therefore u = 0 
+    splPolySub <- CubicInterpSplineAsPiecePoly((round(wuv$uX[i])-15):(round(wuv$uX[i]) + (waveLen-10)), sourcedata[(round(wuv$uX[i])-15):(round(wuv$uX[i]) + (waveLen-10))], "natural")
+    
+    # Turn into discrete form
+    splSub <- predict(splPolySub, c(seq((wuv$uX[i]-14), (wuv$uX[i]+(waveLen-15)), 0.1)))  
+    
+    # Make into dataframe:
+    splSub <-  as.data.frame(splSub)
+    splSub <- cbind(splSub, c(seq((wuv$uX[i]-14), (wuv$uX[i]+(waveLen-15)), 0.1)))
+    colnames(splSub) <- c('y', 'x') 
+    # Scale so that v-u = 1
+    splSub$y <- splSub$y/(wuv$diffVU[i])     
+    # Adjust such that u = 0, v = 1 on y-axis
+    yDiff <- splSub$y[141]  #??????          
+    splSub$y <- splSub$y - yDiff
+    
+    # Find the x-value for each wave that corresponds to when it = 0.5 in height (this requires making a spline):
+    splPolySub2 <- CubicInterpSplineAsPiecePoly(splSub$x, splSub$y, "natural")
+    halfCross <- solve(splPolySub2, b = 0.5, deriv = 0)
+    halfCross <- halfCross[which(abs(halfCross - wuv$wX[i]) == min(abs(halfCross - wuv$wX[i])))]    
+    
+    # Convert to discrete form again: (need to redefine splSub)
+    splSub2 <- predict(splPolySub, c(seq((halfCross-14), (halfCross+(waveLen-15)), 0.1)))  
+    splSub2 <-  as.data.frame(splSub2)
+    splSub2 <- cbind(splSub2, c(seq((halfCross-14), (halfCross+(waveLen-15)), 0.1)))  
+    colnames(splSub2) <- c('y', 'x') 
+    
+    # Scale again
+    splSub2$y <- splSub2$y/(wuv$diffVU[i]) 
+    # Adjust y-axis such that u = 0, v = 1
+    yDiff <- wuv$uY[i] / wuv$diffVU[i]
+    splSub2$y <- splSub2$y - yDiff
+    
+    # Find next_o
+    afterO[[i]] <- which(splSub2$x > inflexX[o][min(which(inflexX[o] > wuv$wX[i]))])
+    
+    # Occassionely can get some unusually long waves that have been baseline corrected i.e two systolic peaks merged, these will return integer(o) for the above line - the below checks if o-o difference is unusally large for a wave
+    if( (inflexX[o][min(which(inflexX[o] > wuv$wX[i]))]) -  (inflexX[o][max(which(inflexX[o] < wuv$wX[i]))]) > (median(ibi)*1.3)  ){
+      extra_long_wave[length(extra_long_wave) + 1] <- i
+    }
+    
+    # Find values before the o of the wave itself 
+    beforeO[[i]] <- which(splSub2$x < inflexX[o][max(which(inflexX[o] < wuv$wX[i]))])
+    
+    # Correct such that x column and wave column are correctly aligned
+    splSub3 <- c()
+    for(i in 1:nrow(splSub2)){
+      splSub3[i+1] <- splSub2$y[i]
+    }
+    
+    # Following lines probably inefficient way of getting everything aligned
+    
+    # If splSub3 and nrow(pulse) are the same length, you need only adjust afterO
+    if(length(splSub3) == nrow(pulse)){
+      if(length(afterO[[i]]) > 0){
+        diff2 <- length(splSub3) - max(afterO[[i]])
+        for(j in 1:diff2){
+          afterO[[i]] <- c(afterO[[i]], (max(afterO[[i]]) + 1))
+        }
+      }
+    }
+    
+    # Or
+    # Adjust such that splSub3 is the same length as pulse
+    if(length(splSub3) > nrow(pulse)){
+      diff <- length(splSub3) - nrow(pulse)
+      len <- length(splSub3)
+      splSub3 <- splSub3[-((len - (diff-1)):len)]
+      if(diff > 1){     # must correct the afterO values so that they also do not contain values beyond the length of splSub3 (include case where length of afterO[[i]] is one so the code works...)
+        if(length(afterO[[i]]) > 1 ){
+          afterO[[i]] <- afterO[[i]][-(which(afterO[[i]] > length(splSub3)))]  #afterO[[i]][1:(which(afterO[[i]] == (len - (diff-1))) - 1) 
+        }else{
+          afterO[[i]] <- afterO[[i]][-(which(afterO[[i]] > length(splSub3)))]
+        }
+      }
+    }
+    
+    if(length(splSub3) < nrow(pulse)){
+      diff <- nrow(pulse) - length(splSub3)
+      splSub3 <- c(splSub3, rep(NA, diff))
+      if(length(afterO[[i]]) > 0){
+        diff2 <- length(splSub3) - max(afterO[[i]])
+        for(j in 1:diff2){
+          afterO[[i]] <- c(afterO[[i]], (max(afterO[[i]]) + 1))
+        }
+      }
+    }
+    
+    
+    # Add column to dataframe
+    pulse <- cbind(pulse, splSub3)
+  }
+  
+  
+  for(i in 1:(ncol(pulse) -1)){ 
+    colnames(pulse)[i+1] <- paste("wave", i, sep = "_")       
+  }
+  colnames(pulse)[1] <- "x"
+  
+  # Remove any values after O for each wave:
+  for(i in 2:(ncol(pulse))){
+    pulse[, i][afterO[[(i-1)]][-1]] <- NA  
+  }
+  
+  # Remove values before O before each wave:
+  for(i in 2:(ncol(pulse))){
+    pulse[, i][beforeO[[(i-1)]][-1]] <- NA  
+  }
+  
+  # Remove any extra long waves (i.e where a distance of 2 Os has been counted as one wave):
+  if(length(extra_long_wave) > 0){
+    pulse <- pulse[, -(extra_long_wave + 1)]
+  }
+  
+  # Remove extra tall waves:
+  tall_waves <- c()
+  for(i in 2:ncol(pulse)){
+    if(max(abs(pulse[, i][!is.na(pulse[, i])])) > 1.5){
+      tall_waves[i] <- i
+    }
+  }
+  tall_waves <- tall_waves[!is.na(tall_waves)]
+  if(length(tall_waves) > 0){
+    pulse <- pulse[, -c(tall_waves)]
+  }
+  average_wave <- find_average(p = pulse, ao = afterO)
+  
+  dat <- list(average_wave, pulse)
+  return(dat)
+}
+
+
+
+
+
+
 clean_wuv <- function(wuv, sp, inx, o){
   
   # Remove u values that are implausibly far from baseline
@@ -61,7 +212,8 @@ clean_wuv <- function(wuv, sp, inx, o){
     diffVU <- diffVU[-length(diffVU)]
     diffVU <- diffVU[-end_waves]
   }
-  dat <- cbind(wuv, diffVU)
+  d <- cbind(wuv, diffVU)
+  dat <- list(d, ibi, oDiff)
   return(dat)
 }
 
