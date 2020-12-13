@@ -1,4 +1,4 @@
-setwd("/Users/luciedaniel-watanabe/Desktop/attempt at pulse analysis/PulseAnalysis/Data/Craig")
+setwd("/Users/luciedaniel-watanabe/Desktop/")
 
 library(tidyverse)                                 
 library(TeachingDemos)
@@ -18,38 +18,41 @@ source("PPG_funcs.R")
 
 
 #### Bioradio (finger) ####
-data <- read.csv("~/Desktop/PulseAnalysis/Data/Craig/Source.csv", header = T)
+data <- read.csv("Source.csv", header = T)
 #downsampling data and undetrending 
-undetrended_data <- data.frame(preproc(dat=data))
-sampling_rate <- 75
+undetrendedData <- data.frame(preproc(dat=data))
+undetrended <- undetrendedData$undetrended
+samplingRate <- 75
 
 #### Mimic database (sample) ####
-data <- read.csv("~/Desktop/data.csv", header = T)
-data <- data[, c(1, 6)]
-undetrended_data <- data
-colnames(undetrended_data)[2] <- "undetrended"
-plot(undetrended_data$undetrended[1:10000], type = "l")
-undetrended_data <- undetrended_data[1:10000, ]
-sampling_rate <- 60
+#data <- read.csv("~/Desktop/data.csv", header = T)
+#data <- data[, c(1, 6)]
+#undetrendedDat <- data
+#colnames(undetrendedDat)[2] <- "undetrended"
+#undetrended <- undetrendedDat$undetrended
+#plot(undetrended[1:10000], type = "l")
+#undetrended <- undetrended[1:10000, ]
+#samplingRate <- 60
 
 
 #### ISO-3 (finger) #### 
-data <- read.delim(file.choose(), header = T)
-data <- cbind(data, (1:nrow(data)))
-undetrended_data <- data
-colnames(undetrended_data)[1] <- "undetrended"
-sampling_rate <- 40
+#data <- read.delim(file.choose(), header = T)
+#data <- cbind(data, (1:nrow(data)))
+#undetrended <- data
+#colnames(undetrended)[1] <- "undetrended"
+#samplingRate <- 40
 
 
 #### Intero-battery (ear) ####
-data <- read.csv("~/Desktop/Khalsa_Fletcher_collaboration copy/Intero_Battery/AN Float/data-organized/AT053/T0/behavioral_session/AT053-T0-__BH-R1-PHYS.csv")
-data <- data[, c(1, 4)]
-data <- data[seq(1, nrow(data), 100), ]
-undetrended_data <- data
-colnames(undetrended_data)[2] <- "undetrended"
+#data <- read.csv("~/Desktop/Khalsa_Fletcher_collaboration copy/Intero_Battery/AN Float/data-organized/AT053/T0/behavioral_session/AT053-T0-__BH-R1-PHYS.csv")
+#data <- data[, c(1, 4)]
+#data <- data[seq(1, nrow(data), 100), ]
+#undetrendedDat <- data
+#colnames(undetrended)[2] <- "undetrended"
+#undetrended <- undetrendedDat$undetrended
 # Most ear PPG traces have large periods of nothing followed by large artefact followed by waveforms, remove the first two:
-undetrended_data <- undetrended_data[-c(1:(max(which(undetrended_data$undetrended == max(undetrended_data$undetrended)))+1000)), ]  
-sampling_rate <- 20
+#undetrended <- undetrended[-c(1:(max(which(undetrended == max(undetrended)))+1000)), ]  
+#samplingRate <- 20
 
 ########################################################################    
 
@@ -59,62 +62,46 @@ sampling_rate <- 20
 
 
 # Create discrete splines:
-sfunction <- splinefun(1:length(undetrended_data$undetrended), undetrended_data$undetrended[1:length(undetrended_data$undetrended)], method = "natural")
-deriv1 <- sfunction(seq(1, length(undetrended_data$undetrended)), deriv = 1)
-spline_1 <-  sfunction(seq(1, length(undetrended_data$undetrended)), deriv = 0)
+sfunction <- splinefun(1:length(undetrended), undetrended[1:length(undetrended)], method = "natural")
+deriv1 <- sfunction(seq(1, length(undetrended)), deriv = 1)
+spline1 <-  sfunction(seq(1, length(undetrended)), deriv = 0)
 
 # Create polynomial splines: 
-spline_poly <- CubicInterpSplineAsPiecePoly(1:length(undetrended_data$undetrended), undetrended_data$undetrended[1:length(undetrended_data$undetrended)], "natural")
-deriv1_poly <- CubicInterpSplineAsPiecePoly(1:length(undetrended_data$undetrended), deriv1, "natural") 
+splinePoly <- CubicInterpSplineAsPiecePoly(1:length(undetrended), undetrended[1:length(undetrended)], "natural")
+deriv1Poly <- CubicInterpSplineAsPiecePoly(1:length(undetrended), deriv1, "natural") 
 
-# Finding inflexion points on spline_poly (points on deriv1 where x = 0):
-inflexion_points <- solve(spline_poly, b = 0, deriv = 1)
-inflexion_points_yval <- predict(spline_poly, inflexion_points)
+# Finding inflexion points on splinePoly (points on deriv1 where x = 0):
+inflexX <- solve(splinePoly, b = 0, deriv = 1)
+inflexY <- predict(splinePoly, inflexX)
 
 # Find W:
-w <- find_w(d1p = deriv1_poly, deriv1 = deriv1, sp = spline_poly)
+w <- find_w(d1p = deriv1Poly, deriv1 = deriv1, sp = splinePoly)
 
 # Find U and V:
-u_v <- find_u_v(dat = undetrended_data$undetrended, wx = w$w_poly_peaks, wy = w$w_poly_peaks_yval, d1 = deriv1, d1p = deriv1_poly, spline = spline_poly, spline_o = spline_1, plot=FALSE)
+uv <- find_u_v(dat = undetrended, wx = w$wX, wy = w$wY, d1 = deriv1, d1p = deriv1Poly, spline = splinePoly, spline_o = spline1, plot=FALSE)
 
-## Find o in order to find the baseline
-o <- c()
-for(i in 1:length(w$w_poly_peaks)){
-  o[i] <- max(which(inflexion_points < w$w_poly_peaks[i]))
-}
-# Adjust for early O points:
-# First find O based on inflection point on first deriv:
-inflexion_points_d1 <- solve(deriv1_poly, b = 0, deriv = 1)
-o2 <- c()
-for(i in 1:length(w$w_poly_peaks)){
-  o2[i] <- max(which(inflexion_points_d1 < w$w_poly_peaks[i]))
-}
-# Use the O derived from 1st deriv if its y-val is above 0: 
-for(i in 1:length(w$w_poly_peaks)){
-  if((inflexion_points[o][i] - inflexion_points_d1[o2][i]) < 0){
-    inflexion_points[o][i] <- inflexion_points_d1[o2][i]
-    inflexion_points_yval[o][i] <- predict(spline_poly, inflexion_points[o][i]) 
-  }
-}
-#plot(spline_1[1:500], type = "l")
-#points(inflexion_points[o], inflexion_points_yval[o])
+# Find O in order to find the baseline
+
+o <- find_o(wx = w$wX, inx = inflexX, iny = inflexY, d1p = deriv1Poly, sp = splinePoly)
+#plot(spline1[1:500], type = "l")
+#points(inflexX[o], inflexY[o])
 
 
-# Find where W lies from U to V on the x-axis, for each wave:
-percentage_distance_to_v <- c()
-for(i in 1:length(w$w_poly_peaks)){
-  percentage_distance_to_v[i] <- (w$w_poly_peaks[i] - u_v$u[i]) / (u_v$v[i] - u_v$u[i])*100
+# Find where W lies from U to V on the x-axis, for each wave find the percentage distance to V: 
+vDist <- c()
+for(i in 1:length(w$wX)){
+  vDist[i] <- (w$wX[i] - uv$uX[i]) / (uv$vx[i] - uv$uX[i])*100
 }
-#plot(w$w_poly_peaks, percentage_distance_to_v, type = "l")
+#plot(w$wX, vDist, type = "l")
 
 # Make a vector of abnormal pdtv (allowing any values between 35 and 65): 
-sdpdtv <- sd(percentage_distance_to_v)
-pdtv_waves <- c(which(percentage_distance_to_v > (sdpdtv + median(percentage_distance_to_v)) & percentage_distance_to_v > 65), which(percentage_distance_to_v < (median(percentage_distance_to_v) - sdpdtv) & percentage_distance_to_v < 35))
+sdpdtv <- sd(vDist)
+pdtvWaves <- c(which(vDist > (sdpdtv + median(vDist)) & vDist > 65), which(vDist < (median(vDist) - sdpdtv) & vDist < 35))
 
-# Remove pdtv_waves:
-if(length(pdtv_waves) > 0){
-  w <- w[-pdtv_waves, ]
-  u_v <- u_v[-pdtv_waves, ]
+# Remove pdtvWaves:
+if(length(pdtvWaves) > 0){
+  w <- w[-pdtvWaves, ]
+  uv <- uv[-pdtvWaves, ]
 }
 
 ########################################################################    
@@ -124,91 +111,27 @@ if(length(pdtv_waves) > 0){
 ######################################################################## 
 
 # Correct Baseline
-baseline_corrected <- baseline(plot=FALSE)
+baseCor <- baseline(inx = inflexX, iny = inflexY, o = o, dat = undetrended, sp = splinePoly, plot=T)
 
 # Redefine discrete splines:
-sfunction_bc <- splinefun(1:length(baseline_corrected), baseline_corrected, method = "natural")
-deriv1_bc <- sfunction_bc(seq(1, length(baseline_corrected)), deriv = 1)
-deriv2_bc <- sfunction_bc(seq(1, length(baseline_corrected)), deriv = 2)
-spline_1_bc <- sfunction_bc(seq(1, length(baseline_corrected)), deriv = 0)
+sfunctionBC <- splinefun(1:length(baseCor), baseCor, method = "natural")
+deriv1BC <- sfunctionBC(seq(1, length(baseCor)), deriv = 1)
+deriv2BC <- sfunctionBC(seq(1, length(baseCor)), deriv = 2)
+spline1BC <- sfunctionBC(seq(1, length(baseCor)), deriv = 0)
 
 # Redefine polynomial splines: 
-spline_poly_bc <- CubicInterpSplineAsPiecePoly(1:length(baseline_corrected), baseline_corrected, "natural")
-deriv1_poly_bc <- CubicInterpSplineAsPiecePoly(1:length(baseline_corrected), deriv1_bc, "natural") 
+splinePolyBC <- CubicInterpSplineAsPiecePoly(1:length(baseCor), baseCor, "natural")
+deriv1PolyBC <- CubicInterpSplineAsPiecePoly(1:length(baseCor), deriv1BC, "natural") 
 
 # Refind W (y-values):
-w$w_poly_peaks_yval <- predict(spline_poly_bc, w$w_poly_peaks)
+w$wY <- predict(splinePolyBC, w$wX)
 
 # Refind U and V (y_values):
-u_v$u_yval <- predict(spline_poly_bc, u_v$u)
-u_v$v_yval <- predict(spline_poly_bc, u_v$v)
+uv$uY <- predict(splinePolyBC, uv$uX)
+uv$vY <- predict(splinePolyBC, uv$vX)
 
-# Remove u values that are implausibly far from baseline
-false_u_vals <- which(u_v$u_yval > (median(u_v$u_yval) + sd(u_v$u_yval)) | u_v$u_yval < -50)
-if(length(false_u_vals) > 1){
-  w <- w[-false_u_vals, ]
-  u_v <- u_v[-false_u_vals, ]
-}
-
-# Find v-u differences:
-v_minus_u <- u_v$v_yval - u_v$u_yval
-
-# undetected artefacts can lead to repeats in half heights (if the deriv peak is too wide), which will lead to 
-# scale factors of 0, check for these:
-if(length(which(v_minus_u == 0)) > 0){
-  dup <- which(v_minus_u == 0)
-  w <- w[-dup, ]
-  u_v <- u_v[-dup, ]
-  v_minus_u <- v_minus_u[-dup]
-}
-
-# Make a vector of waves with abnormally small scale factors and remove them:
-false_scale_waves <- which(v_minus_u < (median(v_minus_u) - 4*(sd(v_minus_u))))
-if(length(false_scale_waves) > 1){
-  w <- w[-false_scale_waves, ]
-  u_v <- u_v[-false_scale_waves, ]
-  v_minus_u <- v_minus_u[-false_scale_waves]
-}
-
-## Find o points again:
-o_yval <- predict(spline_poly_bc, inflexion_points[o])
-#plot(spline_poly_bc)
-#points(inflexion_points[o], o_yval, pch = 19)
-
-# Find o-w difference:
-o_w_difference <- c()
-for(i in 1:length(w$w_poly_peaks)){
-  o_w_difference[i] <- w$w_poly_peaks[i] - inflexion_points[o[i]]
-}
-
-# Find distance between o_points:
-o_difference <- c()
-for(i in 1:(length(inflexion_points[o])-1)){
-  o_difference[i] <- inflexion_points[o[i+1]] - inflexion_points[o[i]]
-}
-
-# Find distance between W points (Inter-beat interval):
-ibi <- c()
-for(i in 1:(length(w$w_poly_peaks))-1){
-  ibi[i] <- w$w_poly_peaks[i+1] - w$w_poly_peaks[i]
-}
-
-# Remove last W:
-w <- w[-nrow(w), ]
-
-# Make a vector of abnormal IBIs (the waves at the end of a sequence / before an artefact): 
-#plot(ibi)
-#points(which(ibi > 1.3*median(ibi)), ibi[which(ibi > 1.3*median(ibi))], pch = 19, col = "red")
-end_waves <- which(ibi > 1.3*median(ibi))
-
-# Remove end_waves from all vectors:
-if(length(end_waves) > 1){
-  w <- w[-end_waves, ]
-  u_v <- u_v[-nrow(u_v), ]
-  u_v <- u_v[-end_waves, ]
-  v_minus_u <- v_minus_u[-length(v_minus_u)]
-  v_minus_u <- v_minus_u[-end_waves]
-}
+wuv <- cbind(w, uv)
+wuv <- clean_wuv(wuv = wuv, sp = splinePolyBC, inx = inflexX, o = o)
 
 
 ########################################################################    
@@ -218,78 +141,82 @@ if(length(end_waves) > 1){
 ######################################################################## 
 
 # Find the average length of a wave (and 15 since we are starting the wave from before O):
-source_data_column_length <- round(median(o_difference)+15) 
+waveLen <- round(median(o_difference)+15) 
 
 # Redefine baseline corrected data:
-sourcedata <- baseline_corrected[1:length(undetrended_data$undetrended)]
+sourcedata <- baseCor[1:length(undetrended)]
 
 # Define a dataframe to contain individual waves (first column is the x-axis (in seconds) - currently set for bioradio data):
-pulse <- data.frame(seq((-141/(sampling_rate*10)), ((source_data_column_length*10 -9)-142)/(sampling_rate*10), by = 1/(sampling_rate*10)))   
+pulse <- data.frame(seq((-141/(samplingRate*10)), ((waveLen*10 -9)-142)/(samplingRate*10), by = 1/(samplingRate*10)))   
+
+
+##Finding waves can be put in a function? 
+
 
 # Add waves to the dataframe:
-after_o <- list()
-before_o <- list()
+afterO <- list()
+beforeO <- list()
 extra_long_wave <- c()
-for(i in 1:(length(w$w_poly_peaks))){  
+for(i in 1:(length(w$wX))){  
   
-  # Make a polynomial spline of rounded u - 15 : rounded u + source_data_column_length - 10:   # Now row 141 in xxxx = 0, therefore u = 0 
-  spline_poly_wave_subset <- CubicInterpSplineAsPiecePoly((round(u_v$u[i])-15):(round(u_v$u[i]) + (source_data_column_length-10)), sourcedata[(round(u_v$u[i])-15):(round(u_v$u[i]) + (source_data_column_length-10))], "natural")
+  # Make a polynomial spline of rounded u - 15 : rounded u + waveLen - 10:   # Now row 141 in xxxx = 0, therefore u = 0 
+  spline_poly_wave_subset <- CubicInterpSplineAsPiecePoly((round(uv$uX[i])-15):(round(uv$uX[i]) + (waveLen-10)), sourcedata[(round(uv$uX[i])-15):(round(uv$uX[i]) + (waveLen-10))], "natural")
   
   # Turn into discrete form
-  xxxx <- predict(spline_poly_wave_subset, c(seq((u_v$u[i]-14), (u_v$u[i]+(source_data_column_length-15)), 0.1)))  
+  xxxx <- predict(spline_poly_wave_subset, c(seq((uv$uX[i]-14), (uv$uX[i]+(waveLen-15)), 0.1)))  
   
   # Make into dataframe:
   xxxx <-  as.data.frame(xxxx)
-  xxxx <- cbind(xxxx, c(seq((u_v$u[i]-14), (u_v$u[i]+(source_data_column_length-15)), 0.1)))
+  xxxx <- cbind(xxxx, c(seq((uv$uX[i]-14), (uv$uX[i]+(waveLen-15)), 0.1)))
   colnames(xxxx) <- c('y', 'x') 
   # Scale so that v-u = 1
-  xxxx$y <- xxxx$y/(v_minus_u[i])     
+  xxxx$y <- xxxx$y/(wuv$diffVU[i])     
   # Adjust such that u = 0, v = 1 on y-axis
   y_axis_difference <- xxxx$y[141]           
   xxxx$y <- xxxx$y - y_axis_difference
- 
+  
   # Find the x-value for each wave that corresponds to when it = 0.5 in height (this requires making a spline):
   spline_poly_wave_subset_2 <- CubicInterpSplineAsPiecePoly(xxxx$x, xxxx$y, "natural")
   half_crossing <- solve(spline_poly_wave_subset_2, b = 0.5, deriv = 0)
-  half_crossing <- half_crossing[which(abs(half_crossing - w$w_poly_peaks[i]) == min(abs(half_crossing - w$w_poly_peaks[i])))]    
+  half_crossing <- half_crossing[which(abs(half_crossing - w$wX[i]) == min(abs(half_crossing - w$wX[i])))]    
   
   # Convert to discrete form again: (need to redefine xxxx)
-  xxxx2 <- predict(spline_poly_wave_subset, c(seq((half_crossing-14), (half_crossing+(source_data_column_length-15)), 0.1)))  
+  xxxx2 <- predict(spline_poly_wave_subset, c(seq((half_crossing-14), (half_crossing+(waveLen-15)), 0.1)))  
   xxxx2 <-  as.data.frame(xxxx2)
-  xxxx2 <- cbind(xxxx2, c(seq((half_crossing-14), (half_crossing+(source_data_column_length-15)), 0.1)))  
+  xxxx2 <- cbind(xxxx2, c(seq((half_crossing-14), (half_crossing+(waveLen-15)), 0.1)))  
   colnames(xxxx2) <- c('y', 'x') 
   
   # Scale again
-  xxxx2$y <- xxxx2$y/(v_minus_u[i]) 
+  xxxx2$y <- xxxx2$y/(wuv$diffVU[i]) 
   # Adjust y-axis such that u = 0, v = 1
-  y_axis_difference <- u_v$u_yval[i] / v_minus_u[i]
+  y_axis_difference <- uv$uY[i] / wuv$diffVU[i]
   xxxx2$y <- xxxx2$y - y_axis_difference
   
   # Find next_o
-  after_o[[i]] <- which(xxxx2$x > inflexion_points[o][min(which(inflexion_points[o] > w$w_poly_peaks[i]))])
+  afterO[[i]] <- which(xxxx2$x > inflexX[o][min(which(inflexX[o] > w$wX[i]))])
   
   # Occassionely can get some unusually long waves that have been baseline corrected i.e two systolic peaks merged, these will return integer(o) for the above line - the below checks if o-o difference is unusally large for a wave
-  if( (inflexion_points[o][min(which(inflexion_points[o] > w$w_poly_peaks[i]))]) -  (inflexion_points[o][max(which(inflexion_points[o] < w$w_poly_peaks[i]))]) > (median(ibi)*1.3)  ){
+  if( (inflexX[o][min(which(inflexX[o] > w$wX[i]))]) -  (inflexX[o][max(which(inflexX[o] < w$wX[i]))]) > (median(ibi)*1.3)  ){
     extra_long_wave[length(extra_long_wave) + 1] <- i
   }
   
   # Find values before the o of the wave itself 
-  before_o[[i]] <- which(xxxx2$x < inflexion_points[o][max(which(inflexion_points[o] < w$w_poly_peaks[i]))])
+  beforeO[[i]] <- which(xxxx2$x < inflexX[o][max(which(inflexX[o] < w$wX[i]))])
   
   # Correct such that x column and wave column are correctly aligned
   xxxx3 <- c()
   for(i in 1:nrow(xxxx2)){
     xxxx3[i+1] <- xxxx2$y[i]
   }
-
+  
   # Following lines probably inefficient way of getting everything aligned
   
-  # If xxxx3 and nrow(pulse) are the same length, you need only adjust after_o
+  # If xxxx3 and nrow(pulse) are the same length, you need only adjust afterO
   if(length(xxxx3) == nrow(pulse)){
-    if(length(after_o[[i]]) > 0){
-      diff2 <- length(xxxx3) - max(after_o[[i]])
+    if(length(afterO[[i]]) > 0){
+      diff2 <- length(xxxx3) - max(afterO[[i]])
       for(j in 1:diff2){
-        after_o[[i]] <- c(after_o[[i]], (max(after_o[[i]]) + 1))
+        afterO[[i]] <- c(afterO[[i]], (max(afterO[[i]]) + 1))
       }
     }
   }
@@ -300,11 +227,11 @@ for(i in 1:(length(w$w_poly_peaks))){
     diff <- length(xxxx3) - nrow(pulse)
     len <- length(xxxx3)
     xxxx3 <- xxxx3[-((len - (diff-1)):len)]
-    if(diff > 1){     # must correct the after_o values so that they also do not contain values beyond the length of xxxx3 (include case where length of after_o[[i]] is one so the code works...)
-      if(length(after_o[[i]]) > 1 ){
-        after_o[[i]] <- after_o[[i]][-(which(after_o[[i]] > length(xxxx3)))]  #after_o[[i]][1:(which(after_o[[i]] == (len - (diff-1))) - 1) 
+    if(diff > 1){     # must correct the afterO values so that they also do not contain values beyond the length of xxxx3 (include case where length of afterO[[i]] is one so the code works...)
+      if(length(afterO[[i]]) > 1 ){
+        afterO[[i]] <- afterO[[i]][-(which(afterO[[i]] > length(xxxx3)))]  #afterO[[i]][1:(which(afterO[[i]] == (len - (diff-1))) - 1) 
       }else{
-       after_o[[i]] <- after_o[[i]][-(which(after_o[[i]] > length(xxxx3)))]
+        afterO[[i]] <- afterO[[i]][-(which(afterO[[i]] > length(xxxx3)))]
       }
     }
   }
@@ -312,10 +239,10 @@ for(i in 1:(length(w$w_poly_peaks))){
   if(length(xxxx3) < nrow(pulse)){
     diff <- nrow(pulse) - length(xxxx3)
     xxxx3 <- c(xxxx3, rep(NA, diff))
-    if(length(after_o[[i]]) > 0){
-      diff2 <- length(xxxx3) - max(after_o[[i]])
+    if(length(afterO[[i]]) > 0){
+      diff2 <- length(xxxx3) - max(afterO[[i]])
       for(j in 1:diff2){
-        after_o[[i]] <- c(after_o[[i]], (max(after_o[[i]]) + 1))
+        afterO[[i]] <- c(afterO[[i]], (max(afterO[[i]]) + 1))
       }
     }
   }
@@ -331,12 +258,12 @@ colnames(pulse)[1] <- "x"
 
 # Remove any values after O for each wave:
 for(i in 2:(ncol(pulse))){
-  pulse[, i][after_o[[(i-1)]][-1]] <- NA  
+  pulse[, i][afterO[[(i-1)]][-1]] <- NA  
 }
 
 # Remove values before O before each wave:
 for(i in 2:(ncol(pulse))){
-  pulse[, i][before_o[[(i-1)]][-1]] <- NA  
+  pulse[, i][beforeO[[(i-1)]][-1]] <- NA  
 }
 
 # Remove any extra long waves (i.e where a distance of 2 Os has been counted as one wave):
@@ -355,21 +282,21 @@ tall_waves <- tall_waves[!is.na(tall_waves)]
 if(length(tall_waves) > 0){
   pulse <- pulse[, -c(tall_waves)]
 }
-  
+
 # Find the average wave:
-average_wave <- find_average(p = pulse, ao = after_o)
+average_wave <- find_average(p = pulse, ao = afterO)
 
 # Can now stack and plot the mean +/- median wave 
 
 pulse_stacked <- gather(pulse, key = "wave_ID", value = "values", -c("x"))
 
-average <- data.frame(seq((-141/(sampling_rate*10)), ((source_data_column_length*10 -9)-142)/(sampling_rate*10), by = 1/(sampling_rate*10)))  
+average <- data.frame(seq((-141/(samplingRate*10)), ((waveLen*10 -9)-142)/(samplingRate*10), by = 1/(samplingRate*10)))  
 average <- cbind(average, average_wave)
 colnames(average)[1] <- "x"
 
 ggplot(data = pulse_stacked, aes(x, values, col = wave_ID), col = "black") +
   scale_color_manual(values = rep("black", ncol(pulse))) +  
-  geom_line(size = 1.5, alpha = ((1/length(w$w_poly_peaks)*10)-(1/length(w$w_poly_peaks)))) + geom_line(data = average, aes(x, average_wave), size = 1.125, color = "red") +  # ylim will vary based on source data    
+  geom_line(size = 1.5, alpha = ((1/length(w$wX)*10)-(1/length(w$wX)))) + geom_line(data = average, aes(x, average_wave), size = 1.125, color = "red") +  # ylim will vary based on source data    
   theme(legend.position = "none") + labs( y= "PPG Output", x = "Time (Seconds)")  # + xlim(c(pulse$x[max(which(is.na(average_wave)))], pulse$x[length(average_wave)])) + ylim(range(average_wave[!is.na(average_wave)]*1.5)) 
 
 # Create a polynomial spline for each wave:
@@ -400,13 +327,13 @@ peaks <- order(inflexion_points_av_yval[which(inflexion_points_av < 215 & inflex
 diastolic_peak <- inflexion_points_av[which(inflexion_points_av < 215 & inflexion_points_av > 120 & inflexion_points_av_yval < 1)][peaks[1]]
 # diastolic_peak will be NA for class 3 waveforms, in which case set a default value
 if(is.na(diastolic_peak) | diastolic_peak < inflexion_points_av[peaks[1]]){
-    diastolic_peak <- 10*sampling_rate
-  }
-  # Find OSND, then extend range as necessary (class 3 + waveforms only)
-  osnd <- osnd_of_average(average_wave, dp = diastolic_peak, diff = 0)
-  if(diastolic_peak == 5*sampling_rate){
-    diastolic_peak <- osnd$x[4]*1.2 
-  }
+  diastolic_peak <- 10*samplingRate
+}
+# Find OSND, then extend range as necessary (class 3 + waveforms only)
+osnd <- osnd_of_average(average_wave, dp = diastolic_peak, diff = 0)
+if(diastolic_peak == 5*samplingRate){
+  diastolic_peak <- osnd$x[4]*1.2 
+}
 # artefacts causing sharp inclines can create a step effect which can be falsely detected as a notch
 # if N and D are too close together e.g < 1.5, reduce the diastolic peak value
 #  most of these artefacts are at the end of the average wave when waves start to drop off
@@ -437,13 +364,11 @@ for(i in 1:length(osnd_all)){
 
 
 
-
-
 #Use new polynomial splines to find w/u/v/notch values for each waveform 
-wuv <- find_wuv(p=pulse, col_len = source_data_column_length, p_w = poly_wave)
+wuv <- find_wuv(p=pulse, col_len = waveLen, p_w = poly_wave)
 
 ## Find O, S, N, D on the new polynomial splines:
-osnd_xy <- find_osnd(p = pulse, p_w = poly_wave, col_len = source_data_column_length, wuvn = wuv)
+osnd_xy <- find_osnd(p = pulse, p_w = poly_wave, col_len = waveLen, wuvn = wuv)
 osnd_y <- osnd_xy[1:(length(osnd_xy)/2)]
 osnd_x <- osnd_xy[(length(osnd_xy)/2+1):length(osnd_xy)]
 
@@ -612,7 +537,5 @@ for(i in 1:(length(poly_wave)-1)){
 
 ##Spectral Analysis
 
-spectralanalysis <- (spectrum(baseline_corrected))
+spectralanalysis <- (spectrum(baseCor))
 
-
-########
