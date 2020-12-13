@@ -1,32 +1,99 @@
+clean_wuv <- function(wuv, sp, inx, o){
+  
+  # Remove u values that are implausibly far from baseline
+  falseU <- which(wuv$uY > (median(wuv$uY) + sd(wuv$uY)) | wuv$uY < -50)
+  if(length(falseU) > 1){
+    wuv <- wuv[-falseU, ]
+  }
+  
+  # Find v-u differences:
+  diffVU <- wuv$vY - wuv$uY
+  
+  # undetected artefacts can lead to repeats in half heights (if the deriv peak is too wide), which will lead to 
+  # scale factors of 0, check for these:
+  if(length(which(diffVU == 0)) > 0){
+    dup <- which(diffVU == 0)
+    wuv <- wuv[-dup, ]
+    diffVU <- diffVU[-dup]
+  }
+  
+  # Make a vector of waves with abnormally small scale factors and remove them:
+  falseScale <- which(diffVU < (median(diffVU) - 4*(sd(diffVU))))
+  if(length(falseScale) > 1){
+    wuv <- wuv[-falseScale, ]
+    diffVU <- diffVU[-falseScale]
+  }
+  
+  ## Find o points again:
+  oY <- predict(sp, inx[o])
+  #plot(splinePolyBC)
+  #points(inflexX[o], o_yval, pch = 19)
+  
+  # Find o-w difference:
+  owDiff <- c()
+  for(i in 1:length(wuv$wX)){
+    owDiff[i] <- wuv$wX[i] - inx[o[i]]
+  }
+  
+  # Find distance between o_points:
+  oDiff <- c()
+  for(i in 1:(length(inx[o])-1)){
+    oDiff[i] <- inx[o[i+1]] - inx[o[i]]
+  }
+  
+  # Find distance between W points (Inter-beat interval):
+  ibi <- c()
+  for(i in 1:(length(wuv$wX))-1){
+    ibi[i] <- wuv$wX[i+1] - wuv$wX[i]
+  }
+  
+  # Remove last W:
+  wuv <- wuv[-nrow(wuv), ]
+  
+  # Make a vector of abnormal IBIs (the waves at the end of a sequence / before an artefact): 
+  #plot(ibi)
+  #points(which(ibi > 1.3*median(ibi)), ibi[which(ibi > 1.3*median(ibi))], pch = 19, col = "red")
+  end_waves <- which(ibi > 1.3*median(ibi))
+  
+  # Remove end_waves from all vectors:
+  if(length(end_waves) > 1){
+    wuv <- wuv[-end_waves, ]
+    diffVU <- diffVU[-length(diffVU)]
+    diffVU <- diffVU[-end_waves]
+  }
+  dat <- cbind(wuv, diffVU)
+  return(dat)
+}
 
 
 
-##Fitting the baseline 
+##Fitting the baseline
 
-baseline <- function(plot = FALSE){
+baseline <- function(inx, iny, o, dat, sp, plot = FALSE){
   # Making a (non-polynomial) spline to fit the baseline
-  sfunction2 <- splinefun(inflexion_points[o], inflexion_points_yval[o], method = "natural")
-  spline_base <- sfunction2(seq(1, length(undetrended_data$undetrended)), deriv = 0)
+  sfunction2 <- splinefun(inx[o], iny[o], method = "natural")
+  splineBase <- sfunction2(seq(1, length(dat)), deriv = 0)
   
   # Plotting spline_base on spline_poly
   if(plot){
-    plot(spline_poly)
-    points(inflexion_points[o], inflexion_points_yval[o], pch = 19)
-    lines(spline_base)
+    plot(sp)
+    points(inx[o], iny[o], pch = 19)
+    lines(splineBase)
   }
   
   # Correcting for baseline:
-  baseline_corrected <- undetrended_data$undetrended - spline_base
+  baseCor <- dat - splineBase
   if(plot){
-    plot(baseline_corrected, type = "l")
+    plot(baseCor, type = "l")
     # Plot new baseline (y = 0)
-    lines(1:length(undetrended_data$undetrended), seq(from = 0, to = 0, length.out = length(undetrended_data$undetrended)))
+    lines(1:length(dat), seq(from = 0, to = 0, length.out = length(dat)))
   }
   
-  return(baseline_corrected)
+  return(baseCor)
 }
 
-# Find average:
+
+### Find average wave:
 
 # p = pulse
 # ao = after_o
@@ -122,46 +189,7 @@ find_average <- function(p, ao){
   return(as.vector(average_wave))
 }
 
-
-find_w <- function(dat, d1, d1p, sp, plot = FALSE){
-  
-  #Plot the y values:
-  if(plot){
-    plot(spline_poly)
-    points(inflexion_points, inflexion_points_yval, pch = 19)
-  }
-  ## Finding W  (note that the quantile threshold 0.95 needs adjusting for some datasets)
-  # Find inflexion points on deriv1_poly
-  inflexion_points_deriv1 <- solve(d1p, b = 0, deriv = 1)
-  inflexion_points_deriv1_yval <- predict(d1p, inflexion_points_deriv1)
-  if(plot){
-    plot(d1p)
-    points(inflexion_points_deriv1, inflexion_points_deriv1_yval, pch = 19)
-  }
-  # Find correct threshold using histogram
-  # hdat<-hist(deriv1)
-  quantiles<-quantile(d1,probs=c(.025,.95))      ## this still needs adjusting based on source data              
-  threshold<-quantiles[2]
-  # Identifying peaks of deriv1_poly:
-  w_poly_peaks <- predict(d1p, inflexion_points_deriv1)
-  w_poly_peaks <- which(w_poly_peaks > threshold)     
-  w_poly_peaks <- inflexion_points_deriv1[w_poly_peaks]
-  w_poly_deriv_yval <- predict(d1p, w_poly_peaks)
-  w_poly_peaks_yval <- predict(sp, w_poly_peaks)
-  
-  
-  # Plot on deriv1_poly
-  if(plot){
-    plot(d1p)
-    points(w_poly_peaks, w_poly_deriv_yval, pch = 19)
-    # Plot back on spline_poly:
-    plot(sp)
-    points(w_poly_peaks, w_poly_peaks_yval, pch = 19)
-  }
-  
-  df <- data.frame(w_poly_peaks, w_poly_peaks_yval, w_poly_deriv_yval)
-  return(df)
-}
+###Find u and v points on systolic incline: 
 
 
 find_u_v <- function(dat, wx, wy, d1, d1p, spline, spline_o, plot = FALSE){
@@ -221,8 +249,12 @@ find_u_v <- function(dat, wx, wy, d1, d1p, spline, spline_o, plot = FALSE){
   }
   
   df <- data.frame(u, u_yval, v, v_yval)
+  colnames(df) <- c("uX", "uY", "vX", "vY")
   return(df)
 }
+
+
+##Different function for finding w, u and v?? 
 
 #p = pulse2
 #col_len = source_data_column_length
@@ -298,6 +330,34 @@ find_wuv <- function(p, col_len, p_w){
   wuv <- data.frame(w, wy, u_x, u_y, v_x, v_y)  # notch_x, notch_y
   return(wuv)
 }
+
+
+
+
+find_o <- function(wx, inx, iny, d1p, sp){
+  o <- c()
+  for(i in 1:length(wx)){
+    o[i] <- max(which(inx < wx[i]))
+  }
+  # Adjust for early O points:
+  # First find O based on inflection point on first deriv:
+  inflexD1 <- solve(d1p, b = 0, deriv = 1)
+  o2 <- c()
+  for(i in 1:length(wx)){
+    o2[i] <- max(which(inflexD1 < wx[i]))
+  }
+  # Use the O derived from 1st deriv if its y-val is above 0: 
+  for(i in 1:length(wx)){
+    if((inx[o][i] - inflexD1[o2][i]) < 0){
+      inx[o][i] <- inflexD1[o2][i]
+      iny[o][i] <- predict(sp, inx[o][i]) 
+    }
+  }
+return(o)
+}
+
+
+### Find w point (peak of first deriv)
 
 find_w <- function(d1p, deriv1, sp){
   
@@ -526,12 +586,15 @@ find_w <- function(d1p, deriv1, sp){
   }
   Ws <- Ws[-1, ]
   Ws <-Ws[-nrow(Ws), ]
+  
+  colnames(Ws) <- c("wX", "wY", "wYD1")
   return(Ws)
 }
 
-###FIND OSND 
 
 
+
+###Find OSND points
 
 #p_w = poly_wave
 #p = pulse2
@@ -744,6 +807,9 @@ find_osnd <- function(p, p_w, col_len, wuvn, ow, plot=FALSE){
 }
 
 
+
+#Find the sine curves for S and D peaks 
+
 find_sd_sine <- function(p, wuvn, osndx, osndy, pw, plot=FALSE){
   x. = 1:(length(p$x))
   s_sine <- list()
@@ -790,6 +856,7 @@ find_sd_sine <- function(p, wuvn, osndx, osndy, pw, plot=FALSE){
 }
 
 
+#Fit the N sine using the S and D sines 
 
 fit_n_sine <- function(p, ss, ds, osndx, osndy, wuvn, plot=FALSE){
   x. = 1:(length(p$x))
@@ -856,6 +923,9 @@ fit_n_sine <- function(p, ss, ds, osndx, osndy, wuvn, plot=FALSE){
   }
   return(n_sine)
 }
+
+
+#Find OSND of average waves 
 
 # aw <- average_wave
 # dp <- diastolic peak
@@ -1113,6 +1183,9 @@ preproc <- function(data){
   return(undetrended_data)
 }
 
+
+
+#Refit the peaks estimated by the sine functions 
 
 ##Takes in the current estimated values for the S, N and D curves and refits them using the trace derivatives 
 #p=pulse2
