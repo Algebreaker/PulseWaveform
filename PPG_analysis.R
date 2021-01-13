@@ -165,7 +165,7 @@ for(i in 2:ncol(pulse)){
 ########################################################################
 
 
-tmp <- diast_pk(avw = avWave, sr = samplingRate)
+tmp <- diast_pk(avw = avWave, sr = samplingRate, scale = F)
 dPeak <- tmp[1]
 xShift <- tmp[2]
 rm(tmp)
@@ -185,10 +185,15 @@ if((osnd$x[4]-osnd$x[3]) < 1.5 & (osnd$x[4]-osnd$x[3]) > 0){
 
 ## Find OSND for each individual wave:
 # Make a list of OSND for each individual wave in pulse:
+scale <- 1   # Set to 1 if scaling
 osnd_all <- list()
 for(i in 2:ncol(pulse)){  #ncol(pulse)
   wavi <- pulse[, i][!is.na(pulse[, i])]
-  xShift2 <- (which(abs(wavi - 0.5) == min(abs(wavi - 0.5))))  # the new 0.5 
+  if(scale == 1){
+    xShift2 <- which.min(abs(wavi))
+  }else{
+    xShift2 <- (which(abs(wavi - 0.5) == min(abs(wavi - 0.5))))  # the new 0.5 
+  }
   diff <- xShift - xShift2
   dpa <- dPeak - diff
   osnd_all[[i-1]] <- osnd_of_average(aw = wavi, dp = dpa, diff = diff, sr = samplingRate)
@@ -197,5 +202,5 @@ for(i in 2:ncol(pulse)){  #ncol(pulse)
 # Can plot all OSND values against the average to see if there are any obvious anomalies:
 plot(avWave[!is.na(avWave)], type = "l")
 for(i in 1:length(osnd_all)){
-  points(osnd_all[[i]][3, 1], osnd_all[[i]][3, 2])
+  points(osnd_all[[i]][3, 1], osnd_all[[i]][3, 2], col = "red")
 }
