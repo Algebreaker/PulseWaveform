@@ -1,3 +1,17 @@
+# PPG function list:
+# 1. Baseline
+# 2. Clean_wuv
+# 3. diast_pk
+# 4. find_average
+# 5. find_u_v
+# 6. find_o
+# 7. find_w
+# 8. osnd_of_average
+# 9. preproc
+# 10. sep_beats
+# 11. spectrum
+# 12. find_sd
+# 13. preclean_wuv
 
 
 baseline <- function(inx, iny, o, dat, sp, plot = FALSE){
@@ -25,11 +39,38 @@ baseline <- function(inx, iny, o, dat, sp, plot = FALSE){
 
 
 
-clean_wuv <- function(wuv, sp, inx, o){
+clean_wuv <- function(wuv, sp, inx, o, samp, bc, q = FALSE){
   
-  # Remove u values that are implausibly far from baseline
-  falseU <- which(wuv$uY > (median(wuv$uY) + std(wuv$uY)) | wuv$uY < -50)
-  if(length(falseU) > 1){
+  # Remove u values that are implausibly far from baseline                             
+  falseU <- c()
+  for(i in 1:(nrow(wuv)-1)){
+    if(wuv$uY[i] > (median(wuv$uY) + 2*std(wuv$uY)) & wuv$uY[i] > 1 & wuv$uY[i] > wuv$uY[i+1]*2 | wuv$uY[i] < -50){
+      falseU[i] <- i
+    }
+  }
+  if(length(falseU) > 0){
+    falseU <- falseU[!is.na(falseU)]
+    cat("\n", length(falseU), "/", nrow(wuv), "waves removed due to U having an abnormally high y-value relative to baseline")
+    if(q == TRUE){
+      plotyyy <- 0
+      while(plotyyy == 0){
+        plotyy <- readline(prompt = "Would you like to view? (enter yes or no)")
+        if(plotyy == "yes"){
+          for(i in 1:length(falseU)){
+            plot((wuv$wX[falseU[i]]-samp*2):(wuv$wX[falseU[i]]+samp*2), bc[(wuv$wX[falseU[i]]-samp*2):(wuv$wX[falseU[i]]+samp*2)], type = "l")
+            points(wuv$uX[falseU[i]], wuv$uY[falseU[i]])
+            points(wuv$uX[falseU[i]-1], wuv$uY[falseU[i]-1])
+            points(wuv$uX[falseU[i]+1], wuv$uY[falseU[i]+1])
+          }
+          plotyyy <- 1
+        }
+        if(plotyy == "no"){
+          cat("\n", "ok") 
+          plotyyy <- 1
+        }
+        if(plotyy != "yes" & plotyy != "no"){cat("\n", "please enter 'yes' or 'no'")}
+      }
+    }
     wuv <- wuv[-falseU, ]
   }
   
@@ -42,14 +83,36 @@ clean_wuv <- function(wuv, sp, inx, o){
     dup <- which(diffVU == 0)
     wuv <- wuv[-dup, ]
     diffVU <- diffVU[-dup]
+    cat(length(which(diffVU == 0)), "/", nrow(wuv), "waves removed due to scale factors of 0 (u and v incorrectly identified)")
   }
   
   # Make a vector of waves with abnormally small scale factors and remove them:
-  falseScale <- which(diffVU < (median(diffVU) - 4*(std(diffVU))))
+  falseScale <- which(diffVU < (median(diffVU) - 5*(std(diffVU))))   # changed 4* to 5*
   if(length(falseScale) > 1){
+    cat("/n", length(falseScale), "/", nrow(wuv), "waves removed due to scale factors of 0 (u and v incorrectly identified)")
+    if(q == TRUE){
+      plotyyy <- 0
+      while(plotyyy == 0){
+        plotyy <- readline(prompt = "Would you like to view? (enter yes or no)")
+        if(plotyy == "yes"){
+          for(i in 1:length(falseScale)){
+            plot((wuv$wX[falseScale[i]]-samp*2):(wuv$wX[falseScale[i]]+samp*2), bc[(wuv$wX[falseScale[i]]-samp*2):(wuv$wX[falseScale[i]]+samp*2)], type = "l")
+            points(wuv$uX[falseScale[i]], wuv$uY[falseScale[i]])
+            points(wuv$vX[falseScale[i]], wuv$vY[falseScale[i]])
+          }
+          plotyyy <- 1
+        }
+        if(plotyy == "no"){
+          cat("\n", "ok") 
+          plotyyy <- 1
+        }
+        if(plotyy != "yes" & plotyy != "no"){cat("\n", "please enter 'yes' or 'no'")}
+      }
+    }
     wuv <- wuv[-falseScale, ]
     diffVU <- diffVU[-falseScale]
   }
+  
   
   ## Find o points again:
   oY <- predict(sp, inx[o])
@@ -76,17 +139,49 @@ clean_wuv <- function(wuv, sp, inx, o){
   
   # Remove last W:
   wuv <- wuv[-nrow(wuv), ]
+  diffVU <- diffVU[-length(diffVU)]  
   
   # Make a vector of abnormal IBIs (the waves at the end of a sequence / before an artefact): 
   #plot(ibi)
   #points(which(ibi > 1.3*median(ibi)), ibi[which(ibi > 1.3*median(ibi))], pch = 19, col = "red")
-  end_waves <- which(ibi > 1.3*median(ibi))
+  endWaves <- c()
+  for(i in 2:(length(ibi)-1)){
+    if(ibi[i] > 1.3*median(ibi) & ibi[i] > 2*ibi[i-1]){
+      endWaves[i] <- i 
+    }
+  }
   
   # Remove end_waves from all vectors:
-  if(length(end_waves) > 1){
-    wuv <- wuv[-end_waves, ]
-    diffVU <- diffVU[-length(diffVU)]
-    diffVU <- diffVU[-end_waves]
+  if(length(endWaves) > 1){
+    endWaves <- endWaves[!is.na(endWaves)]
+    cat("\n", length(endWaves), "/", nrow(wuv), "waves removed due to the end of the wave (next o point) not being corrected for baseline")
+    if(q == TRUE){
+      plotyyy <- 0
+      while(plotyyy == 0){
+        plotyy <- readline(prompt = "Would you like to view? (enter yes or no)")
+        if(plotyy == "yes"){
+          for(i in 1:length(endWaves)){
+            if(endWaves[i] == 1){
+              plot(1:(samp*10), bc[1:(samp*10)], type = "l")
+              points(wuv$wX[endWaves[i]], wuv$wY[endWaves[i]], pch =19, col = 'red')
+            }else{
+              plot((wuv$wX[endWaves[i]]-samp*5):(wuv$wX[endWaves[i]]+samp*5), bc[(wuv$wX[endWaves[i]]-samp*5):(wuv$wX[endWaves[i]]+samp*5)], type = "l")
+              points(wuv$wX[endWaves[i]], wuv$wY[endWaves[i]], pch =19, col = 'red')
+              points(wuv$wX[endWaves[i]+1], wuv$wY[endWaves[i]+1], pch = 19, col = 'red')
+              points(wuv$wX, wuv$wY)
+            }
+          }
+          plotyyy <- 1
+        }
+        if(plotyy == "no"){
+          cat("\n", "ok") 
+          plotyyy <- 1
+        }
+        if(plotyy != "yes" & plotyy != "no"){cat("\n", "please enter 'yes' or 'no'")}
+      }
+    }
+    wuv <- wuv[-endWaves, ]
+    diffVU <- diffVU[-endWaves]
   }
   d <- cbind(wuv, diffVU)
   dat <- list(d, ibi, oDiff)
@@ -292,7 +387,7 @@ find_o <- function(wx, inx, iny, d1p, sp){
       iny[o][i] <- predict(sp, inx[o][i]) 
     }
   }
-return(o)
+  return(o)
 }
 
 
@@ -774,12 +869,12 @@ preproc <- function(data){
 
 
 
-sep_beats <- function(odiff, bc, dat, samp, wuv, wvlen){
+sep_beats <- function(odiff, bc, samp, wuv, wvlen, inx, o, ibi, scale = TRUE, q = FALSE){   
   # Redefine baseline corrected data:
-  sourcedata <- baseCor[1:length(undetrended)]
+  sourcedata <- bc[1:length(undetrended)]
   
   # Define a dataframe to contain individual waves (first column is the x-axis (in seconds) - currently set for bioradio data):
-  pulse <- data.frame(seq((-141/(samplingRate*10)), ((waveLen*10 -9)-142)/(samplingRate*10), by = 1/(samplingRate*10)))   
+  pulse <- data.frame(seq((-141/(samp*10)), ((wvlen*10 -9)-142)/(samp*10), by = 1/(samp*10)))   
   
   
   afterO <- list()
@@ -788,48 +883,54 @@ sep_beats <- function(odiff, bc, dat, samp, wuv, wvlen){
   for(i in 1:(length(wuv$wX))){  
     
     # Make a polynomial spline of rounded u - 15 : rounded u + waveLen - 10:   # Now row 141 in xxxx = 0, therefore u = 0 
-    splPolySub <- CubicInterpSplineAsPiecePoly((round(wuv$uX[i])-15):(round(wuv$uX[i]) + (waveLen-10)), sourcedata[(round(wuv$uX[i])-15):(round(wuv$uX[i]) + (waveLen-10))], "natural")
+    splPolySub <- CubicInterpSplineAsPiecePoly((round(wuv$uX[i])-15):(round(wuv$uX[i]) + (wvlen-10)), sourcedata[(round(wuv$uX[i])-15):(round(wuv$uX[i]) + (wvlen-10))], "natural")
     
     # Turn into discrete form
-    splSub <- predict(splPolySub, c(seq((wuv$uX[i]-14), (wuv$uX[i]+(waveLen-15)), 0.1)))  
+    splSub <- predict(splPolySub, c(seq((wuv$uX[i]-14), (wuv$uX[i]+(wvlen-15)), 0.1)))  
     
     # Make into dataframe:
     splSub <-  as.data.frame(splSub)
-    splSub <- cbind(splSub, c(seq((wuv$uX[i]-14), (wuv$uX[i]+(waveLen-15)), 0.1)))
-    colnames(splSub) <- c('y', 'x') 
+    splSub <- cbind(splSub, c(seq((wuv$uX[i]-14), (wuv$uX[i]+(wvlen-15)), 0.1)))
+    colnames(splSub) <- c('y', 'x')  
     # Scale so that v-u = 1
-    splSub$y <- splSub$y/(wuv$diffVU[i])     
+    if(scale == TRUE){
+      splSub$y <- splSub$y/(wuv$diffVU[i])      
+    }
     # Adjust such that u = 0, v = 1 on y-axis
-    yDiff <- splSub$y[141]  #??????          
+    yDiff <- splSub$y[141] 
     splSub$y <- splSub$y - yDiff
     
-    # Find the x-value for each wave that corresponds to when it = 0.5 in height (this requires making a spline):
-    splPolySub2 <- CubicInterpSplineAsPiecePoly(splSub$x, splSub$y, "natural")
-    halfCross <- solve(splPolySub2, b = 0.5, deriv = 0)
-    halfCross <- halfCross[which(abs(halfCross - wuv$wX[i]) == min(abs(halfCross - wuv$wX[i])))]    
-    
-    # Convert to discrete form again: (need to redefine splSub)
-    splSub2 <- predict(splPolySub, c(seq((halfCross-14), (halfCross+(waveLen-15)), 0.1)))  
-    splSub2 <-  as.data.frame(splSub2)
-    splSub2 <- cbind(splSub2, c(seq((halfCross-14), (halfCross+(waveLen-15)), 0.1)))  
-    colnames(splSub2) <- c('y', 'x') 
-    
-    # Scale again
-    splSub2$y <- splSub2$y/(wuv$diffVU[i]) 
-    # Adjust y-axis such that u = 0, v = 1
-    yDiff <- wuv$uY[i] / wuv$diffVU[i]
-    splSub2$y <- splSub2$y - yDiff
+    if(scale == TRUE){
+      # Find the x-value for each wave that corresponds to when it = 0.5 in height (this requires making a spline):
+      splPolySub2 <- CubicInterpSplineAsPiecePoly(splSub$x, splSub$y, "natural")
+      halfCross <- solve(splPolySub2, b = 0.5, deriv = 0)
+      halfCross <- halfCross[which(abs(halfCross - wuv$wX[i]) == min(abs(halfCross - wuv$wX[i])))]    
+      
+      # Convert to discrete form again: (need to redefine splSub)
+      splSub2 <- predict(splPolySub, c(seq((halfCross-14), (halfCross+(wvlen-15)), 0.1)))  
+      splSub2 <-  as.data.frame(splSub2)
+      splSub2 <- cbind(splSub2, c(seq((halfCross-14), (halfCross+(wvlen-15)), 0.1)))  
+      colnames(splSub2) <- c('y', 'x') 
+      
+      # Scale again
+      splSub2$y <- splSub2$y/(wuv$diffVU[i]) 
+      # Adjust y-axis such that u = 0, v = 1
+      yDiff <- wuv$uY[i] / wuv$diffVU[i]
+      splSub2$y <- splSub2$y - yDiff
+    }else{
+      splSub2 <- splSub
+    }
     
     # Find next_o
-    afterO[[i]] <- which(splSub2$x > inflexX[o][min(which(inflexX[o] > wuv$wX[i]))])
+    afterO[[i]] <- which(splSub2$x > inx[o][min(which(inx[o] > wuv$wX[i]))])
     
     # Occassionely can get some unusually long waves that have been baseline corrected i.e two systolic peaks merged, these will return integer(o) for the above line - the below checks if o-o difference is unusally large for a wave
-    if( (inflexX[o][min(which(inflexX[o] > wuv$wX[i]))]) -  (inflexX[o][max(which(inflexX[o] < wuv$wX[i]))]) > (median(ibi)*1.3)  ){
+    if( (inx[o][min(which(inx[o] > wuv$wX[i]))]) -  (inx[o][max(which(inx[o] < wuv$wX[i]))]) > (median(ibi)*1.3)){
       extra_long_wave[length(extra_long_wave) + 1] <- i
     }
     
     # Find values before the o of the wave itself 
-    beforeO[[i]] <- which(splSub2$x < inflexX[o][max(which(inflexX[o] < wuv$wX[i]))])
+    beforeO[[i]] <- which(splSub2$x < inx[o][max(which(inx[o] < wuv$wX[i]))])
     
     # Correct such that x column and wave column are correctly aligned
     splSub3 <- c()
@@ -897,22 +998,237 @@ sep_beats <- function(odiff, bc, dat, samp, wuv, wvlen){
   }
   
   # Remove any extra long waves (i.e where a distance of 2 Os has been counted as one wave):
-  if(length(extra_long_wave) > 0){
-    pulse <- pulse[, -(extra_long_wave + 1)]
-  }
-  
-  # Remove extra tall waves:
-  tall_waves <- c()
+  # find average length of waves (without NAs) in pulse
+  wavelengths <- c()
   for(i in 2:ncol(pulse)){
-    if(max(abs(pulse[, i][!is.na(pulse[, i])])) > 1.5){
-      tall_waves[i] <- i
+    wavelengths[i] <- length(pulse[, i][!is.na(pulse[, i])])  
+  }
+
+  # Make sure the extra long waves are not similar length to the waves either side of them. 
+  if(length(extra_long_wave[!is.na(extra_long_wave)]) > 0){
+    # Correct for if the first wave is extra long:
+    if(extra_long_wave[1] == 1){extra_long_wave <- extra_long_wave[-1]}
+    for(i in 1:length(extra_long_wave)){    
+      if(wavelengths[extra_long_wave[i]] < 1.8*wavelengths[extra_long_wave[i]-1]){
+        extra_long_wave[i] <- NA
+      }
+    }
+    extra_long_wave <- extra_long_wave[!is.na(extra_long_wave)]
+    if(length(extra_long_wave) > 0){
+      cat("\n", length(extra_long_wave), "/", (ncol(pulse)-1), "waves removed for being abnormally long")
+      if(q == TRUE){
+        plotyyy <- 0
+        while(plotyyy == 0){
+          plotyy <- readline(prompt = "Would you like to view? (enter yes or no)")
+          if(plotyy == "yes"){
+            for(i in 1:length(extra_long_wave)){
+              plot((wuv$wX[extra_long_wave[i]]-samp*2):(wuv$wX[extra_long_wave[i]]+samp*2), bc[(wuv$wX[extra_long_wave[i]]-samp*2):(wuv$wX[extra_long_wave[i]]+samp*2)], type = "l")
+              points(wuv$wX[extra_long_wave[i]], wuv$wY[extra_long_wave[i]], pch =19, col = 'red')
+            }
+            plotyyy <- 1
+          }
+          if(plotyy == "no"){
+            cat("\n", "ok") 
+            plotyyy <- 1
+          }
+          if(plotyy != "yes" & plotyy != "no"){cat("\n", "please enter 'yes' or 'no'")}
+        }
+      }
+      pulse <- pulse[, -(extra_long_wave[!is.na(extra_long_wave)])]  # used to be (extra_long_wave + 1).. unsure why
     }
   }
-  tall_waves <- tall_waves[!is.na(tall_waves)]
-  if(length(tall_waves) > 0){
-    pulse <- pulse[, -c(tall_waves)]
+    
+    
+  
+  # Remove tall waves:
+  nodontdothis <- 1
+  if(nodontdothis != 1){
+    tall_waves <- c()
+    for(i in 2:ncol(pulse)){
+      if(max(abs(pulse[, i][!is.na(pulse[, i])])) > 1.75){   
+        tall_waves[i] <- i
+      }
+    }
+    if(length(tall_waves) > 0){
+      tall_waves <- tall_waves[!is.na(tall_waves)]
+      cat("\n", length(tall_waves), "/", (ncol(pulse)-1), "waves removed for being abnormally high amplitude")
+      if(q == TRUE){
+        plotyyy <- 0
+        while(plotyyy == 0){
+          plotyy <- readline(prompt = "Would you like to view? (enter yes or no)")
+          if(plotyy == "yes"){
+            for(i in 1:length(tall_waves)){
+              plot((wuv$wX[tall_waves[i]-1]-samp*4):(wuv$wX[tall_waves[i]-1]+samp*4), bc[(wuv$wX[tall_waves[i]-1]-samp*4):(wuv$wX[tall_waves[i]-1]+samp*4)], type = "l")
+              lines(1:100000, rep(0, 100000))
+              points(wuv$wX[tall_waves[i]-1], wuv$wY[tall_waves[i]-1], pch = 19, col = "red")
+              points(wuv$wX, wuv$wY)
+              points(wuv$uX, wuv$uY)
+              points(wuv$vX, wuv$vY)
+              plot(pulse[, tall_waves[i]])
+            }
+            plotyyy <- 1
+          }
+          if(plotyy == "no"){
+            cat("\n", "ok") 
+            plotyyy <- 1
+          }
+          if(plotyy != "yes" & plotyy != "no"){cat("\n", "please enter 'yes' or 'no'")}
+        }
+      }
+      pulse <- pulse[, -c(tall_waves)]
+    }
   }
+  
+  # Find average wave:
   average_wave <- find_average(p = pulse, ao = afterO)
+  
+  # Find the SD wave:
+  sd_wave <- find_sd(p = pulse, ao = afterO)
+  
+  # More cleaning:
+  
+  # Waves that enter a second systolic upstroke
+  systolic_endings <- c()
+  for(i in 2:ncol(pulse)){
+    wave <- pulse[, i] 
+    wave <- wave[!is.na(wave)]
+    if(wave[length(wave)] > 0.25){          
+      systolic_endings[i] <- i
+    }   
+  }
+  systolic_endings <- systolic_endings[!is.na(systolic_endings)]
+  if(length(systolic_endings) > 0){
+    cat("\n", length(systolic_endings), "/", (ncol(pulse)-1), "waves removed for including the following systolic upstroke")
+    if(q == TRUE){
+      plotyyy <- 0
+      while(plotyyy == 0){
+        plotyy <- readline(prompt = "Would you like to view? (enter yes or no)")
+        if(plotyy == "yes"){
+          for(i in 1:length(systolic_endings)){
+            plot(pulse[, systolic_endings[i]])
+          }
+          plotyyy <- 1
+        }
+        if(plotyy == "no"){
+          cat("\n", "ok") 
+          plotyyy <- 1
+        }
+        if(plotyy != "yes" & plotyy != "no"){cat("\n", "please enter 'yes' or 'no'")}
+      }
+    }
+    pulse <- pulse[, -systolic_endings]
+  }
+  
+  # Waves that fall significantly below O:
+  drops_below_o <- c()
+  for(i in 2:ncol(pulse)){
+    wave <- pulse[, i][!is.na(pulse[, i])]
+    if((min(wave) < wave[1]*2 | min(wave) < min(average_wave[!is.na(average_wave)])*2) & min(wave) < 0){  # threhold subject to change
+      drops_below_o[i] <- i
+    }
+  }
+  drops_below_o <- drops_below_o[!is.na(drops_below_o)]
+  if(length(drops_below_o) > 0){
+    cat("\n", length(drops_below_o), "/", (ncol(pulse)-1), "waves removed for having values significantly below baseline")
+    if(q == TRUE){
+      plotyyy <- 0
+      while(plotyyy == 0){
+        plotyy <- readline(prompt = "Would you like to view? (enter yes or no)")
+        if(plotyy == "yes"){
+          for(i in 1:length(drops_below_o)){
+            plot(pulse[, drops_below_o[i]])
+          }
+          plotyyy <- 1
+        }
+        if(plotyy == "no"){
+          cat("\n", "ok") 
+          plotyyy <- 1
+        }
+        if(plotyy != "yes" & plotyy != "no"){cat("\n", "please enter 'yes' or 'no'")}
+      }
+    }
+    pulse <- pulse[, -drops_below_o]
+  }
+  
+  
+  # Recalculate average after removing the most aberrant waves:
+  average_wave <- find_average(p = pulse, ao = afterO)
+  
+  # Remove waves that have a high SD of residuals:
+  resid_sd <- c()
+  for(i in 2:ncol(pulse)){
+    residuals <- average_wave[142:length(average_wave)] - pulse[, i][142:length(pulse[, i])]
+    resid_sd[i] <- sd(residuals[!is.na(residuals)])
+  }
+  resid_sd <- sqrt(resid_sd)
+  resid_sd <- resid_sd[-1] # remove the NA
+  thld <- mean(resid_sd) + sd(resid_sd)*2   # threshold could be adjusted
+  hrsd_waves <- which(resid_sd > thld) + 1  # (+1 since we removed the NA)
+  if(length(hrsd_waves) > 0){
+    cat("\n", length(hrsd_waves), "/", (ncol(pulse)-1), "waves removed for having high residual SD")
+    if(q == TRUE){
+      plotyyy <- 0
+      while(plotyyy == 0){
+        plotyy <- readline(prompt = "Would you like to view? (enter yes or no)")
+        if(plotyy == "yes"){
+          for(i in 1:length(hrsd_waves)){
+            plot(pulse[, hrsd_waves[i]])
+          }
+          plotyyy <- 1
+        }
+        if(plotyy == "no"){
+          cat("\n", "ok") 
+          plotyyy <- 1
+        }
+        if(plotyy != "yes" & plotyy != "no"){cat("\n", "please enter 'yes' or 'no'")}
+      }
+    }
+    pulse <- pulse[, -hrsd_waves]
+  }
+  
+  
+  # Waves that are beyond 5 SDs away from the average:
+  outlier_waves <- c()
+  for(i in 2:ncol(pulse)){
+    breaches <- c()
+    wave <- pulse[, i]
+    for(j in 142:length(wave)){   # look only after w
+      if(is.na(pulse[j, i]) == FALSE & is.na(average_wave[j] + 5*sd_wave[j]) == FALSE){
+        if(pulse[j, i] > (average_wave[j] + 5*sd_wave[j]) | pulse[j, i] < (average_wave[j] - 5*sd_wave[j])){
+          breaches[j] <- 1
+        }
+      }
+    }
+    if(sum(breaches[!is.na(breaches)]) > 0){
+      outlier_waves[i] <- i
+    }
+  }
+  outlier_waves <- outlier_waves[!is.na(outlier_waves)]
+  if(length(outlier_waves) > 0){
+    cat("\n", length(outlier_waves), "/", (ncol(pulse)-1), "waves removed for having values beyond 5 SDs from the average")
+    if(q == TRUE){
+      plotyyy <- 0
+      while(plotyyy == 0){
+        plotyy <- readline(prompt = "Would you like to view? (enter yes or no)")
+        if(plotyy == "yes"){
+          for(i in 1:length(outlier_waves)){
+            plot(pulse[, outlier_waves[i]])
+          }
+          plotyyy <- 1
+        }
+        if(plotyy == "no"){
+          cat("\n", "ok") 
+          plotyyy <- 1
+        }
+        if(plotyy != "yes" & plotyy != "no"){cat("\n", "please enter 'yes' or 'no'")}
+      }
+    }
+    pulse <- pulse[, -outlier_waves]
+  }
+  
+  
+  # Final recalculation of average wave:
+  average_wave <- find_average(p = pulse, ao = afterO) 
   
   dat <- list(average_wave, pulse)
   return(dat)
@@ -964,4 +1280,106 @@ spectrum <- function(baseline_corrected){
   spectralratio
   return(spectralratio)
   
+}
+
+
+find_sd <- function(p, ao){
+  
+  # Find the last 10 values of each wave:
+  last10 <- list()
+  for(i in 2:(ncol(p))){
+    last10[[i-1]] <- p[, i][!is.na(p[, i])][(length(p[, i][!is.na(p[, i])])-10):(length(p[, i][!is.na(p[, i])]))]
+  }
+  
+  # Find the average last 10 values
+  mean_last10 <- c()
+  for(i in 1:10){   
+    row_vector <- c()
+    for(j in 1:length(last10)){      
+      row_vector[j] <- last10[[c(j, i)]] 
+    }
+    mean_last10[i] <- mean(row_vector[!is.na(row_vector)])   
+  }
+  
+  # Find the consecutive y-axis differences (gradient essentially) of last 10 values:
+  mean_diff_last10 <- c()
+  for(i in 1:9){                    # 9 here since 10 values will give 9 values for differences between them
+    mean_diff_last10[i] <- mean_last10[i+1] - mean_last10[i]
+  }
+  
+  # Replace NA values with continuing downward gradient in a clone dataframe:
+  p_for_finding_average <- p
+  for(i in 2:(ncol(p_for_finding_average))){
+    for(j in 1:length(p_for_finding_average[, i][ao[[(i-1)]][-1]])){
+      p_for_finding_average[, i][ao[[(i-1)]][-1]][j] <- p_for_finding_average[, i][ao[[(i-1)]][1]] + j*mean(mean_diff_last10[1:5])
+    }
+  }
+  
+  # Calculate the average wave by row:
+  average_wave <- c()
+  sd_wave <- c()
+  median_wave <- c()
+  for(i in 1:nrow(p_for_finding_average)){
+    row_vector <- c()
+    for(j in 2:(ncol(p_for_finding_average))){
+      row_vector[j-1] <- p_for_finding_average[i, j] 
+    }
+    average_wave[i] <- mean(row_vector[!is.na(row_vector)])   
+    sd_wave[i] <- sd(row_vector[!is.na(row_vector)]) 
+    median_wave[i] <- median(row_vector[!is.na(row_vector)])
+  }
+  
+  return(as.vector(sd_wave))
+}
+
+
+preclean_wuv <- function(w, uv, o, samp, sp, q = FALSE){
+  
+  # Find where W lies from U to V on the x-axis, for each wave find the percentage distance to V: 
+  vDist <- c()
+  for(i in 1:length(w$wX)){
+    vDist[i] <- (w$wX[i] - uv$uX[i]) / (uv$vX[i] - uv$uX[i])*100
+  }
+  #plot(w$wX, vDist, type = "l")
+  
+  # Make a vector of abnormal pdtv (allowing any values between 30 and 70): 
+  sdpdtv <- sd(vDist)
+  pdtvWaves <- c(which(vDist > (sdpdtv + median(vDist)) & vDist > 70), which(vDist < (median(vDist) - sdpdtv) & vDist < 30))
+  
+  # Remove pdtvWaves:
+  if(length(pdtvWaves) > 0){
+    cat("\n", length(pdtvWaves), "waves removed due to abnormal distances between u, v and w" )
+    if(q == TRUE){
+      plotyyy <- 0
+      while(plotyyy == 0){
+        plotyy <- readline(prompt = "Would you like to view? (enter yes or no)")
+        if(plotyy == "yes"){
+          for(i in 1:length(pdtvWaves)){
+            if(pdtvWaves[i] == 1){
+              plot(1:(samp*10), sp[1:(samp*10)], type = "l")
+              points(w$wX, w$wY)
+              points(w$wX[pdtvWaves[i]], w$wY[pdtvWaves[i]], pch =19, col = 'red')
+              points(uv$uX, uv$uY)
+              points(uv$vX, uv$vY)
+            }else{
+              plot((w$wX[pdtvWaves[i]]-samp*5):(w$wX[pdtvWaves[i]]+samp*5), sp[(w$wX[pdtvWaves[i]]-samp*5):(w$wX[pdtvWaves[i]]+samp*5)], type = "l")
+              points(w$wX, w$wY)
+              points(w$wX[pdtvWaves[i]], w$wY[pdtvWaves[i]], pch =19, col = 'red')
+              points(uv$uX, uv$uY)
+              points(uv$vX, uv$vY)
+            }
+          }
+          plotyyy <- 1
+        }
+        if(plotyy == "no"){
+          cat("\n", "ok") 
+          plotyyy <- 1
+        }
+        if(plotyy != "yes" & plotyy != "no"){cat("\n", "please enter 'yes' or 'no'")}
+      }
+    }
+    w <- w[-pdtvWaves, ]
+    uv <- uv[-pdtvWaves, ]
+  }
+  return(list(w, uv))
 }
