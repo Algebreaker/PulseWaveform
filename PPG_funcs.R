@@ -13,7 +13,6 @@
 # 12. find_sd
 # 13. preclean_wuv
 
-
 baseline <- function(inx, iny, o, dat, sp, plot = FALSE){
   # Making a (non-polynomial) spline to fit the baseline
   sfunction2 <- splinefun(inx[o], iny[o], method = "natural")
@@ -190,23 +189,35 @@ clean_wuv <- function(wuv, sp, inx, o, samp, bc, q = FALSE){
 
 
 
-diast_pk <- function(avw, sr){
+diast_pk <- function(avw, sr, scale = F){
   # Find the diastolic peak on the average wave to inform OSND finding (also some adjusment of x-values for removal of NA values):
   avw <- avw[!is.na(avw)]
   
   # Need to find new W position (0.5) after removing NAs
-  xShift <- which(abs(avw-0.5) == min(abs(avw - 0.5)))
+  if(scale == TRUE){
+   xShift <- which.min(abs(avw)) 
+  }else{
+    xShift <- which(abs(avw-0.5) == min(abs(avw - 0.5)))
+  }
   avWavePoly <- CubicInterpSplineAsPiecePoly(1:length(avw), avw, "natural")
   avInflexX <- solve(avWavePoly, b = 0, deriv = 1)
   avInflexY <- predict(avWavePoly, avInflexX)
   
   # Specify limitations for where the diastolic peak can first be found i.e between 120:230 on x-axis, and below 1 on y-axis:
-  peaks <- order(avInflexY[which(avInflexX < 215 & avInflexX > 120 & avInflexY < 1)], decreasing = TRUE)
-  diastPk <- avInflexX[which(avInflexX < 215 & avInflexX > 120 & avInflexY < 1)][peaks[1]]
+  #peaks <- order(avInflexY[which(avInflexX < 215 & avInflexX > 120 & avInflexY < 1)], decreasing = TRUE)  
+  #diastPk <- avInflexX[which(avInflexX < 215 & avInflexX > 120 & avInflexY < 1)][peaks[1]]
+  
+  # OR:
+  # Find any peaks (above 0):
+  peaks_above_0 <- which(avInflexY > 0)
+  peaks <- order(avInflexY[peaks_above_0], decreasing = TRUE)
+  peaks <- peaks_above_0[peaks]
+  diastPk <- avInflexX[peaks[2]]  
+  
   
   # diastPk will be NA for class 3 waveforms, in which case set a default value
   if(is.na(diastPk) | diastPk < avInflexX[peaks[1]]){
-    diastPk <- 10*sr
+    diastPk <- 5*sr
   }
   return(c(diastPk, xShift))
 }
@@ -650,7 +661,7 @@ osnd_of_average <- function(aw, dp, diff, sr){
   }else{
     a. <- which(d1InflxY[notchRange] == max(d1InflxY[notchRange]))
     # In cases where the renal peak is higher on 1st deriv than the notch peak, make sure the notch peak is limited by x-axis
-    while(d1InflxX[notchRange[a.]] < 115){
+    while(d1InflxX[notchRange[a.]] < sr*3){   # was 115 instead of sr*3
       b. <- 2
       a. <- order(d1InflxY[notchRange], decreasing = TRUE)[b.]
       b. <- 3
