@@ -85,23 +85,11 @@ o <- find_o(wx = w$wX, inx = inflexX, iny = inflexY, d1p = deriv1Poly, sp = spli
 #plot(spline1[1:500], type = "l")
 #points(inflexX[o], inflexY[o])
 
-
-# Find where W lies from U to V on the x-axis, for each wave find the percentage distance to V: 
-vDist <- c()
-for(i in 1:length(w$wX)){
-  vDist[i] <- (w$wX[i] - uv$uX[i]) / (uv$vx[i] - uv$uX[i])*100
-}
-#plot(w$wX, vDist, type = "l")
-
-# Make a vector of abnormal pdtv (allowing any values between 35 and 65): 
-sdpdtv <- sd(vDist)
-pdtvWaves <- c(which(vDist > (sdpdtv + median(vDist)) & vDist > 65), which(vDist < (median(vDist) - sdpdtv) & vDist < 35))
-
-# Remove pdtvWaves:
-if(length(pdtvWaves) > 0){
-  w <- w[-pdtvWaves, ]
-  uv <- uv[-pdtvWaves, ]
-}
+# Preclean:
+tmp <- preclean_wuv(w=w, uv=uv, o=o, samp = samplingRate, sp = spline1, q = F)
+w <- tmp[[1]]
+uv <- tmp[[2]]
+rm(tmp)
 
 ########################################################################    
 
@@ -110,7 +98,7 @@ if(length(pdtvWaves) > 0){
 ######################################################################## 
 
 # Correct Baseline
-baseCor <- baseline(inx = inflexX, iny = inflexY, o = o, dat = undetrended, sp = splinePoly, plot=T)
+baseCor <- baseline(inx = inflexX, iny = inflexY, o = o, dat = undetrended, sp = splinePoly, plot=F)
 
 # Redefine discrete splines:
 sfunctionBC <- splinefun(1:length(baseCor), baseCor, method = "natural")
@@ -129,7 +117,7 @@ uv$uY <- predict(splinePolyBC, uv$uX)
 uv$vY <- predict(splinePolyBC, uv$vX)
 
 wuv <- cbind(w, uv)
-tmp <- clean_wuv(wuv = wuv, sp = splinePolyBC, inx = inflexX, o = o)
+tmp <- clean_wuv(wuv = wuv, sp = splinePolyBC, inx = inflexX, o = o, samp = samplingRate, bc = baseCor, q = F)
 wuv <- tmp[[1]]
 ibi <- tmp[[2]]
 oDiff <- tmp[[3]]
@@ -144,10 +132,11 @@ rm(tmp, w, uv)
 # Find the average length of a wave (and 15 since we are starting the wave from before O):
 waveLen <- round(median(oDiff)+15) 
 
-tmp <- sep_beats(odiff = oDiff, bc = baseCor, samp = samplingRate, wuv = wuv, wvlen = waveLen) 
+tmp <- sep_beats(odiff = oDiff, bc = baseCor, samp = samplingRate, wuv = wuv, wvlen = waveLen, ibi=ibi, o=o, inx = inflexX, scale = T, q = F) 
 pulse <- tmp[[2]]
 avWave <- tmp[[1]]
 rm(tmp)
+
 
 # Can now stack and plot the mean +/- median wave 
 
@@ -160,7 +149,7 @@ colnames(average)[1] <- "x"
 ggplot(data = pulse_stacked, aes(x, values, col = wave_ID), col = "black") +
   scale_color_manual(values = rep("black", ncol(pulse))) +  
   geom_line(size = 1.5, alpha = ((1/length(wuv$wX)*10)-(1/length(wuv$wX)))) + geom_line(data = average, aes(x, avWave), size = 1.125, color = "red") +  # ylim will vary based on source data    
-  theme(legend.position = "none") + labs( y= "PPG Output", x = "Time (Seconds)")  # + xlim(c(pulse$x[max(which(is.na(avWave)))], pulse$x[length(avWave)])) + ylim(range(avWave[!is.na(avWave)]*1.5)) 
+  theme(legend.position = "none") + labs( y= "PPG Output", x = "Time (Seconds)") + xlim(-0.25, max(average$x)) # + xlim(c(pulse$x[max(which(is.na(avWave)))], pulse$x[length(avWave)])) + ylim(range(avWave[!is.na(avWave)]*1.5)) 
 
 # Create a polynomial spline for each wave:
 polyWave <- list()
@@ -194,7 +183,6 @@ if((osnd$x[4]-osnd$x[3]) < 1.5 & (osnd$x[4]-osnd$x[3]) > 0){
   osnd <- osnd_of_average(avWave, dp = dPeak, diff = 0)
 }
 
-
 ## Find OSND for each individual wave:
 # Make a list of OSND for each individual wave in pulse:
 osnd_all <- list()
@@ -207,13 +195,7 @@ for(i in 2:ncol(pulse)){  #ncol(pulse)
 }
 
 # Can plot all OSND values against the average to see if there are any obvious anomalies:
-#for(i in 1:length(osnd_all)){
-#  points(osnd_all[[i]][3, 1], osnd_all[[i]][3, 2])
-#}
-
-
-
-##Spectral Analysis
-
-spectralanalysis <- (spectrum(baseCor))
-
+plot(avWave[!is.na(avWave)], type = "l")
+for(i in 1:length(osnd_all)){
+  points(osnd_all[[i]][3, 1], osnd_all[[i]][3, 2])
+}
