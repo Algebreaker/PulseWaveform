@@ -190,9 +190,9 @@ osnd_all <- list()
 for(i in 2:ncol(pulse)){  #ncol(pulse)
   wavi <- pulse[, i][!is.na(pulse[, i])]
   if(scale == 1){
-    xShift2 <- which.min(abs(wavi))
-  }else{
     xShift2 <- (which(abs(wavi - 0.5) == min(abs(wavi - 0.5))))  # the new 0.5 
+  }else{
+    xShift2 <- which.min(abs(wavi))
   }
   diff <- xShift - xShift2
   dpa <- dPeak - diff
@@ -204,3 +204,18 @@ plot(avWave[!is.na(avWave)], type = "l")
 for(i in 1:length(osnd_all)){
   points(osnd_all[[i]][3, 1], osnd_all[[i]][3, 2], col = "red")
 }
+
+
+########################################################################    
+
+#                     Step 6 : Feature Extraction                      #
+
+########################################################################
+
+# First: Correct all OSNDs so that O = 0
+for(i in 1:length(osnd_all)){
+  osnd_all[[i]]$y <- osnd_all[[i]]$y - osnd_all[[i]]$y[1]
+}
+
+# Extract features:
+features <- feature_extract(oa = osnd_all, p = pulse, pw = polyWave)
