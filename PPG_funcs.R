@@ -12,6 +12,7 @@
 # 11. spectrum
 # 12. find_sd
 # 13. preclean_wuv
+# 14. feature_extract
 
 baseline <- function(inx, iny, o, dat, sp, plot = FALSE){
   # Making a (non-polynomial) spline to fit the baseline
@@ -1393,4 +1394,122 @@ preclean_wuv <- function(w, uv, o, samp, sp, q = FALSE){
     uv <- uv[-pdtvWaves, ]
   }
   return(list(w, uv))
+}
+
+
+
+feature_extract <- function(oa, p, pw){
+  
+  # S_values:
+  s_vals <- c()
+  for(i in 1:length(oa)){
+    s_vals[i] <- oa[[i]]$y[2]
+  }
+  
+  # N_values:
+  n_vals <- c()
+  for(i in 1:length(oa)){
+    n_vals[i] <- oa[[i]]$y[3]
+  }
+  
+  # D_values:
+  d_vals <- c()
+  for(i in 1:length(oa)){
+    d_vals[i] <- oa[[i]]$y[4]
+  }
+  
+  # NP_ratio:
+  np_ratio <- c()
+  for(i in 1:length(oa)){
+    np_ratio[i] <- oa[[i]]$y[3] / oa[[i]]$y[2]
+  }
+  
+  # PPT:
+  ppt <- c()
+  for(i in 1:length(oa)){
+    ppt[i] <- oa[[i]]$x[4] - oa[[i]]$x[2]
+  }
+  
+  # Maximum amplitude:
+  max_amp <- c()
+  for(i in 1:length(oa)){
+    inx <- solve(pw[[i]], b = 0, deriv = 1)
+    iny <- predict(pw[[i]], inx)
+    max_amp[i] <- max(iny)
+  }
+  
+  # Total AUC:
+  auc <- c()
+  for(i in 1:length(oa)){
+    wave <- p[, (i+1)]
+    v <- which(!is.na(wave))
+    auc[i] <- AUC(x = v, y = wave[v], method = "spline")
+  }
+  
+  # AUC after peak of systole:
+  auc_s <- c()
+  for(i in 1:length(oa)){
+    wave <- p[, (i+1)]
+    wave <- wave[!is.na(wave)]
+    s <- oa[[i]]$x[2]
+    v <- 1:length(wave)
+    v <- which(v > s)
+    auc_s[i] <- AUC(x = v, y = wave[v], method = "spline")
+  }
+  
+  # Length:
+  l <- c()
+  for(i in 1:length(oa)){
+    l[i] <- length(p[, (i+1)][!is.na(p[, (i+1)])])
+  }
+  
+  # Inflexion point area ratio (For canonical waveform use x[3], if using inflection point then use x[4]):
+  ipa_ratio <- c()
+  for(i in 1:length(oa)){
+    wave <- p[, (i+1)][!is.na(p[, (i+1)])]
+    ip <- oa[[i]]$x[3]
+    v <- 1:length(wave)
+    v <- which(v < ip)
+    s_auc <- AUC(x = v, y = wave[v], method = "spline")
+    v <- 1:length(wave)
+    v <- which(v > ip)
+    d_auc <- AUC(x = v, y = wave[v], method = "spline")
+    ipa_ratio[i] <- s_auc/d_auc
+  }
+  
+  # Peak to Notch time (relative to length of wave):
+  pn_time <- c()
+  for(i in 1:length(oa)){
+    pn_time[i] <- (oa[[i]]$x[3] - oa[[i]]$x[2])/l[i]
+  }
+  
+  # Notch-time ratio = time interval from notch to end of p / time interval from notch to beginning of p:
+  nt_ratio <- c()
+  for(i in 1:length(oa)){
+    wave <- p[, (i+1)][!is.na(p[, (i+1)])]
+    # Find next_o i.e the last value of the wave:
+    next_o <- max(which(is.na(wave) ==  0)) 
+    nt_ratio[i] <- (next_o - oa[[i]]$x[3]) / (oa[[i]]$x[3] -  oa[[i]]$x[1])
+  }
+  
+  # Reflectance peak to forward peak ratio (augmentation index):
+  ai <- c()
+  for(i in 1:length(oa)){
+    ai[i] <- oa[[i]]$y[4] / oa[[i]]$y[2]
+  }
+  
+  # Alternative augmentation index:
+  aai <- c()
+  for(i in 1:length(oa)){
+    aai[i] <- (oa[[i]]$y[2] - oa[[i]]$y[4]) / oa[[i]]$y[2]
+  }
+  
+  # Crest time (O to S time):
+  ct <- c()
+  for(i in 1:length(oa)){
+    ct[i] <- oa[[i]]$x[2] - oa[[i]]$x[1]
+  }
+  
+  features <- data.frame(s_vals, n_vals, d_vals, np_ratio, ppt, max_amp, auc, auc_s, l, ipa_ratio, pn_time, nt_ratio, ai, aai, ct)
+  return(features)
 }
