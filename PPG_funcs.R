@@ -196,9 +196,9 @@ diast_pk <- function(avw, sr, scale = F){
   
   # Need to find new W position (0.5) after removing NAs
   if(scale == TRUE){
-   xShift <- which.min(abs(avw)) 
+   xShift <- which(abs(avw-0.5) == min(abs(avw - 0.5)))
   }else{
-    xShift <- which(abs(avw-0.5) == min(abs(avw - 0.5)))
+    xShift <- which.min(abs(avw)) 
   }
   avWavePoly <- CubicInterpSplineAsPiecePoly(1:length(avw), avw, "natural")
   avInflexX <- solve(avWavePoly, b = 0, deriv = 1)
