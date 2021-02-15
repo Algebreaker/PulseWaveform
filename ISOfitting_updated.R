@@ -658,7 +658,7 @@ for(i in 1:beats_in){
 # Data will be the ppg data
 # Params - at the moment this is just being used to feed in the across_beat_params - perhaps can simplify this?
 # Beats is used to feed in the beat_vector - which contains where to find the segments for each wave (and an initial value indicating how many beats to read in)
-# Optional - not doing anything...? vestigeal from last ChiSq
+# Optional - not doing anything...? vestigial from last ChiSq
 # Beat - takes the beat dataframe or the new_beat data_frame - the info is used to retrieve input parameters for individual beats if a is null
 # A - inputs a 66 parameter row for use in run.simplex
 # Plot - if you want to plot the 10 beats and their fits    
