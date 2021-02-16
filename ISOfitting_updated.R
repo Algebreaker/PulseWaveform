@@ -25,6 +25,8 @@ lab.dt = "interval (s)"
 
 baseline_correct <- 1
 
+
+
 ppg <- read.csv("~/Desktop/Khalsa_Fletcher_collaboration copy/Physio Dial/ISO_3.0/Iso_3_PhysioData/BJ478/scan_20200210/physiological_files/ECG_7_ISO_R3.1D", sep = "")   
 ppg <- data.frame(
   time = (0:(nrow(ppg)-1)) / 40,
@@ -200,15 +202,15 @@ beat$NAmplitude = 1:nrow(beat) * 0
 beat$NWidth     = 1:nrow(beat) * 0
 
 
+
 # Define how many beats you want to fit over:
 beats_in <- 10  
-
 
 # Find the Excess, and the three peaks:
 nBeats <- nrow(beat)
 seg <- c(0,0,0)
 
-for(i in 1:beats_in){ #1:nBeats
+for(i in 1:100){ #1:beats_in
   
   beatTime <- beat[i,1]
   nextTime <- if(i < nBeats){beat[i+1,1]}else{NA}
@@ -329,6 +331,14 @@ beat <- cbind(beat, rep(0, nrow(beat)))
 colnames(beat)[16] <- "config.rate"
 
 
+# For loop starts here:
+beat_orig <- beat
+
+fit_check <- list()
+for(k in 1:10){
+  
+beat <- beat_orig[((k*10)-9):(k*10), ]
+
 # Extract the median NTime:
 beat <- beat[1:beats_in, ]    # or whatever the number of rows of estimated parameters is 
 renal_param <- median(beat$NTime)
@@ -377,7 +387,7 @@ sim <- make_matrix(sim, a)
 sim <- simplex.Run2(data = ppg, simplexParam = sim, f = model2.ChiSq3, optional=NULL, beat_vector = beat_vector, renal_param = renal_param)
 
 # Check best result:    
-model2.ChiSq3(data = ppg, params = NULL, beats = beat_vector, beat = beat, a = sim[1, ], plot = TRUE, renal_param = renal_param)
+#model2.ChiSq3(data = ppg, params = NULL, beats = beat_vector, beat = beat, a = sim[1, ], plot = TRUE, renal_param = renal_param)
 
 # Extract the across and within beat parameters outputted by the simplex:
 across <- sim[1, ][1:6]
@@ -573,9 +583,6 @@ sim <- make_matrix(sim, a)
 
 sim <- simplex.Run2(data = ppg, simplexParam = sim, f = model2.ChiSq3, optional=NULL, beat_vector = beat_vector, renal_param = renal_param)
 
-# Check result:     
-#model2.ChiSq3(data = ppg, params = NULL, beats = beat_vector, beat = beat, a = sim[1, ], plot = TRUE, renal_param = renal_param)
-
 # Fix Params:
 fixed <- list()
 for(i in 1:beats_in){
@@ -584,6 +591,9 @@ for(i in 1:beats_in){
   rm(seg)
   fixed[[i]] <- model2.FixParams3(data, params = as.numeric(within[[i]]), across_beat_params = across)
 }
+
+# Check result:     
+fit_check[[k]] <- model2.ChiSq4(data = ppg, params = NULL, beats = beat_vector, beat = beat, a = sim[1, ], plot = FALSE, renal_param = renal_param)
 
 
 # Update beat with fixed values:
@@ -640,7 +650,7 @@ for(i in 1:beats_in){
   temp<-model2.Rebuild2(data,yPrev,par,TRUE)
   lines(data[,1],temp, col = "green")
 }
-
+}
 
 
 
@@ -658,7 +668,7 @@ for(i in 1:beats_in){
 # Data will be the ppg data
 # Params - at the moment this is just being used to feed in the across_beat_params - perhaps can simplify this?
 # Beats is used to feed in the beat_vector - which contains where to find the segments for each wave (and an initial value indicating how many beats to read in)
-# Optional - not doing anything...? vestigial from last ChiSq
+# Optional - not doing anything...? vestigeal from last ChiSq
 # Beat - takes the beat dataframe or the new_beat data_frame - the info is used to retrieve input parameters for individual beats if a is null
 # A - inputs a 66 parameter row for use in run.simplex
 # Plot - if you want to plot the 10 beats and their fits    
@@ -735,6 +745,77 @@ model2.ChiSq3 <- function(data, params,debug=FALSE, beats, optional = NULL, beat
   return(ts_fit)
 }
 
+model2.ChiSq4 <- function(data, params,debug=FALSE, beats, optional = NULL, beat, a = NULL, plot = FALSE, renal_param){  
+  
+  # Across-beat parameter extraction:
+  if(!is.null(a)){                                            # If a 66 parameter vector has been supplied, extract the first 6 
+    across_beat_params <- a[1:6]
+  }else{                                                      # If not, take them from the params input
+    par <- params
+    across_beat_params <- par[c(5, 6, 8, 9, 11, 12)]
+  }
+  
+  # Calculation of ChiSq for all beats:
+  beat_fit <- list()
+  for(i in 1:beats[[1]]){                                          # The number of beats is determined by the first object of beats
+    
+    # Within-beat parameter extraction:
+    if(!is.null(a)){                                               # If a 66 parameter vector has been supplied, take those values
+      par2 <- a[((i*6)+1):((i*6)+6)]    
+      par2 <- c(par2[1:4], 0, 0, par2[5], 0, 0, par2[6], 0, 0)
+    }else{                                                         # If not, take the values of beat. 
+      par2 <- as.numeric(beat[i, 5:16])
+    }
+    
+    # Extract individual beat data:  
+    seg <- c(beats[[2]][i],0,beats[[3]][i])
+    dat <- model2.GetSegment(data,seg)
+    rm(seg)
+    
+    # Truncation of the data:
+    #dat <- dat[-c(((nrow(dat)) - 10):nrow(dat)), ]
+    
+    # Extract systolic and diastolic parameters:
+    sys <- par2[3]
+    dias <- across_beat_params[2] + par2[3]
+    start <- which(abs(dat[, 1]-sys) == min(abs(dat[, 1] - sys)))
+    end <- which(abs(dat[, 1]-dias) == min(abs(dat[, 1] - dias)))
+  
+    # Fix parameters and calculate penalty:
+    temp <- model2.FIX_PAR3(data = dat, params = par2, across_beat_params = across_beat_params, renal_param = renal_param)  
+    penalty <- temp[1]
+    fixedPar <- temp[2:length(temp)]     
+    rm(temp)
+    
+    # Calculate fit and residue:
+    fit <- model2.Rebuild2(dat,dat[1,2],params = fixedPar)    
+    residue <- dat[ ,2] - fit
+    # Multiply residue between systolic and diastolic peaks by 2
+    residue[start:end] <-  residue[start:end]*2
+    
+    # Calculate Reduced Chi-Square for the beat:
+    nData <- nrow(dat)    
+    nPar <- length(par2)
+    beat_fit[[i]] <- (sum(residue*residue) / (nData-nPar)) + as.numeric(penalty)
+    
+    if(plot == TRUE){
+      plot(dat,  ylim = c(-150, 1600))      #ylim = c(76, 86) for bioradio data, ylim = c(-150, 1600) for ISO
+      lines(dat[, 1], fit)
+      #lines(dat[, 1], residue + dat[1, 2])
+    }
+  }
+  
+  # Summate individual beat ChiSq values:
+  temp <- c()
+  for(i in 1:length(beat_fit)){
+    temp[i] <- beat_fit[[i]][1]
+  }
+  ts_fit <- sum(temp)
+  
+  fit <- list(ts_fit, beat_fit)
+  
+  return(fit)
+}
 
 
 # This version of model2.rebuild is only different in that it uses model2.Excess.Inv2 instead of model2.Excess.Inv
@@ -898,13 +979,13 @@ model2.FIX_PAR3 <- function(data,params,across_beat_params, debug=FALSE, renal_p
     
     if(i==3){                                              # Renal peak timing should be similar to initial estimation
       if(t[3] > (renal_param + 0.02) ){
-        penalty <- penalty + 500
+        penalty <- penalty + 5000
       }
     }
     
     if(i==3){                                              # Renal peak timing should be similar to initial estimation
       if(t[3] < (renal_param - 0.02) ){
-        penalty <- penalty + 500
+        penalty <- penalty + 5000
       }
     }
     
@@ -969,7 +1050,7 @@ model2.FIX_PAR3 <- function(data,params,across_beat_params, debug=FALSE, renal_p
       penalty <- penalty + diff*diff 
       p[7] <- diff*diff
     }
-    t[3] <- fixed
+    t[3] <- renal_param
   }
   
   # Don't clamp baseline shift, but penalize large shifts   (there will always be two baselines, but they will be the same if them being different results in no significantly better fit)
@@ -1290,7 +1371,7 @@ simplex.MakeSimplex3 <- function(data,param,f,inScale,directions=NULL,inTol=-1,o
 
 
 simplex.Run2 <- function(data = ppg,simplexParam = sim,f = model2.ChiSq3,optional=NULL, beat_vector = beat_vector, renal_param = renal_param){
-  MAX_STEP <- 5000                                               # The number of steps to iterate through
+  MAX_STEP <- 10000                                               # The number of steps to iterate through
   FTOL <- 1e-5                                  
   
   debugRtol <- 1:(MAX_STEP+1) * 0.0
@@ -1395,7 +1476,7 @@ simplex.Run2 <- function(data = ppg,simplexParam = sim,f = model2.ChiSq3,optiona
   debugRtol[MAX_STEP+1] <- rtol
   debugMin[MAX_STEP+1] <- chiSqMin
   debugMax[MAX_STEP+1] <- chiSqMax
-  plot(debugMax,type='l', ylim = c(0, 10))
+  plot(debugMax,type='l')
   lines(debugMin)
   
   
@@ -1477,6 +1558,8 @@ make_matrix <- function(sim, a){
   
   return(sim)
 }
+
+
 
 
 
