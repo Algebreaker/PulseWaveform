@@ -1209,8 +1209,12 @@ simplex.MakeSimplex2 <- function(data,param,f,inScale,directions=NULL,inTol=-1,o
         if (debug){ print(paste("chi^2(",tParam[i],") =",chiSq[i+1])) }
         #print(paste(i,"-",delta,":",chiSq[i+1]))
         if (iKill < 0 & (chiSq[i+1]-chiSq[1]) > 0.75 * (lastChiSq-chiSq[1])){
+          if(i == 9){
+            tParam[9] <- renal_param  # Ignore renal times that can't optomize
+            next
+            } 
           print("Failed to construct simplex")
-          return(paste("Error: param[",i,"]",sep=""))   # THIS IS THE ERROR YOU ARE GETTING!!!!
+          return(paste("Error: param[",i,"]",sep=""))  
         }
         iKill <- iKill - 1
       }
