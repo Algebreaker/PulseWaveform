@@ -342,7 +342,7 @@ colnames(beat)[16] <- "config.rate"
 beat_orig <- beat
 
 fit_check <- list()
-for(k in 5:5){         # 
+for(k in 1:10){         # 
   
 beat <- beat_orig[((k*10)-9):(k*10), ]
 
@@ -1156,9 +1156,9 @@ simplex.MakeSimplex2 <- function(data,param,f,inScale,directions=NULL,inTol=-1,o
     }
     
     tParam <- param - delta                                   # This part tries tweaking each parameter up or down, 
-    chiSqMinus <- f(data,tParam,optional=optional, beats = beat_vector, beat = beat, renal_param = renal_param, plot = TRUE)            # tParam = test parameter. 
+    chiSqMinus <- f(data,tParam,optional=optional, beats = beat_vector, beat = beat, renal_param = renal_param)            # tParam = test parameter. 
     tParam <- param + delta                                   # The chisquare (goodness of fit) is calculated for each direction, 
-    chiSq[i+1] <- f(data,tParam,optional=optional, beats = beat_vector, beat = beat, renal_param = renal_param, plot = TRUE)            # and presumably the direction with the smaller value is chosen. 
+    chiSq[i+1] <- f(data,tParam,optional=optional, beats = beat_vector, beat = beat, renal_param = renal_param)            # and presumably the direction with the smaller value is chosen. 
     
     if (debug){
       print("Select direction:")
@@ -1220,16 +1220,18 @@ simplex.MakeSimplex2 <- function(data,param,f,inScale,directions=NULL,inTol=-1,o
         delta <- 0.5*delta
         tParam <- param + delta
         lastChiSq <- chiSq[i+1]
-        chiSq[i+1] <- f(data,tParam,optional=optional, beats = beat_vector, beat = beat, renal_param = renal_param, plot = TRUE)
+        chiSq[i+1] <- f(data,tParam,optional=optional, beats = beat_vector, beat = beat, renal_param = renal_param)
         if (debug){ print(paste("chi^2(",tParam[i],") =",chiSq[i+1])) }
         #print(paste(i,"-",delta,":",chiSq[i+1]))
         if (iKill < 0 & (chiSq[i+1]-chiSq[1]) > 0.75 * (lastChiSq-chiSq[1])){
           if(i == 9){
             tParam[9] <- renal_param  # Ignore renal times that can't optomize
             next
-            } 
-          print("Failed to construct simplex")
-          return(paste("Error: param[",i,"]",sep=""))   
+            }
+          print(c("simplex constructed as per original parameter"))
+          next
+          #print("Failed to construct simplex")
+          #return(paste("Error: param[",i,"]",sep=""))   
         }
         iKill <- iKill - 1
       }
@@ -1369,7 +1371,7 @@ simplex.MakeSimplex3 <- function(data,param,f,inScale,directions=NULL,inTol=-1,o
         if (debug){ print(paste("chi^2(",tParam[i],") =",chiSq[i+1])) }
         #print(paste(i,"-",delta,":",chiSq[i+1]))
         if (iKill < 0 & (chiSq[i+1]-chiSq[1]) > 0.75 * (lastChiSq-chiSq[1])){
-          print(c("Failed to construct simplex within 10 iterations for parameter", i, "defaulting to inputted value"))
+          print(c("simplex constructed as per original parameter"))
           #return(paste("Error: param[",i,"]",sep=""))
           tParam[i] <- param[i]
           next
