@@ -627,7 +627,7 @@ for(i in 1:beats_in){
   xPrev <- ppg[seg[1]-1, 1]
   xNext <- ppg[seg[3], 1]
   rm(seg)
-  plot(data[, 1], data[, 2], ylim = c(-400, 2200))   # ylim = c(76, 86)
+  plot(data[, 1], data[, 2], ylim = c(-400, 2500), main = c("batch", k, ", wave", i))   # ylim = c(76, 86)
   temp<-model2.Rebuild2(data, yPrev, as.double(beat2[i,]),TRUE)    
   lines(data[,1],temp)
   # Plot baselines:
