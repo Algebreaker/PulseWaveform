@@ -202,15 +202,21 @@ beat$NAmplitude = 1:nrow(beat) * 0
 beat$NWidth     = 1:nrow(beat) * 0
 
 
+# Show data
+plot(ppg[4000:5000,1],ppg[4000:5000,2],t='l')
+points(beat[,1],(1:nBeats)*0+84)
+
+
 
 # Define how many beats you want to fit over:
 beats_in <- 10  
+
 
 # Find the Excess, and the three peaks:
 nBeats <- nrow(beat)
 seg <- c(0,0,0)
 
-for(i in 1:100){ #1:beats_in
+for(i in 1:100){ #1:beats_in    # 1:100    # 9 is bad... c(1:8, 10:101)
   
   beatTime <- beat[i,1]
   nextTime <- if(i < nBeats){beat[i+1,1]}else{NA}
@@ -331,11 +337,12 @@ beat <- cbind(beat, rep(0, nrow(beat)))
 colnames(beat)[16] <- "config.rate"
 
 
-# For loop starts here:
+# Start the for loop here:
+
 beat_orig <- beat
 
 fit_check <- list()
-for(k in 1:10){
+for(k in 5:5){         # 
   
 beat <- beat_orig[((k*10)-9):(k*10), ]
 
@@ -384,7 +391,7 @@ sim <- make_matrix(sim, a)
 
 ##################################  RUN SIMPLEX 1  ###################################
 
-sim <- simplex.Run2(data = ppg, simplexParam = sim, f = model2.ChiSq3, optional=NULL, beat_vector = beat_vector, renal_param = renal_param)
+sim <- simplex.Run2(data = ppg, simplexParam = sim, f = model2.ChiSq3, optional=NULL, beat_vector = beat_vector, renal_param = renal_param, run = "run 1")
 
 # Check best result:    
 #model2.ChiSq3(data = ppg, params = NULL, beats = beat_vector, beat = beat, a = sim[1, ], plot = TRUE, renal_param = renal_param)
@@ -461,7 +468,7 @@ sim <- make_matrix(sim, a)
 
 ##################################  RUN SIMPLEX 2  ####################################
 
-sim <- simplex.Run2(data = ppg, simplexParam = sim, f = model2.ChiSq3, optional=NULL, beat_vector = beat_vector, renal_param = renal_param)
+sim <- simplex.Run2(data = ppg, simplexParam = sim, f = model2.ChiSq3, optional=NULL, beat_vector = beat_vector, renal_param = renal_param, run = "run 2")
 
 # Check result:     
 #model2.ChiSq3(data = ppg, params = NULL, beats = beat_vector, beat = beat, a = sim[1, ], plot = TRUE, renal_param = renal_param)
@@ -539,7 +546,7 @@ sim <- make_matrix(sim, a)
 
 ##################################  RUN SIMPLEX 1  ####################################
 
-sim <- simplex.Run2(data = ppg, simplexParam = sim, f = model2.ChiSq3, optional=NULL, beat_vector = beat_vector, renal_param = renal_param)
+sim <- simplex.Run2(data = ppg, simplexParam = sim, f = model2.ChiSq3, optional=NULL, beat_vector = beat_vector, renal_param = renal_param, run = "run 3")
 
 # Check result:     
 #model2.ChiSq3(data = ppg, params = NULL, beats = beat_vector, beat = beat, a = sim[1, ], plot = TRUE, renal_param = renal_param)
@@ -581,7 +588,7 @@ sim <- make_matrix(sim, a)
 
 ##################################  RUN SIMPLEX 2  ####################################
 
-sim <- simplex.Run2(data = ppg, simplexParam = sim, f = model2.ChiSq3, optional=NULL, beat_vector = beat_vector, renal_param = renal_param)
+sim <- simplex.Run2(data = ppg, simplexParam = sim, f = model2.ChiSq3, optional=NULL, beat_vector = beat_vector, renal_param = renal_param, run = "run 4")
 
 # Fix Params:
 fixed <- list()
@@ -653,9 +660,17 @@ for(i in 1:beats_in){
 }
 
 
+batch <- c(fit_check[[1]][[1]], fit_check[[2]][[1]], fit_check[[3]][[1]], fit_check[[4]][[1]], fit_check[[5]][[1]], 
+              fit_check[[6]][[1]], fit_check[[7]][[1]], fit_check[[8]][[1]], fit_check[[9]][[1]], fit_check[[10]][[1]])
+which(batch > 1000000)
+mean(batch)
+sd(batch)
 
-
-
+waves <- as.numeric(c(fit_check[[1]][[2]], fit_check[[2]][[2]], fit_check[[3]][[2]], fit_check[[4]][[2]], fit_check[[5]][[2]], 
+           fit_check[[6]][[2]], fit_check[[7]][[2]], fit_check[[8]][[2]], fit_check[[9]][[2]], fit_check[[10]][[2]]))
+which(waves > 100000)
+mean(waves)
+sd(waves)
 
 ###################### New Functions: ########################
 
@@ -1117,7 +1132,7 @@ simplex.MakeSimplex2 <- function(data,param,f,inScale,directions=NULL,inTol=-1,o
   
   
   chiSq <- 1:(nPar+1) * 0.0
-  chiSq[1] <- f(data,param,optional=optional, beats = beat_vector, beat = beat, renal_param = renal_param)   # ChiSq[1 is the fit when no parameters are changed... 
+  chiSq[1] <- f(data,param,optional=optional, beats = beat_vector, beat = beat, renal_param = renal_param, plot = TRUE)   # ChiSq[1 is the fit when no parameters are changed... 
   if (debug){ print(paste("Root chi-squared:",chiSq[1]))}
   
   result <- matrix(nrow=nPar+1,ncol=nPar)
@@ -1141,9 +1156,9 @@ simplex.MakeSimplex2 <- function(data,param,f,inScale,directions=NULL,inTol=-1,o
     }
     
     tParam <- param - delta                                   # This part tries tweaking each parameter up or down, 
-    chiSqMinus <- f(data,tParam,optional=optional, beats = beat_vector, beat = beat, renal_param = renal_param)            # tParam = test parameter. 
+    chiSqMinus <- f(data,tParam,optional=optional, beats = beat_vector, beat = beat, renal_param = renal_param, plot = TRUE)            # tParam = test parameter. 
     tParam <- param + delta                                   # The chisquare (goodness of fit) is calculated for each direction, 
-    chiSq[i+1] <- f(data,tParam,optional=optional, beats = beat_vector, beat = beat, renal_param = renal_param)            # and presumably the direction with the smaller value is chosen. 
+    chiSq[i+1] <- f(data,tParam,optional=optional, beats = beat_vector, beat = beat, renal_param = renal_param, plot = TRUE)            # and presumably the direction with the smaller value is chosen. 
     
     if (debug){
       print("Select direction:")
@@ -1201,11 +1216,11 @@ simplex.MakeSimplex2 <- function(data,param,f,inScale,directions=NULL,inTol=-1,o
       }
     } else {
       if (debug){ print("Shrinking above tolerance") }
-      while (chiSq[i+1] > chiSq[1] + tol){
+      while (chiSq[i+1] > chiSq[1] + tol){              # If the new fit is much worse than the original, reduce the size of delta
         delta <- 0.5*delta
         tParam <- param + delta
         lastChiSq <- chiSq[i+1]
-        chiSq[i+1] <- f(data,tParam,optional=optional, beats = beat_vector, beat = beat, renal_param = renal_param)
+        chiSq[i+1] <- f(data,tParam,optional=optional, beats = beat_vector, beat = beat, renal_param = renal_param, plot = TRUE)
         if (debug){ print(paste("chi^2(",tParam[i],") =",chiSq[i+1])) }
         #print(paste(i,"-",delta,":",chiSq[i+1]))
         if (iKill < 0 & (chiSq[i+1]-chiSq[1]) > 0.75 * (lastChiSq-chiSq[1])){
@@ -1214,7 +1229,7 @@ simplex.MakeSimplex2 <- function(data,param,f,inScale,directions=NULL,inTol=-1,o
             next
             } 
           print("Failed to construct simplex")
-          return(paste("Error: param[",i,"]",sep=""))  
+          return(paste("Error: param[",i,"]",sep=""))   
         }
         iKill <- iKill - 1
       }
@@ -1240,7 +1255,7 @@ simplex.MakeSimplex2 <- function(data,param,f,inScale,directions=NULL,inTol=-1,o
 
 
 # Make simplex 3 (for within-beat parameters only)
-
+simplex.MakeSimplex3(data, param, inScale, inTol)
 
 simplex.MakeSimplex3 <- function(data,param,f,inScale,directions=NULL,inTol=-1,optional=NULL,debug=FALSE){
   if(debug){print("MakeSimplex -- debug")}
@@ -1354,8 +1369,10 @@ simplex.MakeSimplex3 <- function(data,param,f,inScale,directions=NULL,inTol=-1,o
         if (debug){ print(paste("chi^2(",tParam[i],") =",chiSq[i+1])) }
         #print(paste(i,"-",delta,":",chiSq[i+1]))
         if (iKill < 0 & (chiSq[i+1]-chiSq[1]) > 0.75 * (lastChiSq-chiSq[1])){
-          #print("Failed to construct simplex")
-          return(paste("Error: param[",i,"]",sep=""))
+          print(c("Failed to construct simplex within 10 iterations for parameter", i, "defaulting to inputted value"))
+          #return(paste("Error: param[",i,"]",sep=""))
+          tParam[i] <- param[i]
+          next
         }
         iKill <- iKill - 1
       }
@@ -1374,8 +1391,9 @@ simplex.MakeSimplex3 <- function(data,param,f,inScale,directions=NULL,inTol=-1,o
 
 
 
-simplex.Run2 <- function(data = ppg,simplexParam = sim,f = model2.ChiSq3,optional=NULL, beat_vector = beat_vector, renal_param = renal_param){
-  MAX_STEP <- 10000                                               # The number of steps to iterate through
+simplex.Run2 <- function(data = ppg,simplexParam = sim,f = model2.ChiSq3,optional=NULL, beat_vector = beat_vector, renal_param = renal_param, run = NULL){
+  
+   MAX_STEP <- 10000                                               # The number of steps to iterate through
   FTOL <- 1e-5                                  
   
   debugRtol <- 1:(MAX_STEP+1) * 0.0
@@ -1395,8 +1413,11 @@ simplex.Run2 <- function(data = ppg,simplexParam = sim,f = model2.ChiSq3,optiona
     nHigh <- extrema[2]
     high <- extrema[3]
     
+    if(!is.null(run)){
+      print(run)
+    }
     print(iStep)
-    
+  
     chiSqMax <- chiSq[high]                        
     chiSqMin <- chiSq[low]                  
     
