@@ -1,6 +1,6 @@
 # Model2 (Updated for across time series fitting) for ISO data:
 
-# See functions below before starting
+# See new functions below before starting
 
 setwd("Desktop/Scripts")
 
@@ -26,7 +26,8 @@ lab.dt = "interval (s)"
 baseline_correct <- 1
 
 
-ppg <- read.csv("~/Desktop/Khalsa_Fletcher_collaboration copy/Physio Dial/ISO_3.0/Iso_3_PhysioData/AG474/scan_20170414/physiological_files/ECG_11_ISO_R6.1D", sep = "")   
+
+ppg <- read.csv("~/Desktop/Khalsa_Fletcher_collaboration copy/Physio Dial/ISO_3.0/Iso_3_PhysioData/AA343/scan_20190905/physiological_files/ECG_6_ISO_R1.1D", sep = "")   
 ppg <- data.frame(
   time = (0:(nrow(ppg)-1)) / 40,
   ppg = ppg[,1]
@@ -89,7 +90,7 @@ y.[[1]][2] # gradient of the tail
 
 # Now adjust factor until gradient = 0
 factor_value <- 1.01
-while(y.[[1]][2][1] > -20){     # default = -20  
+while(y.[[1]][2][1] > -10){     # default = -20  
   
   factor_value <- factor_value - 0.01
   ppg2 <- ppg
@@ -205,8 +206,11 @@ beat$NWidth     = 1:nrow(beat) * 0
 plot(ppg[1:1000,1],ppg[1:1000,2],t='l')
 points(beat[,1],(1:nBeats)*0+84)
 
+
+
 # Define how many beats you want to fit over:
 beats_in <- 10  
+
 
 # Find the Excess, and the three peaks:
 nBeats <- nrow(beat)
@@ -309,6 +313,8 @@ for(i in 1:100){ #1:beats_in    # 1:100    # c(1:71, 73:101)
   
   #plot(data[,1],excess)
   #lines(data[,1],residue)
+  
+  
   # Store parameters
   
   w <- seg[1]:seg[3]
@@ -330,17 +336,20 @@ beat <- add_column(beat, Baseline2 = beat$Baseline, .after = 5)
 beat <- cbind(beat, rep(0, nrow(beat)))
 colnames(beat)[16] <- "config.rate"
 
+
 # Start the for loop here:
 
 beat_orig <- beat
+
 fit_check <- list()
 for(k in 1:10){         
   
 beat <- beat_orig[((k*10)-9):(k*10), ]
 
 # Extract the median NTime:
-beat <- beat[1:beats_in, ]   
+beat <- beat[1:beats_in, ]    # or whatever the number of rows of estimated parameters is 
 renal_param <- median(beat$NTime)
+
 
 beat <-  beat[1:beats_in, ]   
 beat[, 16] <- rep(0.75, beats_in)
@@ -351,6 +360,8 @@ beat_start <- beat[, 3]
 beat_end <- beat[, 4]
 beat_vector <- list(beat_start, beat_end)
 beat_vector <- c(beats_in, beat_vector)
+
+
 
 ####################################     Refine Parameters     ####################################
 
@@ -439,9 +450,9 @@ for(i in 1:beats_in){
   data <- model2.GetSegment(ppg,seg)
   rm(seg)
   
-  witin <- within[[i]]                                             
+  witin <- within[[i]]                                               # You shouldn't define within from sim[1, ] here, since sim[1, ] is pre-fix!
   par <- c(witin[1:4], across[1:2], witin[7], across[3:4], witin[10], across[5:6])
-  #par <- c(model2.FixParams3( data[,1:2], par ))                      
+  #par <- c(model2.FixParams3( data[,1:2], par ))                      # Is this line redundant since you have fixed parameters above...?
   
   a[[i]] <- simplex.MakeSimplex3(data[,1:2],par,model2.ChiSq,0.1) 
 }
@@ -559,12 +570,13 @@ for(i in 1:beats_in){
   data <- model2.GetSegment(ppg,seg)
   rm(seg)
   
-  witin <- within[[i]]                                              
+  witin <- within[[i]]                                               # You shouldn't define within from sim[1, ] here, since sim[1, ] is pre-fix!
   par <- c(witin[1:4], across[1:2], witin[7], across[3:4], witin[10], across[5:6])
-  #par <- c(model2.FixParams3( data[,1:2], par ))                   
+  #par <- c(model2.FixParams3( data[,1:2], par ))                      # Is this line redundant since you have fixed parameters above...?
   
   a[[i]] <- simplex.MakeSimplex3(data[,1:2],par,model2.ChiSq,0.1) 
 }
+
 
 # Make simplex for the across-beat parameters (now new_beat can be fed in):
 sim <- simplex.MakeSimplex2(data=ppg, param = par, f = model2.ChiSq3, inScale = 0.1, beat_vector = beat_vector, beat = new_beat, renal_param = renal_param)
@@ -647,17 +659,16 @@ for(i in 1:beats_in){
 }
 }
 
-# Calculate fits for for loop:
 
 batch <- c(fit_check[[1]][[1]], fit_check[[2]][[1]], fit_check[[3]][[1]], fit_check[[4]][[1]], fit_check[[5]][[1]], 
               fit_check[[6]][[1]], fit_check[[7]][[1]], fit_check[[8]][[1]], fit_check[[9]][[1]], fit_check[[10]][[1]])
-which(batch > 1000000)
+which(batch > 500000)
 mean(batch)
 sd(batch)
 
 waves <- as.numeric(c(fit_check[[1]][[2]], fit_check[[2]][[2]], fit_check[[3]][[2]], fit_check[[4]][[2]], fit_check[[5]][[2]], 
            fit_check[[6]][[2]], fit_check[[7]][[2]], fit_check[[8]][[2]], fit_check[[9]][[2]], fit_check[[10]][[2]]))
-which(waves > 100000)
+which(waves > 50000)
 mean(waves)
 sd(waves)
 
@@ -715,8 +726,16 @@ model2.ChiSq3 <- function(data, params,debug=FALSE, beats, optional = NULL, beat
     dat <- model2.GetSegment(data,seg)
     rm(seg)
     
-    # Truncation of the data:
-    #dat <- dat[-c(((nrow(dat)) - 10):nrow(dat)), ]
+    # Extract systolic and diastolic parameters:
+    sys <- par2[3]
+    dias <- across_beat_params[2] + par2[3]
+    start <- which(abs(dat[, 1]-sys) == min(abs(dat[, 1] - sys)))
+    end <- which(abs(dat[, 1]-dias) == min(abs(dat[, 1] - dias)))
+    
+    # Find W:
+    sfunction <- splinefun(1:nrow(dat), dat[, 2], method = "natural")
+    deriv1 <- sfunction(seq(1, nrow(dat)), deriv = 1)
+    w <- which.max(deriv1)
     
     # Fix parameters and calculate penalty:
     temp <- model2.FIX_PAR3(data = dat, params = par2, across_beat_params = across_beat_params, renal_param = renal_param)  
@@ -726,7 +745,35 @@ model2.ChiSq3 <- function(data, params,debug=FALSE, beats, optional = NULL, beat
     
     # Calculate fit and residue:
     fit <- model2.Rebuild2(dat,dat[1,2],params = fixedPar)    
-    residue <- (dat[,2] - fit)/2 + (dat[8:26, 2] - fit[8:26])
+    residue <- dat[ ,2] - fit
+
+     # 1. Weighted region is S -> D (without slope)
+     residue[start:end] <-  residue[start:end]*2
+    
+     # 2. Weighted region is W -> D (without slope)
+     #residue[w:end] <-  residue[w:end]*2
+    
+     # 3. Weighted region is S -> D (with slope)
+     #residue[start:end] <-  residue[start:end]*2
+     #if(length(residue) > end){
+     #  tail <- (end+1):length(residue)
+     #  for(j in 1:length(tail)){
+     #    wgt <- 2 - (0.1*j)
+     #    if(wgt < 1){wgt <- 1}
+     #    residue[tail[j]] <- residue[tail[j]]*wgt
+     #  }
+     #}
+    
+     # 4. Weighted region is W -> D (with slope)
+     #residue[w:end] <-  residue[w:end]*2
+     #if(length(residue) > end){
+     #   tail <- (end+1):length(residue)
+     #  for(j in 1:length(tail)){
+     #     wgt <- 2 - (0.1*j)
+     #   if(wgt < 1){wgt <- 1}
+     #   residue[tail[j]] <- residue[tail[j]]*wgt
+     #   }
+     #}
     
     # Calculate Reduced Chi-Square for the beat:
     nData <- nrow(dat)    
@@ -841,6 +888,84 @@ model2.Rebuild2 <- function(xy,offset,params,invert=TRUE){
 }
 
 
+# THIS VERSION OF MODEL2.REBUILD3 IS DESIGNED TO ONLY APPLY THE EXPONENTIAL DECAY TO THE DIASTOLIC PORTION
+model2.Rebuild3 <- function(xy,offset,params,invert=TRUE){     
+  result <- 1:nrow(xy) * 0.0
+  # Creating the excess:
+  result <- result + model2.Peak(xy[,1],params[3:5])     # Systolic parameters 
+  if (length(params)>=8){
+    result <- result + model2.Peak(xy[,1],params[6:8]+c(params[3],0,0))   # Diastolic parameters 
+  }
+  if (length(params)>=11){
+    result <- result + model2.Peak(xy[,1],params[9:11]+c(params[3],0,0))  # Renal parameters
+  }
+  
+  # Isolating individual waves:
+  sys <- model2.Peak(xy[,1],params[3:5]) 
+  R1 <-  model2.Peak(xy[,1],params[9:11]+c(params[3],0,0))
+  R2 <- model2.Peak(xy[,1],params[6:8]+c(params[3],0,0))
+  
+  # Adding decay (config.rate + baseline parameters) to the systolic and diastolic peaks only:
+  if (invert){
+    result <- model2.Excess.Inv3(xy[,1],result,offset,params[1],params[2],params[3]+0.5*params[6], config.rate = params[12], sys, R1, R2)  
+  }
+  return(as.double(result))
+}
+
+# This version of model2.Excess.Inv is the one that corresponds to model2.Rebuild3
+model2.Excess.Inv3 <- function(time,excess,offset,baselineStart,baselineEnd,timeBase,config.rate, sys, R1, R2){   
+  nX <- length(excess)
+  if (nX == 0){
+    print("Help")
+  }
+  result <- 1:nX * 0.0
+  baseline <- time * 0 + baselineStart
+  baseline[which(time > timeBase)] = baselineEnd
+  
+  # If excess has NAs it will interrupt the reconstruction, remove them:
+  temp <- which(is.nan(excess))
+  if(length(temp) > 0){
+    for(i in 1:length(temp)){
+      excess[temp][i] <- 0 
+    }
+  }
+
+  # Alternative way of adding the decay:
+  # 1. Make systolic wave + decay 
+  excess_1 <- sys
+  #plot(excess_1)
+  result_1 <- c()
+  result_1[1] <- excess_1[1] + (baselineStart + config.rate*(offset-baselineStart)) 
+  for (j in 2:length(excess_1)){  
+    result_1[j] = excess_1[j] + (baseline[j] + config.rate*(result_1[j-1]-baseline[j]))  
+  }
+  #plot(result_1)
+  
+  # 2. Make diastolic wave + decay
+  excess_2 <- R2
+  #plot(excess_2)
+  result_3 <- c()
+  result_3[1] <- excess_2[1] + (baselineStart + config.rate*(offset-baselineStart)) 
+  for (j in 2:length(excess_2)){  
+    result_3[j] = excess_2[j] + (baseline[j] + config.rate*(result_3[j-1]-baseline[j]))  
+  }
+  #plot(result_3)
+  
+  # 3. Make renal wave
+  excess_3 <- R1
+  #plot(excess_3)
+    
+  # 3. Add 1 and 2. 
+  result_2 <- result_1 + result_3 + excess_3
+  #plot(result_2)
+  
+  #plot(data)
+  #lines(data[, 1], result_1)
+  
+  return(result_2)
+}
+
+
 # This version of model2.Excess.Inv is only different in that is takes config.rate as an additional argument
 model2.Excess.Inv2 <- function(time,excess,offset,baselineStart,baselineEnd,timeBase,config.rate){   
   nX <- length(excess)
@@ -866,6 +991,8 @@ model2.Excess.Inv2 <- function(time,excess,offset,baselineStart,baselineEnd,time
   }
   return(result)
 }
+
+
 
 # Different to previous FIX_PAR versions, across_beat_params is now an additional argument. 
 # Conditional statements have been altered to reflect the new max number of parameters per beat (12)
@@ -993,7 +1120,14 @@ model2.FIX_PAR3 <- function(data,params,across_beat_params, debug=FALSE, renal_p
       }
     }
     
-    # S amplitude should be closely fitting the data (though we might have issues with class 3 waveforms here):
+    # SWidth:
+    #if(i==1){
+    #    if(w[1] > 0.27){
+    #      penalty <- penalty + 150000
+    #    }
+    #}
+    
+    # S amplitude:
     if(i==1){
       max.amp <- data[which.min(abs(data[, 1] - t[1])), 2]
       if(h[1] > max.amp + 50){
@@ -1008,6 +1142,8 @@ model2.FIX_PAR3 <- function(data,params,across_beat_params, debug=FALSE, renal_p
       if(h[1] > max.amp - 100){
         penalty <- penalty + 200000
       }
+      
+      
     }
     
     ########################################################### 
@@ -1078,23 +1214,6 @@ model2.FIX_PAR3 <- function(data,params,across_beat_params, debug=FALSE, renal_p
     penalty <- penalty + 1000
   }
   
-  # And extra 22/2/21:
-  
-  # Go from max.amp to min between s and d peaks
-  # It should be a simple calculation to see if the decay from maxamp will fall below the notch, and should be hopefully more specific to config.rate 
-  
-  # Or you could plot out the systolic wave + decay only...
-  
-  #This didn't work for some reason...
-  #t_par <- params
-  #t_par[c(7:8, 10:11)] <- 0
-  #temp<-model2.Rebuild2(data,data[1,2],t_par,TRUE)
-  #a. <- data[10:20, 2] - temp[10:20]
-  #a. <- which(a. < 0)
-  #if(length(a.) > 0){
-  #  penalty <- penalty + 10000000
-  #}
-  
   ############################
   
   fixedPar <- c( baseline, t[1], h[1], w[1], t[2], h[2], w[2], t[3], h[3], w[3], across_beat_params[6])
@@ -1117,6 +1236,8 @@ model2.FixParams3 <- function(data,params, across_beat_params = NULL, debug=FALS
   temp <- model2.FIX_PAR3(data, params, across_beat_params, debug, rp)  
   return( temp[2:length(temp)] )     # first value of temp is penalty
 } 
+
+
 
 
 ###################################### NEW SIMPLEX FUNCTIONS #########################################
@@ -1262,6 +1383,7 @@ simplex.MakeSimplex2 <- function(data,param,f,inScale,directions=NULL,inTol=-1,o
   if (debug){ print("/MakeSimplex") }
   return(result)
 }
+
 
 
 # Make simplex 3 (for within-beat parameters only)
@@ -1419,7 +1541,7 @@ simplex.Run2 <- function(data = ppg,simplexParam = sim,f = model2.ChiSq3,optiona
     chiSq[i] <- f(data, params = NULL, optional=NULL, a = result[i, ], beats = beat_vector, renal_param = renal_param)
   }
   
-  for (iStep in 1:MAX_STEP){                              # This is a long for loop....
+  for (iStep in 1:MAX_STEP){                             # This is a long for loop....
     extrema <- simplex.SortHighLow(chiSq)                # Finds the results which give the highest, 2nd highest and lowest ChiSq
     low <- extrema[1]
     nHigh <- extrema[2]
@@ -1595,12 +1717,3 @@ make_matrix <- function(sim, a){
   
   return(sim)
 }
-
-
-
-
-
-
-
-
-
