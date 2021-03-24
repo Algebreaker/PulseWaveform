@@ -18,12 +18,12 @@ UnDetrend <- function(ppg,factor=0,offset=1)
 
 FactorAdjust <- function(ppg, beat, fs = model2.FindSegment, gs = model2.GetSegment, u = UnDetrend, factorCutoff = -20, plot = T){
   # Extract the first beat:
-  i <- 1
-  beatTime <- beat[i,1]
-  nextTime <- if (i < nrow(beat)){beat[i+1,1]}else{NA}
-  seg <- fs(ppg,beat[i,1],nextTime)
+  beatTime <- beat[1,1]
+  nextTime <- beat[2, 1] 
+  seg <- c(which(ppg$`time (s)` ==  beatTime), 0, which(ppg$`time (s)` == nextTime))
   data <- gs(ppg,seg)
   if(plot == TRUE){plot(data)} 
+  
   # Calculate the Gradient of the tail of the beat:
   tail <- c(data[nrow(data), 2], data[nrow(data)-1, 2], data[nrow(data)-2, 2], data[nrow(data)-3, 2], 
             data[nrow(data)-4, 2])    
@@ -36,9 +36,12 @@ FactorAdjust <- function(ppg, beat, fs = model2.FindSegment, gs = model2.GetSegm
     factor_value <- factor_value - 0.01
     ppg2 <- ppg
     ppg2[, 2] <- u(ppg,factor=factor_value,offset=1)
-    beatTime <- beat[i,1]
-    nextTime <- if (i < nrow(beat)){beat[i+1,1]}else{NA}
-    seg <- fs(ppg,beat[i,1],nextTime)
+    beatTime <- beat[1,1]
+    #a <- min(which(ppg[round(inflexX[o]), 1] > beatTime)) 
+    nextTime <- beat[2, 1]    #ppg[round(inflexX[o])[a], 1]
+    #nextTime <- if (i < nrow(beat)){beat[i+1,1]}else{NA}
+    #seg <- fs(ppg,beat[i,1],nextTime)
+    seg <- c(which(ppg$`time (s)` ==  beatTime), 0, which(ppg$`time (s)` == nextTime))
     data <- gs(ppg2,seg)
     if(plot == TRUE){plot(data)}
     if(y.[[1]][2] > 0){
@@ -102,7 +105,7 @@ AddOutput <- function(beat){
 }
 
 
-FindStartParams <- function(batch_number, beats_in, beat, ppg, fs = model2.FindSegment, gs = model2.GetSegment, e = model2.Excess, sep = model2.SubtractExcessPeak){
+FindStartParams <- function(batch_number, beats_in, beat, ppg, fs = model2.FindSegment, gs = model2.GetSegment, e = model2.Excess, sep = model2.SubtractExcessPeak, all_beats = FALSE, plot = FALSE){
   nBeats <- nrow(beat)
   seg <- c(0,0,0)
   if((batch_number*beats_in) > nBeats){
@@ -110,17 +113,28 @@ FindStartParams <- function(batch_number, beats_in, beat, ppg, fs = model2.FindS
     maxn <- nBeats - 1
   }else{
     maxn <-(batch_number*beats_in)
+    if(all_beats == TRUE){maxn <- maxn + (nrow(beat) - maxn)}
   }
-  for(i in 1:maxn){   #(batch_number*beats_in)
-    beatTime <- beat[i,1]
-    nextTime <- if(i < nBeats){beat[i+1,1]}else{NA}
-    temp = seg[3]
-    seg <- fs(ppg,beat[i,1],nextTime)
-    if (temp > 0){
-      seg[1] = temp + 1
-    }
-    rm(temp)
-    data <- gs(ppg,seg)
+  ob <- c()
+  for(i in 1:(nrow(beat)-1)){
+   ob[i] <- beat[i+1, 1] - beat[i, 1]    
+  }
+  ob_thrld <- mean(ob) + sd(ob)*4
+  #segn <- 0
+  for(i in 1:maxn){  
+      
+      beatTime <- beat[i,1]
+      a <- min(which(ppg[round(inflexX[o]), 1] > beatTime))  
+      nextTime <- ppg[round(inflexX[o])[a], 1]
+      # If nextBeat is unreasonably late, shorten the segment:
+       if(nextTime - beatTime >  ob_thrld){        
+        nextTime <- beatTime + round(median(ob)) - 0.2      
+       }
+      seg <- c(which(ppg$`time (s)` ==  beatTime), 0, which(abs(ppg[, 1] - nextTime) == min(abs(ppg[, 1] - nextTime))))
+      data <- gs(ppg,seg)
+      if(plot == TRUE){plot(data)}
+
+    if(nrow(data) < 10){next}
     tStart <- ppg[seg[1],1]
     yPrev <- ppg[max(seg[1]-1,1),2]
     
@@ -206,8 +220,9 @@ FindStartParams <- function(batch_number, beats_in, beat, ppg, fs = model2.FindS
 
 FindWithinParams <- function(beats_in, ppg, beat, gs = model2.GetSegment, fp = model2.FixParams3, ms = simplex.MakeSimplex3, m2 = model2.ChiSq){
   a <- list()
-  for(i in 1:beats_in){                      
+  for(i in 1:beats_in){         
     seg <- c(beat[i,3],0,beat[i,4])
+    if(seg[1] == 0){next}
     data <- gs(ppg,seg)
     rm(seg)
     
@@ -253,7 +268,7 @@ UpdateBeat <- function(beats_in, beat, fixed){
 
 PlotFits <- function(beats_in, ppg, beat2, gs = model2.GetSegment, rb = model2.Rebuild2){
   for(i in 1:beats_in){
-    seg <- c(beat[i,3],0,beat[i,4])
+    seg <- c(beat[i,3],0,beat[i,4])  
     data <- model2.GetSegment(ppg,seg)
     yPrev <- ppg[seg[1]-1,2]
     xPrev <- ppg[seg[1]-1, 1]
@@ -297,6 +312,7 @@ model2.ChiSq3 <- function(data, params,debug=FALSE, beats, optional = NULL, beat
   
   # Calculation of ChiSq for all beats:
   beat_fit <- list()
+  failed_segs <- c()
   for(i in 1:beats[[1]]){                                          # The number of beats is determined by the first object of beats
     
     # Within-beat parameter extraction:
@@ -360,12 +376,98 @@ model2.ChiSq3 <- function(data, params,debug=FALSE, beats, optional = NULL, beat
   # Summate individual beat ChiSq values:
   temp <- c()
   for(i in 1:length(beat_fit)){
+    if(sum(i == failed_segs) > 0){next}
     temp[i] <- beat_fit[[i]][1]
   }
   ts_fit <- sum(temp)
   return(ts_fit)
 }
 
+model2.ChiSq4 <- function(data, params,debug=FALSE, beats, optional = NULL, beat, a = NULL, plot = FALSE, renal_param, dias_param){  
+  
+  # Across-beat parameter extraction:
+  if(!is.null(a)){                                       
+    across_beat_params <- a[1:6]
+  }else{                                           
+    par <- params
+    across_beat_params <- par[c(5, 6, 8, 9, 11, 12)]
+  }
+  
+  # Calculation of ChiSq for all beats:
+  beat_fit <- list()
+  max_error <- list()
+  failed_segs <- c()
+  for(i in 1:beats[[1]]){                                    
+    
+    # Within-beat parameter extraction:
+    if(!is.null(a)){                                            
+      par2 <- a[((i*6)+1):((i*6)+6)]    
+      par2 <- c(par2[1:4], 0, 0, par2[5], 0, 0, par2[6], 0, 0)
+    }else{                                                        
+      par2 <- as.numeric(beat[i, 5:16])
+    }
+    
+    # Extract individual beat data:  
+    seg <- c(beats[[2]][i],0,beats[[3]][i])
+    dat <- model2.GetSegment(data,seg)
+    rm(seg)
+    
+    # Extract systolic and diastolic parameters:
+    sys <- par2[3]
+    #dias <- across_beat_params[2] + par2[3]
+    dias <- par2[3] + dias_param
+    start <- which(abs(dat[, 1]-sys) == min(abs(dat[, 1] - sys)))
+    end <- which(abs(dat[, 1]-dias) == min(abs(dat[, 1] - dias)))
+    
+    # Find W:
+    sfunction <- splinefun(1:nrow(dat), dat[, 2], method = "natural")
+    deriv1 <- sfunction(seq(1, nrow(dat)), deriv = 1)
+    w <- which.max(deriv1)
+    
+    # Fix parameters and calculate penalty:
+    temp <- model2.FIX_PAR3(data = dat, params = par2, across_beat_params = across_beat_params, renal_param = renal_param)  
+    penalty <- temp[1]
+    fixedPar <- temp[2:length(temp)]     
+    rm(temp)
+    
+    # Calculate fit, residue and max error:
+    fit <- model2.Rebuild2(dat,dat[1,2],params = fixedPar)    
+    residue <- dat[ ,2] - fit
+    max_error[[i]] <- max(residue)
+    
+    # Weighted region is W -> D (with slope)
+    residue[w:end[1]] <-  residue[w:end[1]]*3
+    if(length(residue) > end[1]){
+      tail <- (end[1]+1):length(residue)
+      for(j in 1:length(tail)){
+        wgt <- 3 - (0.1*j)
+        if(wgt < 1){wgt <- 1}
+        residue[tail[j]] <- residue[tail[j]]*wgt
+      }
+    }
+    
+    # Calculate Reduced Chi-Square for the beat:
+    nData <- nrow(dat)    
+    nPar <- length(par2)
+    beat_fit[[i]] <- (sum(residue*residue) / (nData-nPar)) + as.numeric(penalty)
+    
+    if(plot == TRUE){
+      plot(dat,  ylim = c(-150, 1600))     
+      lines(dat[, 1], fit)
+    }
+  }
+  
+  # Summate individual beat ChiSq values:
+  temp <- c()
+  for(i in 1:length(beat_fit)){
+    if(sum(i == failed_segs) > 0){next}
+    temp[i] <- beat_fit[[i]][1]
+  }
+  ts_fit <- sum(temp)
+  
+  fit <- list(ts_fit, beat_fit, max_error)
+  return(fit)
+}
 
 # This version of model2.rebuild is only different in that it uses model2.Excess.Inv2 instead of model2.Excess.Inv
 model2.Rebuild2 <- function(xy,offset,params,invert=TRUE){     
@@ -482,16 +584,6 @@ model2.FIX_PAR3 <- function(data,params,across_beat_params, debug=FALSE, renal_p
       w[i] <- fixed
     }
     
-    ############# My own Insertion 30/1/21 ####################
-    
-    # If renal peak starts before systolic peak, penalize
-    #if(i==3){
-    #  if(((t[1] + t[3]) - (w[3]/2)) < data[which.max(data[, 2]), 1]){   
-    # can divide w[3] by 2 for a different (possibly better?) cutoff
-    #    penalty <- penalty + 10000000
-    #  }
-    #}
-    
     if(i==3){                                              # Renal width should not be greater than 0.25...
       if(w[3] > 0.25){
         diff <- 0.25 - w[3]
@@ -531,42 +623,36 @@ model2.FIX_PAR3 <- function(data,params,across_beat_params, debug=FALSE, renal_p
     if(i==3){                                              # Renal peak timing should be similar to initial estimation
       if(t[3] > (renal_param + 0.02) ){
         penalty <- penalty + 5000
+        t[3] <- renal_param + 0.02
       }
     }
     
     if(i==3){                                              # Renal peak timing should be similar to initial estimation
       if(t[3] < (renal_param - 0.02) ){
         penalty <- penalty + 5000
+        t[3] <- renal_param - 0.02
       }
     }
     
-    # SWidth:
-    #if(i==1){
-    #    if(w[1] > 0.27){
-    #      penalty <- penalty + 150000
-    #    }
-    #}
-    
-    # S amplitude:
-    if(i==1){
+    if(i==1){                                               # S amplitude should not deviated, horizontally or vertically, from the max point of the data
       max.amp <- data[which.min(abs(data[, 1] - t[1])), 2]
       if(h[1] > max.amp + 50){
         penalty <- penalty + 100000
+        h[1] <- max.amp
       }
       if(h[1] > max.amp - 50){
         penalty <- penalty + 100000
+        h[1] <- max.amp
       }
       if(h[1] > max.amp + 100){
         penalty <- penalty + 200000
+        h[1] <- max.amp
       }
       if(h[1] > max.amp - 100){
         penalty <- penalty + 200000
+        h[1] <- max.amp
       }
-      
-      
     }
-    
-    ########################################################### 
   }
   
   
@@ -589,9 +675,11 @@ model2.FIX_PAR3 <- function(data,params,across_beat_params, debug=FALSE, renal_p
   y. <- data[which.max(data[, 2]), 1]
   if(t[1] > y. + 0.04){
     penalty <- penalty + 10000
+    t[1] <- y.
   }
   if(t[1] < y. - 0.04){
     penalty <- penalty + 10000
+    t[1] <- y.
   }
   
   # Diastolic:
@@ -623,16 +711,15 @@ model2.FIX_PAR3 <- function(data,params,across_beat_params, debug=FALSE, renal_p
     t[3] <- renal_param
   }
   
-  # Don't clamp baseline shift, but penalize large shifts   (there will always be two baselines, but they will be the same if them being different results in no significantly better fit)
-  diff <- abs(baseline[1] - baseline[2])    # + 100?
-  #penalty <- penalty + META_BASELINE_SHIFT*diff  #*diff     
+  # Don't clamp baseline shift (and not currently penalized)
+  diff <- abs(baseline[1] - baseline[2])  
+  #penalty <- penalty + META_BASELINE_SHIFT*diff  
   
-
+  # Fix Config.rate 
   if(across_beat_params[6] > 0.95){
-    #diff <- 0.85 - across_beat_params[6]   
     penalty <- penalty + 1000
+    across_beat_params[6] <- 0.95
   }
-  
 
   fixedPar <- c( baseline, t[1], h[1], w[1], t[2], h[2], w[2], t[3], h[3], w[3], across_beat_params[6])
   
@@ -695,7 +782,7 @@ simplex.MakeSimplex2 <- function(data,param,f,inScale,directions=NULL,inTol=-1,o
   if (useDirections){ useDirections <- nrow(directions) == nPar & ncol(directions) == nPar}
   
   
-  for (i in c(5, 6, 8, 9, 11, 12)){  
+  for (i in c(5, 6, 8, 9, 11, 12)){   
     if (debug){ print(paste("Parameter",i)) }
     
     tParam <- param
@@ -729,7 +816,7 @@ simplex.MakeSimplex2 <- function(data,param,f,inScale,directions=NULL,inTol=-1,o
     
     iKill <- 10    
     
-    if (chiSq[i+1] < chiSq[1]){         # If the new fit is better than the old fit, continue to go in the direction that improved the fit
+    if (chiSq[i+1] < chiSq[1]){         # If the new fit is better than the old fit (with no parameters changed), continue to go in the direction that improved the fit
       if (debug){ print("Extending as best point") }
       while (chiSq[i+1] < chiSq[1] + tol){                 # Chisquare keeps getting iterated here (for 10 iterations)
         delta <- 2*delta    # 2* was too much here... WHY DOES IT SEEM LIKE SAMPLITUDE IS COMING DOWN???
@@ -763,8 +850,14 @@ simplex.MakeSimplex2 <- function(data,param,f,inScale,directions=NULL,inTol=-1,o
         }
         iKill <- iKill - 1
         if (iKill < 0){
-          print("Failed to construct simplex")
-          return(paste("Error: param[",i,"]",sep=""))
+          if(i == 9){
+            tParam[9] <- renal_param  # Ignore renal times that can't optomize
+            break
+          } 
+          print(c("simplex constructed as per original parameter"))
+          break
+          #print("Failed to construct simplex")
+          #return(paste("Error: param[",i,"]",sep=""))
         }
       }
     } else {
@@ -796,16 +889,9 @@ simplex.MakeSimplex2 <- function(data,param,f,inScale,directions=NULL,inTol=-1,o
     
   }
   
-  # PARAMETER TWEAKING ENDS HERE... 
-  
   if (debug){ print("/MakeSimplex") }
   return(result)
 }
-
-
-
-
-
 
 
 
@@ -953,7 +1039,7 @@ simplex.MakeSimplex3 <- function(data,param,f,inScale,directions=NULL,inTol=-1,o
 
 simplex.Run2 <- function(data = ppg,simplexParam = sim,f = model2.ChiSq3,optional=NULL, beat_vector = beat_vector, renal_param = renal_param, dias_param = dias_param, run = NULL){
   
-  MAX_STEP <- 10000                                               # The number of steps to iterate through
+  MAX_STEP <- 500                                               # The number of steps to iterate through
   FTOL <- 1e-5                                  
   
   debugRtol <- 1:(MAX_STEP+1) * 0.0
@@ -1142,4 +1228,55 @@ make_matrix <- function(sim, a){
   sim <- rbind(final_top_row, sim)
   
   return(sim)
+}
+
+
+osnd_fit <- function(bf = beat_final, ppg, gs = model2.GetSegment, r = model2.Rebuild2, sf = splinefun, dp = diast_pk, oa = osnd_of_average, sr = samplingRate, plot = FALSE){
+  
+  osnd_diff <- list()
+  for(i in 1:nrow(bf)){  
+    # Find the correct data segments and corresponding model fit:
+    seg <- c(bf[i,3],0,bf[i,4])  
+    data <- gs(ppg,seg)
+    yPrev <- ppg[seg[1]-1,2]
+    xPrev <- ppg[seg[1]-1, 1]
+    xNext <- ppg[seg[3], 1]
+    rm(seg)
+    temp <- r(data, yPrev, as.double(bf[i,-c(1:4)]),TRUE)   
+    
+    # Upsample fit - so that fit OSND can be calculated as the data would have been in the main script
+    sfunction <- sf(1:length(temp), temp, method = "natural")
+    fit <-  sfunction(seq(1, length(temp), 0.1), deriv = 0)
+    # Upsample data segment:
+    sfunction <- sf(1:length(data[, 2]), data[, 2], method = "natural")
+    dat <-  sfunction(seq(1, length(data[, 2]), 0.1), deriv = 0)
+    
+    # Find OSND of fit:
+    tmp <- dp(avw = fit, sr = sr, scale = T)  
+    dPeak <- tmp[1]
+    xShift <- tmp[2]
+    rm(tmp)
+    osnd_fit <- oa(fit, dp = dPeak, diff = 0, sr = sr, plot = F)
+    # Find OSND of data:
+    tmp <- diast_pk(avw = dat, sr = sr, scale = T)  
+    dPeak <- tmp[1]
+    xShift <- tmp[2]
+    rm(tmp)
+    osnd_dat <- oa(dat, dp = dPeak, diff = 0, sr = sr, plot = F)
+    
+    # Adjust x-axis for upsampling and sampling rate, then find the difference between OSND points:
+    osnd_dat$x <- osnd_dat$x/(10*sr)
+    osnd_fit$x <- osnd_fit$x/(10*sr)
+    osnd_diff[[i]] <- osnd_dat - osnd_fit
+    
+    if(plot == TRUE){
+      # Plot them together:
+      plot((1:length(dat))/(10*samplingRate), dat, type = "l", xlab = "time", ylab = "")
+      lines((1:length(dat))/(10*samplingRate), fit, col = "red")
+      points(osnd_dat, pch = 19)
+      points(osnd_fit, col = "red", pch = 19)
+    }
+  }
+  
+  return(osnd_diff)
 }
