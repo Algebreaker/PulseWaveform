@@ -115,18 +115,6 @@ model2.FIX_PAR <- function(data,params,debug=FALSE){
       w[i] <- fixed
     }
     
-    ############# My own Insertion 30/1/21 ####################
-    
-    # If renal peak starts before systolic peak, penalize
-    
-    #if(i==3){
-    #  if(((t[1] + t[3]) - (w[3]/2)) < data[which.max(data[, 2]), 1]){    # can divide w[3] by 2 for a different (possibly better cutoff)
-    #    penalty <- penalty + 1000
-    #  }
-    #}
-    
-    # Penalize the renal peak for increasing in amplitude 
-    
     if(i==3){
       if(h[3] > 25){
         penalty <- penalty + 50000
@@ -307,6 +295,9 @@ model2.FindSegment <- function(ppg,beatTime,nextBeatTime=NA){
 }
 
 model2.GetSegment <- function(ppg,limits){
+  
+  #seg <- c(which(ppg$`time (s)` ==  beatTime), 0, which(ppg$`time (s)` == nextTime))
+  
   w <- c(limits[1]:limits[3])
 
   result <- matrix(nrow=length(w),ncol=2)
