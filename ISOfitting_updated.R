@@ -76,7 +76,7 @@ ibi <- tmp[[2]]
 oDiff <- tmp[[3]]
 rm(tmp, w, uv)
 waveLen <- round(median(oDiff)+15) 
-tmp <- sep_beats(odiff = oDiff, bc = baseCor, samp = samplingRate, wuv = wuv, wvlen = waveLen, ibi=ibi, o=o, inx = inflexX, scale = T, q = F) 
+tmp <- sep_beats(odiff = oDiff, bc = baseCor, samp = samplingRate, wuv = wuv, wvlen = waveLen, ibi=ibi, o=o, inx = inflexX, scale = T, q = F, subset = T) 
 pulse <- tmp[[2]]
 avWave <- tmp[[1]]
 wuv <- tmp[[3]]
