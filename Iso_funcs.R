@@ -110,7 +110,7 @@ FindStartParams <- function(batch_number, beats_in, beat, ppg, fs = model2.FindS
   seg <- c(0,0,0)
   if((batch_number*beats_in) > nBeats){
     print("Batch and beat values request more beats than are in time series, defaulting to max number of beats")
-    maxn <- nBeats - 1
+    maxn <- nBeats #- 1
   }else{
     maxn <-(batch_number*beats_in)
     if(all_beats == TRUE){maxn <- maxn + (nrow(beat) - maxn)}
@@ -711,15 +711,17 @@ model2.FIX_PAR3 <- function(data,params,across_beat_params, debug=FALSE, renal_p
     t[3] <- renal_param
   }
   
-  # Don't clamp baseline shift (and not currently penalized)
-  diff <- abs(baseline[1] - baseline[2])  
-  #penalty <- penalty + META_BASELINE_SHIFT*diff  
+  # Don't clamp baseline shift, but penalize large shifts   (there will always be two baselines, but they will be the same if them being different results in no significantly better fit)
+  diff <- abs(baseline[1] - baseline[2])    # + 100?
+  #penalty <- penalty + META_BASELINE_SHIFT*diff  #*diff     
   
-  # Fix Config.rate 
+
   if(across_beat_params[6] > 0.95){
+    #diff <- 0.85 - across_beat_params[6]   
     penalty <- penalty + 1000
     across_beat_params[6] <- 0.95
   }
+  
 
   fixedPar <- c( baseline, t[1], h[1], w[1], t[2], h[2], w[2], t[3], h[3], w[3], across_beat_params[6])
   
@@ -889,9 +891,16 @@ simplex.MakeSimplex2 <- function(data,param,f,inScale,directions=NULL,inTol=-1,o
     
   }
   
+  # PARAMETER TWEAKING ENDS HERE... 
+  
   if (debug){ print("/MakeSimplex") }
   return(result)
 }
+
+
+
+
+
 
 
 
