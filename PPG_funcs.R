@@ -217,6 +217,10 @@ diast_pk <- function(avw, sr, scale = F){
   avInflexX <- solve(avWavePoly, b = 0, deriv = 1)
   avInflexY <- predict(avWavePoly, avInflexX)
   
+  # Specify limitations for where the diastolic peak can first be found i.e between 120:230 on x-axis, and below 1 on y-axis:
+  #peaks <- order(avInflexY[which(avInflexX < 215 & avInflexX > 120 & avInflexY < 1)], decreasing = TRUE)  
+  #diastPk <- avInflexX[which(avInflexX < 215 & avInflexX > 120 & avInflexY < 1)][peaks[1]]
+  
   # OR:
   # Find any peaks (above 0):
   peaks_above_0 <- which(avInflexY > 0)
@@ -297,6 +301,7 @@ find_average <- function(p, ao){
     ux <- unique(x)
     ux[which.max(tabulate(match(x, ux)))]
   }
+  # Made this into a for loop because there can be waves that have no values after o, and if all waves are like that, end will be null
   if(length(end) > 1){     
     avEnd <- mode(round(end[!is.na(end)], digits = 2))
     # Remove elements of average wave after where its end should be:
@@ -661,6 +666,8 @@ osnd_of_average <- function(aw, dp, diff, sr, plot = TRUE){
   wavInflxX <- solve(avWavPoly, b = 0, deriv = 1)
   wavInflxY <- predict(avWavPoly, wavInflxX)
   
+  # You might not have to worry about correcting o with this wave since the inflection point in likely to be correct
+  
   # Finding notch based on x-axis:
   # Find inflexion point closest to where the notch usually is (aka 75-80)
   notchRange <- which(d1InflxX > (3.104572*sr - diff) & d1InflxX < dp) # 3.104572 used to be 3.5! #  dp used to be 5*sampling rate!
@@ -737,11 +744,23 @@ osnd_of_average <- function(aw, dp, diff, sr, plot = TRUE){
   
   # If more than one half height detected:
   if(length(halfHeights) > 2){
-    # Find the distance between each detected half height, compare their xvals to the peak, and keep only the two that have the most similar distance to the peak
+    # Find the distance between each detected half height, compare their xvals to the peak, and keep only the two that have the most similar distance to the peak... 
+    # bear in mind one has to be either side of w...
     a <- halfHeights - w.
     postW <- which(a > 0)
     preW <- which(a < 0)
     halfHeights <- c(  min(halfHeights[postW]),  max(halfHeights[preW]))
+    #a <- abs(halfHeights - w.)
+    #b <- c()
+    #for(j in 1:(length(a)-1)){
+    #  b[j] <- abs(a[j] - a[j+1])
+    #} 
+    #b[length(b) + 1] <- abs(a[1] - a[length(a)])
+    #c <- which(abs(b) == min(abs(b)))
+    #if(c == length(b)){
+    #  halfHeights <- c(halfHeights[c], halfHeights[1])
+    #}else{
+    #  halfHeights <- c(halfHeights[c], halfHeights[c+1])
   }
   
   u <- halfHeights[1]
@@ -776,7 +795,7 @@ osnd_of_average <- function(aw, dp, diff, sr, plot = TRUE){
   }
   o._yval <- predict(avWavPoly, o.)
   if(plot == TRUE){points(o., o._yval, pch = 19)}
-  
+
   
   ## Find S:
   # Find new S:
@@ -895,7 +914,7 @@ preproc <- function(data){
 
 
 
-sep_beats <- function(odiff, bc, samp, wuv, wvlen, inx, o, ibi, scale = TRUE, q = FALSE){   
+sep_beats <- function(odiff, bc, samp, wuv, wvlen, inx, o, ibi, scale = TRUE, q = FALSE, subset = FALSE){   
 
   # Redefine baseline corrected data:
   sourcedata <- bc[1:length(undetrended)]
@@ -1152,7 +1171,8 @@ sep_beats <- function(odiff, bc, samp, wuv, wvlen, inx, o, ibi, scale = TRUE, q 
   drops_below_o <- c()
   for(i in 2:ncol(pulse)){
     wave <- pulse[, i][!is.na(pulse[, i])]
-    if((min(wave) < wave[1]*2 | min(wave) < min(average_wave[!is.na(average_wave)])*2) & min(wave) < 0){  # threhold subject to change
+    thd <- 4   # threshold subject to change (default 2)
+    if((min(wave) < wave[1]*thd | min(wave) < min(average_wave[!is.na(average_wave)])*thd) & min(wave) < 0){  
       drops_below_o[i] <- i
     }
   }
@@ -1258,9 +1278,39 @@ sep_beats <- function(odiff, bc, samp, wuv, wvlen, inx, o, ibi, scale = TRUE, q 
     pulse <- pulse[, -outlier_waves]
   }
   
-  
   # Final recalculation of average wave:
   average_wave <- find_average(p = pulse, ao = afterO) 
+  
+  # Optional subsetting of Iso Waves:
+  if(subset == T){
+    #Find the Iso specific part of the data
+    ab_ibi <- which(ibi > mean(ibi) + (4*sd(ibi)) | ibi < mean(ibi) - (4*sd(ibi))) #excluding ibi points 4 sds above mean
+    ibi[ab_ibi] <- NA 
+    ibi <- ibi[!is.na(ibi)]
+    meds <- rollmedian(ibi, k = 19) #rolling median
+    basemed <- mean(meds[1:50]) #baseline defined as the average of the first 50 rolling median points... I'm not sure if this is sensible
+    halfs <- (basemed - min(meds))/2 #half diff between minimum and baseline
+    post <- min(meds) + halfs 
+    indx <- which(ibi == min(ibi)) 
+    pre_indx <- which(abs(ibi[1:indx] - post) < 0.5) #finds the values that are closest to the half point
+    in2 <- which(abs(pre_indx - indx) == min(abs(pre_indx - indx))) #take the one closest to the minimum
+    pre_indx <- pre_indx[in2]
+    post_indx <-  indx + (which(abs(ibi[indx:length(ibi)] - post) == min(abs(ibi[indx:length(ibi)] - post))))
+    plot(ibi)
+    points(pre_indx:post_indx, ibi[pre_indx:post_indx], col='red') #plot check
+    rm(meds, basemed, halfs, post, indx, in2)
+    ppg_pre <- (which((ppg[,1]) == beat[,1][pre_indx - 1]))    # Before infusion
+    ppg_post <- which((ppg[,1]) == beat[,1][post_indx + 1])    # After infusion wears off
+    
+    # Subset:
+    subs <- which(wuv$wX > ppg_pre & wuv$wX < ppg_post)
+    wuv <- wuv[subs, ]
+    afterO <- afterO[subs]
+    pulse <- pulse[, c(1, subs + 1)]
+
+    # Refind average wave:
+    average_wave <- find_average(p = pulse, ao = afterO)  
+  }
   
   dat <- list(average_wave, pulse, wuv)
   return(dat)
@@ -1269,6 +1319,29 @@ sep_beats <- function(odiff, bc, samp, wuv, wvlen, inx, o, ibi, scale = TRUE, q 
 
 
 spectrum <- function(baseline_corrected){
+  #filtered <- filter.fft(spline_poly,fc=0.0925,BW=0.0525,n=50)
+  #plot.fft(filtered)
+  #spectral<-spec.fft(spline_poly)
+  #plot(data_downsampled$PPG.PulseOx1)
+  #plot(baseline_corrected)
+  
+  #powerspectrum<-spectrum(data_downsampled$PPG.PulseOx1)
+  #powerspectrum<-spectrum(baseline_corrected)
+  
+  #LF<-ffilter(data_downsampled$PPG.PulseOx1, f=75, from = 0.04, to = 0.145, bandpass = TRUE) #low bandpass, sampling frequency of 75 Hz (75 times per second)
+  #powerspectrum<-spectrum(LF)
+  #HF<-ffilter(data_downsampled$PPG.PulseOx1, f=75, from = 0.145, to = 0.45, bandpass = TRUE) #high bandpass
+  #powerspectrum<-spectrum(HF)
+  
+  #spectralratio<-sum(LF)/sum(HF) #ratio of LF/HF
+  
+  #Y1 <- fft(baseline_corrected[1:1000])
+  
+  #plot(abs(Y1), type="h")
+  
+  #bands<-c(0.04, 0.145, 0.45)
+  #frebands<-Freq(baseline_corrected, breaks = bands)
+  #Y1 <- fft(frebands[1])
   
   library('signal')
   low<-0.04
