@@ -10,7 +10,7 @@ output:
 
 ## PPG Model 2
 
-This is a ReadMe for the photopletysmography (PPG) analysis published in []. It is supposed to both provide an overview of the workings of the code, any issues we encountered and some further explanations that did not make it into the paper. The basic assumption is that the signal is decaying towards a baseline and that the peaks can be modelled more accurately/conistently *?* by discounting the decay element first. 
+This is a ReadMe for the photopletysmography (PPG) analysis published in []. It is supposed to both provide an overview of the workings of the code, any issues we encountered and some further explanations that did not make it into the paper. The basic assumption is that the signal is decaying towards a baseline and that the peaks can be modelled more accurately/consistently *?* by discounting the decay element first. 
 
 # Prerequisites
 The script makes use of the following packages:  
@@ -23,7 +23,7 @@ The script makes use of the following packages:
 - library(DescTools) *does it?*  
 
 # Installation
-Please install by typing `devtools::install_github(“Algebreaker/PPG”)`.
+Please install by typing `devtools::install_github(“whatever”)` into the command line.
 
 # ISOFitting
 This is the main script from which the other functions are called. First the working directory needs to be changed so the other functions can be called and the sampling rate need to be adjusted, i.e. `samplingRate <- 40`. The `beats_in` and `batch_number` parameters determine how many beats the parameters are estimated over and how many batches are generated for analysis and optimisation. The code uses a chi-square goodness of fit test to improve model fit and will do so by minimising chi-square over all the beats within a batch. The default values are 10 for both.
