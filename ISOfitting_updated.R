@@ -7,6 +7,7 @@ library(pracma)
 library(SplinesUtils) 
 library(spectral)
 library(DescTools)
+library(zoo)
 
 source("~/Desktop/WorkshopCS/Workshop2/model2.R")
 source("~/Desktop/WorkshopCS/Workshop2/simplex.R")
