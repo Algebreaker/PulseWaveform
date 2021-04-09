@@ -35,7 +35,7 @@ beat <- data.frame(ppg[which(vpg[1:(n-1)] < 300 & vpg[2:n] >= 300),1])
 rm(vpg)
 
 # Adjust factor:  
-factor_value <- FactorAdjust(ppg, beat, fs = model2.FindSegment, gs = model2.GetSegment, u = UnDetrend, factorCutoff = -20, plot = T)
+factor_value <- FactorAdjust(ppg, beat, gs = model2.GetSegment, u = UnDetrend, factorCutoff = -20, plot = T)
 ppg3 <- data.frame(ppg[,1],UnDetrend(ppg,factor=factor_value,offset=1))
 
 # Adjust offset:
@@ -107,7 +107,7 @@ ppg$Excess   = 1:nrow(ppg) * 0
 ppg$Residue  = 1:nrow(ppg) * 0
 
 # Fill beat and ppg with parameters derived from the excess:
-temp <- FindStartParams(batch_number, beats_in, beat, ppg, fs = model2.FindSegment, gs = model2.GetSegment, e = model2.Excess, sep = model2.SubtractExcessPeak, all_beats)
+temp <- FindStartParams(batch_number, beats_in, beat, ppg, gs = model2.GetSegment, e = model2.Excess, sep = model2.SubtractExcessPeak, all_beats)
 beat <- temp[[1]]
 ppg <- temp[[2]]
 rm(temp)
