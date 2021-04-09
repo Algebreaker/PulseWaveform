@@ -403,7 +403,7 @@ model2.ChiSq3 <- function(data, params,debug=FALSE, beats, optional = NULL, beat
 }
 
 
-model2.ChiSq4 <- function(data, params,debug=FALSE, beats, optional = NULL, beat = NULL, a = NULL, plot = FALSE, renal_param, dias_param, sys_time, sys_amp, w){  
+model2.ChiSq4 <- function(data, params,debug=FALSE, beats, optional = NULL, beat, a = NULL, plot = FALSE, renal_param, dias_param, sys_time, sys_amp, w){  
   
   # Across-beat parameter extraction:
   if(!is.null(a)){                                            # If a 66 parameter vector has been supplied, extract the first 6 
@@ -415,6 +415,7 @@ model2.ChiSq4 <- function(data, params,debug=FALSE, beats, optional = NULL, beat
   
   # Calculation of ChiSq for all beats:
   beat_fit <- list()
+  max_error <- list()
   for(i in 1:beats[[1]]){                                          # The number of beats is determined by the first object of beats
     
     # Within-beat parameter extraction:
@@ -444,7 +445,7 @@ model2.ChiSq4 <- function(data, params,debug=FALSE, beats, optional = NULL, beat
     # Find W:
     w. <- w[i]
     w. <- which(abs(dat[, 1] - w.) == min(abs(dat[, 1] - w.))) 
-  
+    
     # Get intially estimated systolic timing and amplitude:
     sys_t <- sys_time[i]
     sys_a <- sys_amp[i]
