@@ -17,6 +17,7 @@ samplingRate <- 40
 beats_in <- 10
 batch_number <- 10
 all_beats <- TRUE
+subset <- TRUE
 
 # Load time series:
 ppg <- read.csv("~/Desktop/Khalsa_Fletcher_collaboration copy/Physio Dial/ISO_3.0/Iso_3_PhysioData/BJ194/scan_20191008/physiological_files/ECG_4_ISO_R1.1D", sep = "")   
@@ -55,7 +56,7 @@ inflexX <- solve(splinePoly, b = 0, deriv = 1)
 inflexY <- predict(splinePoly, inflexX)
 w <- find_w(d1p = deriv1Poly, deriv1 = deriv1, sp = splinePoly, sr = samplingRate)
 uv <- find_u_v(dat = undetrended, wx = w$wX, wy = w$wY, d1 = deriv1, d1p = deriv1Poly, spline = splinePoly, spline_o = spline1, plot=FALSE)
-o <- find_o(wx = w$wX, inx = inflexX, iny = inflexY, d1p = deriv1Poly, sp = splinePoly)    
+o <- find_o(wx = w$wX, inx = inflexX, iny = inflexY, d1p = deriv1Poly, sp = splinePoly)  
 tmp <- preclean_wuv(w=w, uv=uv, o=o, samp = samplingRate, sp = spline1, q = F)  
 w <- tmp[[1]]
 uv <- tmp[[2]]
@@ -76,7 +77,7 @@ ibi <- tmp[[2]]
 oDiff <- tmp[[3]]
 rm(tmp, w, uv)
 waveLen <- round(median(oDiff)+15) 
-tmp <- sep_beats(odiff = oDiff, bc = baseCor, samp = samplingRate, wuv = wuv, wvlen = waveLen, ibi=ibi, o=o, inx = inflexX, scale = T, q = F, subset = T) 
+tmp <- sep_beats(odiff = oDiff, bc = baseCor, samp = samplingRate, wuv = wuv, wvlen = waveLen, ibi=ibi, o=o, inx = inflexX, scale = T, q = F, subset) 
 pulse <- tmp[[2]]
 avWave <- tmp[[1]]
 wuv <- tmp[[3]]
@@ -121,34 +122,40 @@ for(k in 1:(batch_number+1)){
       if(remainder == 0){break}
       beat <- beat_orig[(((k-1)*beats_in) + 1 ):(((k-1)*beats_in) + remainder), ]
       beats_in <- remainder
+      w <- wuv$wX[(((k-1)*beats_in) + 1 ):(((k-1)*beats_in) + remainder)]
     }else{
       beat <- beat_orig[((k*beats_in)-(beats_in-1)):(k*beats_in), ]
+      w <- wuv$wX[((k*beats_in)-(beats_in-1)):(k*beats_in)]
     }
   }else{
     beat <- beat_orig[((k*beats_in)-(beats_in-1)):(k*beats_in), ]
+    w <- wuv$wX[((k*beats_in)-(beats_in-1)):(k*beats_in)]
   }
 
+  w <- w / samplingRate
   renal_param <- median(beat$NTime)
   dias_param <- median(beat$DTime)
+  sys_time <- beat$STime
+  sys_amp <- beat$SAmplitude
   par <- as.numeric(beat[1,5:16])   
   beat_start <- beat[, 3]
   beat_end <- beat[, 4]
   beat_vector <- list(beats_in, beat_start, beat_end)
-
+ 
   # Refine parameters:
   for(i in 1:4){
     if(i == 1){new_beat <- beat}
-    within_params <- FindWithinParams(beats_in, ppg, beat = new_beat, gs = model2.GetSegment, fp = model2.FixParams3, ms = simplex.MakeSimplex3, m2 = model2.ChiSq)
-    across_params <- simplex.MakeSimplex2(data=ppg, param = par, f = model2.ChiSq3, inScale = 0.1, beat_vector = beat_vector, beat = new_beat, renal_param = renal_param, dias_param = dias_param)
+    within_params <- FindWithinParams(beats_in, ppg, beat = new_beat, gs = model2.GetSegment, fp = model2.FixParams3, ms = simplex.MakeSimplex3, m2 = model2.ChiSq3, beat_vector = beat_vector, renal_param = renal_param, dias_param = dias_param, sys_time = sys_time, sys_amp = sys_amp, w = w)
+    across_params <- simplex.MakeSimplex2(data=ppg, param = par, f = model2.ChiSq3, inScale = 0.1, beat_vector = beat_vector, beat = new_beat, renal_param = renal_param, dias_param = dias_param, sys_time = sys_time, sys_amp = sys_amp, w = w)
     mat <- make_matrix(across_params, within_params)
-    sim <- simplex.Run2(data = ppg, simplexParam = mat, f = model2.ChiSq3, optional=NULL, beat_vector = beat_vector, renal_param = renal_param, dias_param = dias_param, run = c("run", i))
+    sim <- simplex.Run2(data = ppg, simplexParam = mat, f = model2.ChiSq3, optional=NULL, beat_vector = beat_vector, renal_param = renal_param, dias_param = dias_param, sys_time = sys_time, sys_amp = sys_time, w = w, run = c("run", i))
     output <- extractOutput(beats_in, sim)
-    fixed <- FixOutput(beats_in, beat = new_beat, ppg, gs = model2.GetSegment, fp = model2.FixParams3, across = output[[1]], within = output[[2]])
+    fixed <- FixOutput(beats_in, beat = new_beat, ppg, gs = model2.GetSegment, fp = model2.FixParams3, across = output[[1]], within = output[[2]], sys_time = sys_time, sys_amp = sys_amp)
     new_beat <- UpdateBeat(beats_in, beat, fixed)
   }
   
   # Assess fit:
-  fit_check[[k]] <- model2.ChiSq4(data = ppg, params = NULL, beats = beat_vector, beat = new_beat, a = sim[1, ], plot = FALSE, renal_param = renal_param, dias_param = dias_param)
+  fit_check[[k]] <- model2.ChiSq4(data = ppg, params = NULL, beats = beat_vector, beat = new_beat, a = sim[1, ], plot = FALSE, renal_param = renal_param, dias_param = dias_param, sys_time = sys_time, sys_amp = sys_amp)
 
   # Finalise:
   beat2 <- new_beat       
