@@ -156,7 +156,7 @@ for(k in 1:(batch_number+1)){
   }
   
   # Assess fit:
-  fit_check[[k]] <- model2.ChiSq4(data = ppg, params = NULL, beats = beat_vector, beat = new_beat, a = sim[1, ], plot = FALSE, renal_param = renal_param, dias_param = dias_param, sys_time = sys_time, sys_amp = sys_amp)
+  fit_check[[k]] <- model2.ChiSq4(data = ppg, params = NULL, beats = beat_vector, beat = new_beat, a = sim[1, ], plot = FALSE, renal_param = renal_param, dias_param = dias_param, sys_time = sys_time, sys_amp = sys_amp, w = w)
 
   # Finalise:
   beat2 <- new_beat       
