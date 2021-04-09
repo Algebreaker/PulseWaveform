@@ -38,7 +38,7 @@ UnDetrend <- function(ppg,factor=0,offset=1)
   return(result)
 }
 
-FactorAdjust <- function(ppg, beat, fs = model2.FindSegment, gs = model2.GetSegment, u = UnDetrend, factorCutoff = -20, plot = T){
+FactorAdjust <- function(ppg, beat, gs = model2.GetSegment, u = UnDetrend, factorCutoff = -20, plot = T){
   # Extract the first beat:
   beatTime <- beat[1,1]
   nextTime <- beat[2, 1] 
@@ -124,7 +124,7 @@ AddOutput <- function(beat){
 }
 
 
-FindStartParams <- function(batch_number, beats_in, beat, ppg, fs = model2.FindSegment, gs = model2.GetSegment, e = model2.Excess, sep = model2.SubtractExcessPeak, all_beats = FALSE, plot = FALSE){
+FindStartParams <- function(batch_number, beats_in, beat, ppg, gs = model2.GetSegment, e = model2.Excess, sep = model2.SubtractExcessPeak, all_beats = FALSE, plot = FALSE){
   nBeats <- nrow(beat)
   seg <- c(0,0,0)
   if((batch_number*beats_in) > nBeats){
