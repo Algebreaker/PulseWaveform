@@ -584,9 +584,6 @@ model2.ChiSq3 <- function(data, params, debug=FALSE, beats, optional = NULL, bea
     # Calculate Reduced Chi-Square for the beat:
     nData <- nrow(dat)    
     nPar <- length(par2) + 6
-    if(par2[1] == par2[2]){    # If baselines are the same, consider them as 1 parameter
-      nPar <- nPar - 1
-    }
     beat_fit[[i]] <- (sum(residue*residue) / (nData-nPar)) + as.numeric(penalty)
     
     if(plot == TRUE){
