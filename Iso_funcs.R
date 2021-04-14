@@ -36,23 +36,6 @@ const.pi = 3.1415926535897932384626433
 # 27. simplex.HypoCentre
 # 28. simplex.SortHighLow 
 
-# 1. Preproc
-# 2. find_w
-# 3. find_u_v
-# 4. find_o
-# 5. preclean_wuv
-# 6. Baseline
-# 7. Clean_wuv
-# 8. sep_beats
-# 9. find_average
-# 10. find_sd
-# 11. diast_pk     
-# 12. osnd_of_average
-# 13. feature_extract
-
-
-
-
 UnDetrend <- function(ppg,factor=0,offset=1)    
 {
   k <- offset * (1-factor)
