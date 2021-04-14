@@ -1193,7 +1193,7 @@ simplex.MakeSimplex3 <- function(ppg, param,f,inScale, directions=NULL, inTol=-1
 
 simplex.Run2 <- function(data = ppg,simplexParam = mat, f = model2.ChiSq3, optional=NULL, beat_vector = beat_vector, renal_param = renal_param, dias_param = dias_param, sys_time = sys_time, w = w, run = NULL){
   
-  MAX_STEP <- 500                                               # The number of steps to iterate through
+  MAX_STEP <- 5000                                               # The number of steps to iterate through
   FTOL <- 1e-5                                  
   
   debugRtol <- 1:(MAX_STEP+1) * 0.0
