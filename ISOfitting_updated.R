@@ -153,7 +153,7 @@ for(k in 1:(batch_number+1)){
     output <- extractOutput(beats_in, sim)
     fixed <- FixOutput(beats_in, beat = new_beat, ppg, gs = model2.GetSegment, fp = model2.FixParams3, across = output[[1]], within = output[[2]], sys_time = sys_time)
     new_beat <- UpdateBeat(beats_in, beat, fixed)
-    new_beat <- FixBaseline(new_beat, f = model2.ChiSq3, renal_param, dias_param, sys_time, w)
+    new_beat <- FixBaseline(new_beat, f = model2.ChiSq4, renal_param, dias_param, sys_time, w)
   }
   
   # Assess fit:
