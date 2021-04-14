@@ -1,422 +1,95 @@
 # PPG function list:
-# 1. Baseline
-# 2. Clean_wuv
-# 3. diast_pk
-# 4. find_average
-# 5. find_u_v
-# 6. find_o
-# 7. find_w
-# 8. osnd_of_average
-# 9. preproc
-# 10. sep_beats
-# 11. spectrum
-# 12. find_sd
-# 13. preclean_wuv
-# 14. feature_extract
-# 15. preproc_iso
-
-baseline <- function(inx, iny, o, dat, sp, plot = FALSE){
-  # Making a (non-polynomial) spline to fit the baseline
-  sfunction2 <- splinefun(inx[o], iny[o], method = "natural")
-  splineBase <- sfunction2(seq(1, length(dat)), deriv = 0)
-  
-  # Plotting spline_base on spline_poly
-  if(plot){
-    plot(sp)
-    points(inx[o], iny[o], pch = 19)
-    lines(splineBase)
-  }
-  
-  # Correcting for baseline:
-  baseCor <- dat - splineBase
-  if(plot){
-    plot(baseCor, type = "l")
-    # Plot new baseline (y = 0)
-    lines(1:length(dat), seq(from = 0, to = 0, length.out = length(dat)))
-  }
-  
-  return(baseCor)
-}
+# 1. Preproc
+# 2. find_w
+# 3. find_u_v
+# 4. find_o
+# 5. preclean_wuv
+# 6. Baseline
+# 7. Clean_wuv
+# 8. sep_beats
+# 9. find_average
+# 10. find_sd
+# 11. diast_pk     
+# 12. osnd_of_average
+# 13. feature_extract
 
 
-
-clean_wuv <- function(wuv, sp, inx, o, samp, bc, q = FALSE){
+preproc <- function(data){
+  dat<-data[!(data$PPG.PulseOx1=='NaN'),]
   
-  o2 <- o
+  #Downsample
+  # The BioRadio device provides 250 samples per second, but the PPG is only sampled 75 times per second, 
+  # so we typically have repeated values in a pattern of 3-3-4 repeating. DownSample tries to retrieve the 
+  # unique values, with an effort to be robust against variation in the repeat pattern and also against 
+  # genuine repeated values.
   
-  # Remove u values that are implausibly far from baseline                             
-  falseU <- c()
-  for(i in 1:(nrow(wuv)-1)){
-    if(wuv$uY[i] > (median(wuv$uY) + 2*std(wuv$uY)) & wuv$uY[i] > 1 & wuv$uY[i] > wuv$uY[i+1]*2 | wuv$uY[i] < -50){
-      falseU[i] <- i
-    }
-  }
-  if(length(falseU) > 0){
-    falseU <- falseU[!is.na(falseU)]
-    cat("\n", length(falseU), "/", nrow(wuv), "waves removed due to U having an abnormally high y-value relative to baseline")
-    if(q == TRUE){
-      plotyyy <- 0
-      while(plotyyy == 0){
-        plotyy <- readline(prompt = "Would you like to view? (enter yes or no)")
-        if(plotyy == "yes"){
-          for(i in 1:length(falseU)){
-            plot((wuv$wX[falseU[i]]-samp*2):(wuv$wX[falseU[i]]+samp*2), bc[(wuv$wX[falseU[i]]-samp*2):(wuv$wX[falseU[i]]+samp*2)], type = "l")
-            points(wuv$uX[falseU[i]], wuv$uY[falseU[i]], pch = 19)
-            points(wuv$uX[falseU[i]-1], wuv$uY[falseU[i]-1])
-            points(wuv$uX[falseU[i]+1], wuv$uY[falseU[i]+1])
-          }
-          plotyyy <- 1
-        }
-        if(plotyy == "no"){
-          cat("\n", "ok") 
-          plotyyy <- 1
-        }
-        if(plotyy != "yes" & plotyy != "no"){cat("\n", "please enter 'yes' or 'no'")}
+  list<-rle(dat$PPG.PulseOx1)
+  ID <- rep(1:length(list$values), times = list$lengths)
+  data_downsampled <- c()
+  
+  nSrc <- nrow(dat)
+  iDst <- 1
+  iSrc <- 1
+  iVal <- 1
+  print("Deduplicating data...")
+  if(TRUE){ # Mode switch in case new method is worse or somehow broken
+    startClock <- Sys.time()
+    reportClock <- 10
+    
+    data_downsampled <- cbind(dat, ID)
+    
+    while (iSrc <= nSrc){
+      if (as.double(difftime(Sys.time(),startClock,unit="secs"))>reportClock){
+        min <- as.integer(reportClock/60)
+        sec <- reportClock %% 60
+        time <- paste("[",min,":",sep="")
+        if (sec == 0){ time <- paste(time,"00]",sep="")} else { time <- paste(time,sec,"]",sep="")}
+        print(paste(time,iSrc,"of",nSrc))
+        reportClock <- reportClock + 10
+      }
+      
+      data_downsampled[iDst,] <- data_downsampled[iSrc,]
+      iDst <- iDst + 1
+      if (list$lengths[iVal] <= 4){
+        iSrc <- iSrc + list$lengths[iVal]
+        iVal <- iVal + 1
+      } else {
+        iSrc <- iSrc + 4
+        list$lengths[iVal] <- list$lengths[iVal] - 4
       }
     }
-    if(length(falseU) > 0){
-      o2 <- o[-falseU]
-      wuv <- wuv[-falseU, ]
+    
+    # Trim downsampled data to size
+    data_downsampled <- data_downsampled[1:(iDst-1),]
+    
+  }else{ # Old method, using rbind which gets slow
+    
+    data2 <- cbind(dat, ID)
+    data_downsampled <-c()
+    
+    for (i in 1:max(ID)){
+      sub.data <- dplyr::filter(data2, ID == i)
+      if(nrow(sub.data) <= 4){
+        data_downsampled <- rbind(data_downsampled, sub.data[1,])
+      }else if(nrow(sub.data) > 4 ){data_downsampled <- rbind(data_downsampled, sub.data[1,], sub.data[5,])}
     }
+    
+  } # End of method selector
+  
+  print("Removing DC blocker...")
+  #Undetrend
+  # Analysis of device output indicates that the PPG signal is detrended by application of the following
+  # formula: OUT[i] = 80 + (OUT[i-1]-80) * 0.96875 + (IN[i] - [IN[i-1]), where the constant 0.96875 is
+  # an approximation fitted to the data.
+  # Individual pulse events are more comprehensible if the detrending is not used, so this function 
+  #removes it by inverting the above function. 
+  undetrended <-replicate(length(data_downsampled$PPG.PulseOx1)-1, 0) 
+  undetrended<-c(data_downsampled$PPG.PulseOx1[1],undetrended) #add first detrended value to vector
+  for (i in 2:length(data_downsampled$PPG.PulseOx1)){
+    undetrended[i]<-((data_downsampled$PPG.PulseOx1[i]-80) - ((data_downsampled$PPG.PulseOx1[i-1]-80) * 0.96875) + (undetrended[i-1]))
   }
-  
-  # Find v-u differences:
-  diffVU <- wuv$vY - wuv$uY
-  
-  # undetected artefacts can lead to repeats in half heights (if the deriv peak is too wide), which will lead to 
-  # scale factors of 0, check for these:
-  if(length(which(diffVU == 0)) > 0){
-    dup <- which(diffVU == 0)
-    wuv <- wuv[-dup, ]
-    diffVU <- diffVU[-dup]
-    cat(length(which(diffVU == 0)), "/", nrow(wuv), "waves removed due to scale factors of 0 (u and v incorrectly identified)")
-  }
-  
-  # Make a vector of waves with abnormally small scale factors and remove them:
-  falseScale <- which(diffVU < (median(diffVU) - 5*(std(diffVU))))   # changed 4* to 5*
-  if(length(falseScale) > 1){
-    cat("/n", length(falseScale), "/", nrow(wuv), "waves removed due to scale factors of 0 (u and v incorrectly identified)")
-    if(q == TRUE){
-      plotyyy <- 0
-      while(plotyyy == 0){
-        plotyy <- readline(prompt = "Would you like to view? (enter yes or no)")
-        if(plotyy == "yes"){
-          for(i in 1:length(falseScale)){
-            plot((wuv$wX[falseScale[i]]-samp*2):(wuv$wX[falseScale[i]]+samp*2), bc[(wuv$wX[falseScale[i]]-samp*2):(wuv$wX[falseScale[i]]+samp*2)], type = "l")
-            points(wuv$uX[falseScale[i]], wuv$uY[falseScale[i]])
-            points(wuv$vX[falseScale[i]], wuv$vY[falseScale[i]])
-          }
-          plotyyy <- 1
-        }
-        if(plotyy == "no"){
-          cat("\n", "ok") 
-          plotyyy <- 1
-        }
-        if(plotyy != "yes" & plotyy != "no"){cat("\n", "please enter 'yes' or 'no'")}
-      }
-    }
-    if(length(falseScale) > 0){
-      o2 <- o2[-falseScale]
-      wuv <- wuv[-falseScale, ]
-      diffVU <- diffVU[-falseScale]
-    }
-  }
-  
-  
-  ## Find o points again:
-  oY <- predict(sp, inx[o])
-  #plot(splinePolyBC)
-  #points(inflexX[o], o_yval, pch = 19)
-  
-  # Find o-w difference:
-  owDiff <- c()
-  for(i in 1:length(wuv$wX)){
-    owDiff[i] <- wuv$wX[i] - inx[o[i]]
-  }
-  
-  # Find distance between o_points:
-  oDiff <- c()
-  for(i in 1:(length(inx[o])-1)){
-    oDiff[i] <- inx[o[i+1]] - inx[o[i]]
-  }
-  
-  # Find distance between W points (Inter-beat interval):
-  ibi <- c()
-  for(i in 1:(length(wuv$wX))-1){
-    ibi[i] <- wuv$wX[i+1] - wuv$wX[i]
-  }
-  
-  # Remove last W:
-  o2 <- o2[-length(o2)]
-  wuv <- wuv[-nrow(wuv), ]
-  diffVU <- diffVU[-length(diffVU)]  
-  
-  # Make a vector of abnormal IBIs (the waves at the end of a sequence / before an artefact): 
-  #plot(ibi)
-  #points(which(ibi > 1.3*median(ibi)), ibi[which(ibi > 1.3*median(ibi))], pch = 19, col = "red")
-  endWaves <- c()
-  for(i in 2:(length(ibi)-1)){
-    if(ibi[i] > 1.3*median(ibi) & ibi[i] > 2*ibi[i-1]){
-      endWaves[i] <- i 
-    }
-  }
-  
-  # Remove end_waves from all vectors:
-  if(length(endWaves) > 1){
-    endWaves <- endWaves[!is.na(endWaves)]
-    cat("\n", length(endWaves), "/", nrow(wuv), "waves removed due to the end of the wave (next o point) not being corrected for baseline")
-    if(q == TRUE){
-      plotyyy <- 0
-      while(plotyyy == 0){
-        plotyy <- readline(prompt = "Would you like to view? (enter yes or no)")
-        if(plotyy == "yes"){
-          for(i in 1:length(endWaves)){
-            if(endWaves[i] == 1){
-              plot(1:(samp*10), bc[1:(samp*10)], type = "l")
-              points(wuv$wX[endWaves[i]], wuv$wY[endWaves[i]], pch =19, col = 'red')
-            }else{
-              plot((wuv$wX[endWaves[i]]-samp*5):(wuv$wX[endWaves[i]]+samp*5), bc[(wuv$wX[endWaves[i]]-samp*5):(wuv$wX[endWaves[i]]+samp*5)], type = "l")
-              points(wuv$wX[endWaves[i]], wuv$wY[endWaves[i]], pch =19, col = 'red')
-              points(wuv$wX[endWaves[i]+1], wuv$wY[endWaves[i]+1], pch = 19, col = 'red')
-              points(wuv$wX, wuv$wY)
-            }
-          }
-          plotyyy <- 1
-        }
-        if(plotyy == "no"){
-          cat("\n", "ok") 
-          plotyyy <- 1
-        }
-        if(plotyy != "yes" & plotyy != "no"){cat("\n", "please enter 'yes' or 'no'")}
-      }
-    }
-    if(length(endWaves) > 1){
-      o2 <- o2[-endWaves]
-      wuv <- wuv[-endWaves, ]
-      diffVU <- diffVU[-endWaves] 
-    }
-  }
-  d <- cbind(wuv, diffVU, o2)
-  dat <- list(d, ibi, oDiff)
-  return(dat)
-}
-
-
-
-diast_pk <- function(avw, sr, scale = F){
-  # Find the diastolic peak on the average wave to inform OSND finding (also some adjusment of x-values for removal of NA values):
-  avw <- avw[!is.na(avw)]
-  
-  # Need to find new W position (0.5) after removing NAs
-  if(scale == TRUE){
-    xShift <- which(abs(avw-0.5) == min(abs(avw - 0.5)))
-  }else{
-    xShift <- which.min(abs(avw)) 
-  }
-  avWavePoly <- CubicInterpSplineAsPiecePoly(1:length(avw), avw, "natural")
-  avInflexX <- solve(avWavePoly, b = 0, deriv = 1)
-  avInflexY <- predict(avWavePoly, avInflexX)
-  
-  # Specify limitations for where the diastolic peak can first be found i.e between 120:230 on x-axis, and below 1 on y-axis:
-  #peaks <- order(avInflexY[which(avInflexX < 215 & avInflexX > 120 & avInflexY < 1)], decreasing = TRUE)  
-  #diastPk <- avInflexX[which(avInflexX < 215 & avInflexX > 120 & avInflexY < 1)][peaks[1]]
-  
-  # OR:
-  # Find any peaks (above 0):
-  peaks_above_0 <- which(avInflexY > 0)
-  peaks <- order(avInflexY[peaks_above_0], decreasing = TRUE)
-  peaks <- peaks_above_0[peaks]
-  diastPk <- avInflexX[peaks[2]]  
-  
-  
-  # diastPk will be NA for class 3 waveforms, in which case set a default value
-  if(is.na(diastPk) | diastPk < avInflexX[peaks[1]]){
-    diastPk <- 5*sr
-  }
-  return(c(diastPk, xShift))
-}
-
-
-
-find_average <- function(p, ao){
-  
-  # Find the last 10 values of each wave:
-  last10 <- list()
-  for(i in 2:(ncol(p))){
-    last10[[i-1]] <- p[, i][!is.na(p[, i])][(length(p[, i][!is.na(p[, i])])-10):(length(p[, i][!is.na(p[, i])]))]
-  }
-  
-  # Find the average last 10 values
-  avLast10 <- c()
-  for(i in 1:10){   
-    rowVec <- c()
-    for(j in 1:length(last10)){      
-      rowVec[j] <- last10[[c(j, i)]] 
-    }
-    avLast10[i] <- mean(rowVec[!is.na(rowVec)])   
-  }
-  
-  # Find the consecutive y-axis differences (gradient essentially) of last 10 values:
-  avDiff <- c()
-  for(i in 1:9){                    # 9 here since 10 values will give 9 values for differences between them
-    avDiff[i] <- avLast10[i+1] - avLast10[i]
-  }
-  
-  # Simply calculating the average wave by averaging each row of the dataframe doesn't work at the end of the wave, 
-  # since as waves end, they no longer factor in to the calculation of the average. The average would be erroneously 
-  # drawn out until the end of the last wave. Therefore, a clone dataframe of p is used to continue the trajectories
-  # of waves after they have ended (by using the average gradient above) and thus make the end of the average wave
-  # a more accurate approximation of the true average. 
-  
-  # Replace NA values with continuing downward gradient in a clone dataframe:
-  p2 <- p
-  for(i in 2:(ncol(p2))){
-    for(j in 1:length(p2[, i][ao[[(i-1)]][-1]])){
-      p2[, i][ao[[(i-1)]][-1]][j] <- p2[, i][ao[[(i-1)]][1]] + j*mean(avDiff[1:5])
-    }
-  }
-  
-  # Calculate the average wave by row:
-  avWav <- c()
-  sdWav <- c()
-  medWav <- c()
-  for(i in 1:nrow(p2)){
-    rowVec <- c()
-    for(j in 2:(ncol(p2))){
-      rowVec[j-1] <- p2[i, j] 
-    }
-    avWav[i] <- mean(rowVec[!is.na(rowVec)])   
-    sdWav[i] <- sd(rowVec[!is.na(rowVec)]) 
-    medWav[i] <- median(rowVec[!is.na(rowVec)])
-  }
-  
-  # Find where the end of the average wave should end: 
-  # This is done by finding the average (mode) y-value of the final value of each wave (before trajectory continuation)
-  end <- c()
-  for(i in 2:ncol(p)){
-    end[i-1] <- p2[, i][ao[[(i-1)]][1]]
-  }
-  # define mode function
-  mode <- function(x) {
-    ux <- unique(x)
-    ux[which.max(tabulate(match(x, ux)))]
-  }
-  # Made this into a for loop because there can be waves that have no values after o, and if all waves are like that, end will be null
-  if(length(end) > 1){     
-    avEnd <- mode(round(end[!is.na(end)], digits = 2))
-    # Remove elements of average wave after where its end should be:
-    belowO <- which(avWav < avEnd)
-    # Find the first point in the last quarter of the wave that goes below baseline
-    if(sum(which(belowO > (length(avWav)/(4/3)))) > 0){
-      b. <- belowO[min(which(belowO > (length(avWav)/(4/3))))]
-    }else{
-      b. <- NA
-    }
-    # If the wave doesn't go below baseline, don't remove any 
-    if(is.na(b.) == FALSE){
-      # otherwise, remove those elements from the average:
-      avWav[b.:length(avWav)] <- NA
-    }
-  }
-  
-  # Find the median of the first x-values - make that the start of average:
-  first <- c()
-  for(i in 2:ncol(p)){
-    stpqw <- p[, i][1:200]
-    stq <- stpqw[is.na(stpqw)]
-    first[i-1] <- length(stq) + 1
-  }
-  start <- median(first)-2
-  avWav[1:start] <- NA
-  
-  
-  return(as.vector(avWav))
-}
-
-
-
-find_u_v <- function(dat, wx, wy, d1, d1p, spline, spline_o, plot = FALSE){
-  # Find half the height of w (on derivative y-axis)
-  wHalfHeight <- predict(d1p, wx)/2   # should change this to w$w_poly_peaks_deriv1_yval
-  # Find u and v:
-  halfHeightX <- c()
-  halfHeightY <- c()
-  for(i in 1:length(wHalfHeight)){    #length(wHalfHeight)
-    d1PeakSub <- CubicInterpSplineAsPiecePoly((round(wx[i])-5):(round(wx[i])+5), d1[(round(wx[i])-5):(round(wx[i])+5)], "natural")   # Making a smaller spline for just the peak
-    preHalfHeights <- solve(d1PeakSub, b = wHalfHeight[i])   # finding the points on the small spline where the heights are half the peak
-    # If only one half height detected, extend window for finding half heights:
-    if(length(preHalfHeights) < 2){
-      d1PeakSub <- CubicInterpSplineAsPiecePoly((round(wx[i])-10):(round(wx[i])+10), d1[(round(wx[i])-10):(round(wx[i])+10)], "natural")   # Making a smaller spline for just the peak
-      preHalfHeights <- solve(d1PeakSub, b = wHalfHeight[i]) 
-    }
-    # If more than one half height detected:
-    if(length(preHalfHeights) > 2){
-      # Find the distance between each detected half height, compare their xvals to the peak, and keep only the two that have the most similar distance to the peak... 
-      a <- preHalfHeights - wx[i]
-      b <- c()
-      for(j in 1:(length(a)-1)){
-        b[j] <- a[j] - a[j+1]
-      } 
-      b[length(b) + 1] <- a[1] - a[length(a)]
-      c <- which(abs(b) == min(abs(b)))
-      if(c == length(b)){
-        preHalfHeights <- c(preHalfHeights[c], preHalfHeights[1])
-      }else{
-        preHalfHeights <- c(preHalfHeights[c], preHalfHeights[c+1])
-      }
-    }
-    halfHeightX[c((2*(i)-1), (2*(i)))] <- preHalfHeights     # assigning half heights to a vector
-    halfHeightY[c((2*(i)-1), (2*(i)))] <- predict(d1PeakSub, halfHeightX[c((2*(i)-1), (2*(i)))])  # finding the y_values from those half heights on the smaller spline
-  }
-  
-  # Plot u's and v's on deriv1_poly
-  if(plot){
-    plot(d1p)
-    points(halfHeightX, halfHeightY, pch = 19)
-  }
-  
-  # Find u and v 
-  uX <- halfHeightX[seq_along(halfHeightX) %%2 != 0] 
-  vX <- halfHeightX[seq_along(halfHeightX) %%2 == 0]
-  
-  
-  # Find u and v y-values for spline_poly
-  uY <- c()
-  for(i in 1:length(uX)){
-    uY[i] <- predict(spline, uX[i])
-  }
-  
-  vY <- c()
-  for(i in 1:length(vX)){
-    vY[i] <- predict(spline, vX[i])
-  }
-  
-  df <- data.frame(uX, uY, vX, vY)
-  return(df)
-}
-
-
-
-find_o <- function(wx, inx, iny, d1p, sp){
-  o <- c()
-  for(i in 1:length(wx)){
-    o[i] <- max(which(inx < wx[i]))
-  }
-  # Adjust for early O points:
-  # First find O based on inflection point on first deriv:
-  inflexD1 <- solve(d1p, b = 0, deriv = 1)
-  o2 <- c()
-  for(i in 1:length(wx)){
-    o2[i] <- max(which(inflexD1 < wx[i]))
-  }
-  # Use the O derived from 1st deriv if its y-val is above 0: 
-  for(i in 1:length(wx)){
-    if((inx[o][i] - inflexD1[o2][i]) < 0){
-      inx[o][i] <- inflexD1[o2][i]
-      iny[o][i] <- predict(sp, inx[o][i]) 
-    }
-  }
-  return(o)
+  print("Done")
+  return(undetrended)
 }
 
 
@@ -646,276 +319,331 @@ find_w <- function(d1p, deriv1, sp, sr){
   return(Ws)
 }
 
-
-
-osnd_of_average <- function(aw, dp, diff, sr, plot = TRUE){
-  
-  switch <- 0
-  aw <- aw[!is.na(aw)]
-  
-  avWavPoly <- CubicInterpSplineAsPiecePoly(1:length(aw), aw, "natural")
-  sfunction <- splinefun(1:length(aw), aw, method = "natural")
-  d1Wav <- sfunction(1:length(aw), deriv = 1)
-  d1WavPoly <- CubicInterpSplineAsPiecePoly(1:length(aw), d1Wav, "natural") 
-  
-  # Find inflexion points on d1WavPoly
-  d1InflxX <- solve(d1WavPoly, b = 0, deriv = 1)
-  d1InflxY <- predict(d1WavPoly, d1InflxX)
-  
-  # Find OSND
-  wavInflxX <- solve(avWavPoly, b = 0, deriv = 1)
-  wavInflxY <- predict(avWavPoly, wavInflxX)
-  
-  # You might not have to worry about correcting o with this wave since the inflection point in likely to be correct
-  
-  # Finding notch based on x-axis:
-  # Find inflexion point closest to where the notch usually is (aka 75-80)
-  notchRange <- which(d1InflxX > (3.104572*sr - diff) & d1InflxX < dp) # 3.104572 used to be 3.5! #  dp used to be 5*sampling rate!
-  # If there is no inflexion point detected within the notch range, this could be because there is a plateu rather than a peak
-  # In this case, taking the mean value of the notch range boundaries gives a reasonable approximation
-  if(length(notchRange) < 1 | (length(notchRange) == 1 & d1InflxY[notchRange][1] < -0.02)){
-    new.n <- ((3.104572*sr) + dp)/2
-    # In case new.n is greater than the number of datapoints, set D to last inflection point on derivative (assuming the wave is very short)
-    if(new.n > length(aw)){
-      new.n <- d1InflxX[length(d1InflxX)]
-    }
-  }else{
-    a. <- which(d1InflxY[notchRange] == max(d1InflxY[notchRange]))
-    # In cases where the renal peak is higher on 1st deriv than the notch peak, make sure the notch peak is limited by x-axis
-    while(d1InflxX[notchRange[a.]] < sr*3){   # was 115 instead of sr*3
-      b. <- 2
-      a. <- order(d1InflxY[notchRange], decreasing = TRUE)[b.]
-      b. <- 3
-    }
-    # Make sure the 1st peak is not the notch:
-    if(which(d1InflxY == max(d1InflxY)) == notchRange[a.]){
-      notchRange <- notchRange[which(notchRange > notchRange[a.])]
-    }
-    new.n <- d1InflxX[notchRange[a.]]
-  }
-  new.ny <- predict(avWavPoly, new.n)
-  #plot(d1WavPoly)
-  #points(new.n, predict(d1WavPoly, new.n))
-  
-  
-  # After having found the notch on all waves, you can see if there are inflexion points either side:
-  # If inflexion point before is lower and inflexion point after is higher (on y axis), this must mean a second peak aka canonical wave
-  # Thus if this criterion is fulfilled you can create N and D separately 
-  if(length(wavInflxX) > 1 & wavInflxY[max(which(wavInflxX < new.n))] < new.ny){
-    new.n <- wavInflxX[max(which(wavInflxX < new.n))]
-    new.ny <-  predict(avWavPoly, new.n)
-    d. <- wavInflxX[min(which(wavInflxX > new.n))]
-    d.y <- predict(avWavPoly, d.)
-    # If no inflexion point after the notch, take instead the closest value to 0 on the 1st deriv wave after it (the next inflexion point on deriv1)
-    if(is.na(d.)){
-      d. <- d1InflxX[notchRange[a.+1]]
-      d.y <- predict(avWavPoly, d.)
-    }
-    switch <- 1
-  }
-  
-  if(plot == TRUE){
-    plot(avWavPoly)
-    points(wavInflxX, wavInflxY)
-    points(new.n, new.ny, col = "red")
-    if(switch == 1){
-      points(d., d.y, col = "blue")
-    }
-  }
-  
-  
-  
-  # Find W: the max inflection point on first deriv:
-  w. <- d1InflxX[which( d1InflxY ==  max(d1InflxY) & d1InflxX[which(d1InflxY ==  max(d1InflxY))] < new.n)]
-  w.y <- predict(avWavPoly, w.)
-  if(plot ==TRUE){points(w., w.y)}
-  
-  # Find U and V:
+find_u_v <- function(dat, wx, wy, d1, d1p, spline, spline_o, plot = FALSE){
   # Find half the height of w (on derivative y-axis)
-  hhaw <- max(d1InflxY)/2
-  # Find u and v for derivative:
-  halfHeights <- solve(d1WavPoly, b = hhaw)
-  #halfHeightsY <- predict(d1WavPoly, halfHeights)
-  
-  # If only one half height detected, assume the segment had quite a high O value such that O was higher than V:
-  if(length(halfHeights) < 2){
-    halfHeights[2] <- solve(d1WavPoly, b = d1Wav[1])[1]
-  }
-  
-  # If more than one half height detected:
-  if(length(halfHeights) > 2){
-    # Find the distance between each detected half height, compare their xvals to the peak, and keep only the two that have the most similar distance to the peak... 
-    # bear in mind one has to be either side of w...
-    a <- halfHeights - w.
-    postW <- which(a > 0)
-    preW <- which(a < 0)
-    halfHeights <- c(  min(halfHeights[postW]),  max(halfHeights[preW]))
-    #a <- abs(halfHeights - w.)
-    #b <- c()
-    #for(j in 1:(length(a)-1)){
-    #  b[j] <- abs(a[j] - a[j+1])
-    #} 
-    #b[length(b) + 1] <- abs(a[1] - a[length(a)])
-    #c <- which(abs(b) == min(abs(b)))
-    #if(c == length(b)){
-    #  halfHeights <- c(halfHeights[c], halfHeights[1])
-    #}else{
-    #  halfHeights <- c(halfHeights[c], halfHeights[c+1])
-  }
-  
-  u <- halfHeights[1]
-  v <- halfHeights[2] 
-  # Find u and v y-values for original wave:
-  uvY <- predict(avWavPoly, halfHeights)
-  uY <- uvY[1]
-  vY <- uvY[2]
-  if(plot == TRUE){
-    points(u, uY)
-    points(v, vY) 
-  }
-  
-  # If there are inflection points before w, use the maximum one as 0:
-  if(length(which(wavInflxX < w.)) > 0){
-    o. <- wavInflxX[max(which(wavInflxX < w.))]
-  }else{
-    # If there are no inflection points before w, check if there are any in the first deriv before w:
-    if(length(which(d1InflxX < w.)) < 1){
-      # If not, assign O to the first value
-      o. <- 1
-    }else{
-      # If there are, make sure the max inflection point is not greater than 0 on the original y-axis (which would be higher than U):
-      if((predict(avWavPoly, d1InflxX[max(which(d1InflxX < w.))]) > 0)){
-        # If the max inflection point is above 0, assign O to the first value
-        o. <- 1
+  wHalfHeight <- predict(d1p, wx)/2   # should change this to w$w_poly_peaks_deriv1_yval
+  # Find u and v:
+  halfHeightX <- c()
+  halfHeightY <- c()
+  for(i in 1:length(wHalfHeight)){    #length(wHalfHeight)
+    d1PeakSub <- CubicInterpSplineAsPiecePoly((round(wx[i])-5):(round(wx[i])+5), d1[(round(wx[i])-5):(round(wx[i])+5)], "natural")   # Making a smaller spline for just the peak
+    preHalfHeights <- solve(d1PeakSub, b = wHalfHeight[i])   # finding the points on the small spline where the heights are half the peak
+    # If only one half height detected, extend window for finding half heights:
+    if(length(preHalfHeights) < 2){
+      d1PeakSub <- CubicInterpSplineAsPiecePoly((round(wx[i])-10):(round(wx[i])+10), d1[(round(wx[i])-10):(round(wx[i])+10)], "natural")   # Making a smaller spline for just the peak
+      preHalfHeights <- solve(d1PeakSub, b = wHalfHeight[i]) 
+    }
+    # If more than one half height detected:
+    if(length(preHalfHeights) > 2){
+      # Find the distance between each detected half height, compare their xvals to the peak, and keep only the two that have the most similar distance to the peak... 
+      a <- preHalfHeights - wx[i]
+      b <- c()
+      for(j in 1:(length(a)-1)){
+        b[j] <- a[j] - a[j+1]
+      } 
+      b[length(b) + 1] <- a[1] - a[length(a)]
+      c <- which(abs(b) == min(abs(b)))
+      if(c == length(b)){
+        preHalfHeights <- c(preHalfHeights[c], preHalfHeights[1])
       }else{
-        # If the max inflection point is not above 0, assign O to it:
-        o. <- d1InflxX[max(which(d1InflxX < w.))]
+        preHalfHeights <- c(preHalfHeights[c], preHalfHeights[c+1])
       }
     }
+    halfHeightX[c((2*(i)-1), (2*(i)))] <- preHalfHeights     # assigning half heights to a vector
+    halfHeightY[c((2*(i)-1), (2*(i)))] <- predict(d1PeakSub, halfHeightX[c((2*(i)-1), (2*(i)))])  # finding the y_values from those half heights on the smaller spline
   }
-  o._yval <- predict(avWavPoly, o.)
-  if(plot == TRUE){points(o., o._yval, pch = 19)}
+  
+  # Plot u's and v's on deriv1_poly
+  if(plot){
+    plot(d1p)
+    points(halfHeightX, halfHeightY, pch = 19)
+  }
+  
+  # Find u and v 
+  uX <- halfHeightX[seq_along(halfHeightX) %%2 != 0] 
+  vX <- halfHeightX[seq_along(halfHeightX) %%2 == 0]
+  
+  
+  # Find u and v y-values for spline_poly
+  uY <- c()
+  for(i in 1:length(uX)){
+    uY[i] <- predict(spline, uX[i])
+  }
+  
+  vY <- c()
+  for(i in 1:length(vX)){
+    vY[i] <- predict(spline, vX[i])
+  }
+  
+  df <- data.frame(uX, uY, vX, vY)
+  return(df)
+}
 
-  
-  ## Find S:
-  # Find new S:
-  s2 <- w. + 2*(abs(v - w.))
-  s2Y <- predict(avWavPoly, s2)
-  #points(s2, s2Y)
-  # Define old s:
-  s1Y <- max(wavInflxY)
-  s1 <- wavInflxX[which(wavInflxY == max(wavInflxY))]
-  # Decide which S to use...
-  if((s1 - w.) < (s2 - w.)){
-    s. <- s1
-    s.y <- s1Y
-  }else{
-    s. <- s2
-    s.y <- s2Y
+
+find_o <- function(wx, inx, iny, d1p, sp){
+  o <- c()
+  for(i in 1:length(wx)){
+    o[i] <- max(which(inx < wx[i]))
   }
-  if(plot == TRUE){points(s., s.y, pch = 19)} 
+  # Adjust for early O points:
+  # First find O based on inflection point on first deriv:
+  inflexD1 <- solve(d1p, b = 0, deriv = 1)
+  o2 <- c()
+  for(i in 1:length(wx)){
+    o2[i] <- max(which(inflexD1 < wx[i]))
+  }
+  # Use the O derived from 1st deriv if its y-val is above 0: 
+  for(i in 1:length(wx)){
+    if((inx[o][i] - inflexD1[o2][i]) < 0){
+      inx[o][i] <- inflexD1[o2][i]
+      iny[o][i] <- predict(sp, inx[o][i]) 
+    }
+  }
+  return(o)
+}
+
+
+preclean_wuv <- function(w, uv, o, samp, sp, q = FALSE){
   
-  if(switch == 0){
-    x <- c(o., s., new.n, new.n)
-  }else{
-    x <- c(o., s., new.n, d.)
+  # Find where W lies from U to V on the x-axis, for each wave find the percentage distance to V: 
+  vDist <- c()
+  for(i in 1:length(w$wX)){
+    vDist[i] <- (w$wX[i] - uv$uX[i]) / (uv$vX[i] - uv$uX[i])*100
+  }
+  #plot(w$wX, vDist, type = "l")
+  
+  # Make a vector of abnormal pdtv (allowing any values between 30 and 70): 
+  sdpdtv <- sd(vDist)
+  pdtvWaves <- c(which(vDist > (sdpdtv + median(vDist)) & vDist > 70), which(vDist < (median(vDist) - sdpdtv) & vDist < 30))
+  
+  # Remove pdtvWaves:
+  if(length(pdtvWaves) > 0){
+    cat("\n", length(pdtvWaves), "waves removed due to abnormal distances between u, v and w" )
+    if(q == TRUE){
+      plotyyy <- 0
+      while(plotyyy == 0){
+        plotyy <- readline(prompt = "Would you like to view? (enter yes or no)")
+        if(plotyy == "yes"){
+          for(i in 1:length(pdtvWaves)){
+            if(pdtvWaves[i] == 1){
+              plot(1:(samp*10), sp[1:(samp*10)], type = "l")
+              points(w$wX, w$wY)
+              points(w$wX[pdtvWaves[i]], w$wY[pdtvWaves[i]], pch =19, col = 'red')
+              points(uv$uX, uv$uY)
+              points(uv$vX, uv$vY)
+            }else{
+              plot((w$wX[pdtvWaves[i]]-samp*5):(w$wX[pdtvWaves[i]]+samp*5), sp[(w$wX[pdtvWaves[i]]-samp*5):(w$wX[pdtvWaves[i]]+samp*5)], type = "l")
+              points(w$wX, w$wY)
+              points(w$wX[pdtvWaves[i]], w$wY[pdtvWaves[i]], pch =19, col = 'red')
+              points(uv$uX, uv$uY)
+              points(uv$vX, uv$vY)
+            }
+          }
+          plotyyy <- 1
+        }
+        if(plotyy == "no"){
+          cat("\n", "ok") 
+          plotyyy <- 1
+        }
+        if(plotyy != "yes" & plotyy != "no"){cat("\n", "please enter 'yes' or 'no'")}
+      }
+    }
+    w <- w[-pdtvWaves, ]
+    uv <- uv[-pdtvWaves, ]
+  }
+  return(list(w, uv))
+}
+
+
+baseline <- function(inx, iny, o, dat, sp, plot = FALSE){
+  # Making a (non-polynomial) spline to fit the baseline
+  sfunction2 <- splinefun(inx[o], iny[o], method = "natural")
+  splineBase <- sfunction2(seq(1, length(dat)), deriv = 0)
+  
+  # Plotting spline_base on spline_poly
+  if(plot){
+    plot(sp)
+    points(inx[o], iny[o], pch = 19)
+    lines(splineBase)
   }
   
-  if(switch == 0){
-    y <- c(o._yval, s.y, new.ny, new.ny)
-  }else{
-    y <- c(o._yval, s.y, new.ny, d.y)
+  # Correcting for baseline:
+  baseCor <- dat - splineBase
+  if(plot){
+    plot(baseCor, type = "l")
+    # Plot new baseline (y = 0)
+    lines(1:length(dat), seq(from = 0, to = 0, length.out = length(dat)))
   }
   
-  osnd <- data.frame(x, y)
-  return(osnd)
+  return(baseCor)
 }
 
 
 
-preproc <- function(data){
-  dat<-data[!(data$PPG.PulseOx1=='NaN'),]
+clean_wuv <- function(wuv, sp, inx, o, samp, bc, q = FALSE){
   
-  #Downsample
-  # The BioRadio device provides 250 samples per second, but the PPG is only sampled 75 times per second, 
-  # so we typically have repeated values in a pattern of 3-3-4 repeating. DownSample tries to retrieve the 
-  # unique values, with an effort to be robust against variation in the repeat pattern and also against 
-  # genuine repeated values.
+  o2 <- o
   
-  list<-rle(dat$PPG.PulseOx1)
-  ID <- rep(1:length(list$values), times = list$lengths)
-  data_downsampled <- c()
-  
-  nSrc <- nrow(dat)
-  iDst <- 1
-  iSrc <- 1
-  iVal <- 1
-  print("Deduplicating data...")
-  if(TRUE){ # Mode switch in case new method is worse or somehow broken
-    startClock <- Sys.time()
-    reportClock <- 10
-    
-    data_downsampled <- cbind(dat, ID)
-    
-    while (iSrc <= nSrc){
-      if (as.double(difftime(Sys.time(),startClock,unit="secs"))>reportClock){
-        min <- as.integer(reportClock/60)
-        sec <- reportClock %% 60
-        time <- paste("[",min,":",sep="")
-        if (sec == 0){ time <- paste(time,"00]",sep="")} else { time <- paste(time,sec,"]",sep="")}
-        print(paste(time,iSrc,"of",nSrc))
-        reportClock <- reportClock + 10
-      }
-      
-      data_downsampled[iDst,] <- data_downsampled[iSrc,]
-      iDst <- iDst + 1
-      if (list$lengths[iVal] <= 4){
-        iSrc <- iSrc + list$lengths[iVal]
-        iVal <- iVal + 1
-      } else {
-        iSrc <- iSrc + 4
-        list$lengths[iVal] <- list$lengths[iVal] - 4
-      }
+  # Remove u values that are implausibly far from baseline                             
+  falseU <- c()
+  for(i in 1:(nrow(wuv)-1)){
+    if(wuv$uY[i] > (median(wuv$uY) + 2*std(wuv$uY)) & wuv$uY[i] > 1 & wuv$uY[i] > wuv$uY[i+1]*2 | wuv$uY[i] < -50){
+      falseU[i] <- i
     }
-    
-    # Trim downsampled data to size
-    data_downsampled <- data_downsampled[1:(iDst-1),]
-    
-  }else{ # Old method, using rbind which gets slow
-    
-    data2 <- cbind(dat, ID)
-    data_downsampled <-c()
-    
-    for (i in 1:max(ID)){
-      sub.data <- dplyr::filter(data2, ID == i)
-      if(nrow(sub.data) <= 4){
-        data_downsampled <- rbind(data_downsampled, sub.data[1,])
-      }else if(nrow(sub.data) > 4 ){data_downsampled <- rbind(data_downsampled, sub.data[1,], sub.data[5,])}
-    }
-    
-  } # End of method selector
-  
-  print("Removing DC blocker...")
-  #Undetrend
-  # Analysis of device output indicates that the PPG signal is detrended by application of the following
-  # formula: OUT[i] = 80 + (OUT[i-1]-80) * 0.96875 + (IN[i] - [IN[i-1]), where the constant 0.96875 is
-  # an approximation fitted to the data.
-  # Individual pulse events are more comprehensible if the detrending is not used, so this function 
-  #removes it by inverting the above function. 
-  undetrended <-replicate(length(data_downsampled$PPG.PulseOx1)-1, 0) 
-  undetrended<-c(data_downsampled$PPG.PulseOx1[1],undetrended) #add first detrended value to vector
-  for (i in 2:length(data_downsampled$PPG.PulseOx1)){
-    undetrended[i]<-((data_downsampled$PPG.PulseOx1[i]-80) - ((data_downsampled$PPG.PulseOx1[i-1]-80) * 0.96875) + (undetrended[i-1]))
   }
-  print("Done")
-  return(undetrended)
+  if(length(falseU) > 0){
+    falseU <- falseU[!is.na(falseU)]
+    cat("\n", length(falseU), "/", nrow(wuv), "waves removed due to U having an abnormally high y-value relative to baseline")
+    if(q == TRUE){
+      plotyyy <- 0
+      while(plotyyy == 0){
+        plotyy <- readline(prompt = "Would you like to view? (enter yes or no)")
+        if(plotyy == "yes"){
+          for(i in 1:length(falseU)){
+            plot((wuv$wX[falseU[i]]-samp*2):(wuv$wX[falseU[i]]+samp*2), bc[(wuv$wX[falseU[i]]-samp*2):(wuv$wX[falseU[i]]+samp*2)], type = "l")
+            points(wuv$uX[falseU[i]], wuv$uY[falseU[i]], pch = 19)
+            points(wuv$uX[falseU[i]-1], wuv$uY[falseU[i]-1])
+            points(wuv$uX[falseU[i]+1], wuv$uY[falseU[i]+1])
+          }
+          plotyyy <- 1
+        }
+        if(plotyy == "no"){
+          cat("\n", "ok") 
+          plotyyy <- 1
+        }
+        if(plotyy != "yes" & plotyy != "no"){cat("\n", "please enter 'yes' or 'no'")}
+      }
+    }
+    if(length(falseU) > 0){
+      o2 <- o[-falseU]
+      wuv <- wuv[-falseU, ]
+    }
+  }
+  
+  # Find v-u differences:
+  diffVU <- wuv$vY - wuv$uY
+  
+  # undetected artefacts can lead to repeats in half heights (if the deriv peak is too wide), which will lead to 
+  # scale factors of 0, check for these:
+  if(length(which(diffVU == 0)) > 0){
+    dup <- which(diffVU == 0)
+    wuv <- wuv[-dup, ]
+    diffVU <- diffVU[-dup]
+    cat(length(which(diffVU == 0)), "/", nrow(wuv), "waves removed due to scale factors of 0 (u and v incorrectly identified)")
+  }
+  
+  # Make a vector of waves with abnormally small scale factors and remove them:
+  falseScale <- which(diffVU < (median(diffVU) - 5*(std(diffVU))))   # changed 4* to 5*
+  if(length(falseScale) > 1){
+    cat("/n", length(falseScale), "/", nrow(wuv), "waves removed due to scale factors of 0 (u and v incorrectly identified)")
+    if(q == TRUE){
+      plotyyy <- 0
+      while(plotyyy == 0){
+        plotyy <- readline(prompt = "Would you like to view? (enter yes or no)")
+        if(plotyy == "yes"){
+          for(i in 1:length(falseScale)){
+            plot((wuv$wX[falseScale[i]]-samp*2):(wuv$wX[falseScale[i]]+samp*2), bc[(wuv$wX[falseScale[i]]-samp*2):(wuv$wX[falseScale[i]]+samp*2)], type = "l")
+            points(wuv$uX[falseScale[i]], wuv$uY[falseScale[i]])
+            points(wuv$vX[falseScale[i]], wuv$vY[falseScale[i]])
+          }
+          plotyyy <- 1
+        }
+        if(plotyy == "no"){
+          cat("\n", "ok") 
+          plotyyy <- 1
+        }
+        if(plotyy != "yes" & plotyy != "no"){cat("\n", "please enter 'yes' or 'no'")}
+      }
+    }
+    if(length(falseScale) > 0){
+      o2 <- o2[-falseScale]
+      wuv <- wuv[-falseScale, ]
+      diffVU <- diffVU[-falseScale]
+    }
+  }
+  
+  
+  ## Find o points again:
+  oY <- predict(sp, inx[o])
+  #plot(splinePolyBC)
+  #points(inflexX[o], o_yval, pch = 19)
+  
+  # Find o-w difference:
+  owDiff <- c()
+  for(i in 1:length(wuv$wX)){
+    owDiff[i] <- wuv$wX[i] - inx[o[i]]
+  }
+  
+  # Find distance between o_points:
+  oDiff <- c()
+  for(i in 1:(length(inx[o])-1)){
+    oDiff[i] <- inx[o[i+1]] - inx[o[i]]
+  }
+  
+  # Find distance between W points (Inter-beat interval):
+  ibi <- c()
+  for(i in 1:(length(wuv$wX))-1){
+    ibi[i] <- wuv$wX[i+1] - wuv$wX[i]
+  }
+  
+  # Remove last W:
+  o2 <- o2[-length(o2)]
+  wuv <- wuv[-nrow(wuv), ]
+  diffVU <- diffVU[-length(diffVU)]  
+  
+  # Make a vector of abnormal IBIs (the waves at the end of a sequence / before an artefact): 
+  #plot(ibi)
+  #points(which(ibi > 1.3*median(ibi)), ibi[which(ibi > 1.3*median(ibi))], pch = 19, col = "red")
+  endWaves <- c()
+  for(i in 2:(length(ibi)-1)){
+    if(ibi[i] > 1.3*median(ibi) & ibi[i] > 2*ibi[i-1]){
+      endWaves[i] <- i 
+    }
+  }
+  
+  # Remove end_waves from all vectors:
+  if(length(endWaves) > 1){
+    endWaves <- endWaves[!is.na(endWaves)]
+    cat("\n", length(endWaves), "/", nrow(wuv), "waves removed due to the end of the wave (next o point) not being corrected for baseline")
+    if(q == TRUE){
+      plotyyy <- 0
+      while(plotyyy == 0){
+        plotyy <- readline(prompt = "Would you like to view? (enter yes or no)")
+        if(plotyy == "yes"){
+          for(i in 1:length(endWaves)){
+            if(endWaves[i] == 1){
+              plot(1:(samp*10), bc[1:(samp*10)], type = "l")
+              points(wuv$wX[endWaves[i]], wuv$wY[endWaves[i]], pch =19, col = 'red')
+            }else{
+              plot((wuv$wX[endWaves[i]]-samp*5):(wuv$wX[endWaves[i]]+samp*5), bc[(wuv$wX[endWaves[i]]-samp*5):(wuv$wX[endWaves[i]]+samp*5)], type = "l")
+              points(wuv$wX[endWaves[i]], wuv$wY[endWaves[i]], pch =19, col = 'red')
+              points(wuv$wX[endWaves[i]+1], wuv$wY[endWaves[i]+1], pch = 19, col = 'red')
+              points(wuv$wX, wuv$wY)
+            }
+          }
+          plotyyy <- 1
+        }
+        if(plotyy == "no"){
+          cat("\n", "ok") 
+          plotyyy <- 1
+        }
+        if(plotyy != "yes" & plotyy != "no"){cat("\n", "please enter 'yes' or 'no'")}
+      }
+    }
+    if(length(endWaves) > 1){
+      o2 <- o2[-endWaves]
+      wuv <- wuv[-endWaves, ]
+      diffVU <- diffVU[-endWaves] 
+    }
+  }
+  d <- cbind(wuv, diffVU, o2)
+  dat <- list(d, ibi, oDiff)
+  return(dat)
 }
-
-
 
 
 sep_beats <- function(odiff, bc, samp, wuv, wvlen, inx, o, ibi, scale = TRUE, q = FALSE, subset = FALSE){   
-
+  
   # Redefine baseline corrected data:
   sourcedata <- bc[1:length(undetrended)]
   
@@ -983,8 +711,6 @@ sep_beats <- function(odiff, bc, samp, wuv, wvlen, inx, o, ibi, scale = TRUE, q 
       splSub3[i+1] <- splSub2$y[i]
     }
     
-    # Following lines probably inefficient way of getting everything aligned
-    
     # If splSub3 and nrow(pulse) are the same length, you need only adjust afterO
     if(length(splSub3) == nrow(pulse)){
       if(length(afterO[[i]]) > 0){
@@ -1047,7 +773,7 @@ sep_beats <- function(odiff, bc, samp, wuv, wvlen, inx, o, ibi, scale = TRUE, q 
   for(i in 2:ncol(pulse)){
     wavelengths[i] <- length(pulse[, i][!is.na(pulse[, i])])  
   }
-
+  
   # Make sure the extra long waves are not similar length to the waves either side of them. 
   if(length(extra_long_wave[!is.na(extra_long_wave)]) > 0){
     # Correct for if the first wave is extra long:
@@ -1080,11 +806,11 @@ sep_beats <- function(odiff, bc, samp, wuv, wvlen, inx, o, ibi, scale = TRUE, q 
         }
       }
       wuv <- wuv[-(extra_long_wave[!is.na(extra_long_wave)]), ]
-      pulse <- pulse[, -(extra_long_wave[!is.na(extra_long_wave)])]  # used to be (extra_long_wave + 1).. unsure why
+      pulse <- pulse[, -(extra_long_wave[!is.na(extra_long_wave)])]  
     }
   }
-    
-    
+  
+  
   
   # Remove tall waves:
   nodontdothis <- 1
@@ -1213,7 +939,7 @@ sep_beats <- function(odiff, bc, samp, wuv, wvlen, inx, o, ibi, scale = TRUE, q 
   resid_sd <- sqrt(resid_sd)
   resid_sd <- resid_sd[-1] # remove the NA
   thld <- mean(resid_sd) + sd(resid_sd)*2   # threshold could be adjusted
-  hrsd_waves <- which(resid_sd > thld) + 1  # (+1 since we removed the NA)
+  hrsd_waves <- which(resid_sd > thld) + 1  
   if(length(hrsd_waves) > 0){
     cat("\n", length(hrsd_waves), "/", (ncol(pulse)-1), "waves removed for having high residual SD")
     if(q == TRUE){
@@ -1302,12 +1028,14 @@ sep_beats <- function(odiff, bc, samp, wuv, wvlen, inx, o, ibi, scale = TRUE, q 
     ppg_pre <- (which((ppg[,1]) == beat[,1][pre_indx - 1]))    # Before infusion
     ppg_post <- which((ppg[,1]) == beat[,1][post_indx + 1])    # After infusion wears off
     
-    # Subset:
+    # You might have to re-derive pre and post indx from ppg pre and post
     subs <- which(wuv$wX > ppg_pre & wuv$wX < ppg_post)
+    
+    # Subset:
     wuv <- wuv[subs, ]
     afterO <- afterO[subs]
     pulse <- pulse[, c(1, subs + 1)]
-
+    
     # Refind average wave:
     average_wave <- find_average(p = pulse, ao = afterO)  
   }
@@ -1317,52 +1045,101 @@ sep_beats <- function(odiff, bc, samp, wuv, wvlen, inx, o, ibi, scale = TRUE, q 
 }
 
 
-
-spectrum <- function(baseline_corrected){
-  #filtered <- filter.fft(spline_poly,fc=0.0925,BW=0.0525,n=50)
-  #plot.fft(filtered)
-  #spectral<-spec.fft(spline_poly)
-  #plot(data_downsampled$PPG.PulseOx1)
-  #plot(baseline_corrected)
+find_average <- function(p, ao){
   
-  #powerspectrum<-spectrum(data_downsampled$PPG.PulseOx1)
-  #powerspectrum<-spectrum(baseline_corrected)
+  # Find the last 10 values of each wave:
+  last10 <- list()
+  for(i in 2:(ncol(p))){
+    last10[[i-1]] <- p[, i][!is.na(p[, i])][(length(p[, i][!is.na(p[, i])])-10):(length(p[, i][!is.na(p[, i])]))]
+  }
   
-  #LF<-ffilter(data_downsampled$PPG.PulseOx1, f=75, from = 0.04, to = 0.145, bandpass = TRUE) #low bandpass, sampling frequency of 75 Hz (75 times per second)
-  #powerspectrum<-spectrum(LF)
-  #HF<-ffilter(data_downsampled$PPG.PulseOx1, f=75, from = 0.145, to = 0.45, bandpass = TRUE) #high bandpass
-  #powerspectrum<-spectrum(HF)
+  # Find the average last 10 values
+  avLast10 <- c()
+  for(i in 1:10){   
+    rowVec <- c()
+    for(j in 1:length(last10)){      
+      rowVec[j] <- last10[[c(j, i)]] 
+    }
+    avLast10[i] <- mean(rowVec[!is.na(rowVec)])   
+  }
   
-  #spectralratio<-sum(LF)/sum(HF) #ratio of LF/HF
+  # Find the consecutive y-axis differences (gradient essentially) of last 10 values:
+  avDiff <- c()
+  for(i in 1:9){                    # 9 here since 10 values will give 9 values for differences between them
+    avDiff[i] <- avLast10[i+1] - avLast10[i]
+  }
   
-  #Y1 <- fft(baseline_corrected[1:1000])
+  # Simply calculating the average wave by averaging each row of the dataframe doesn't work at the end of the wave, 
+  # since as waves end, they no longer factor in to the calculation of the average. The average would be erroneously 
+  # drawn out until the end of the last wave. Therefore, a clone dataframe of p is used to continue the trajectories
+  # of waves after they have ended (by using the average gradient above) and thus make the end of the average wave
+  # a more accurate approximation of the true average. 
   
-  #plot(abs(Y1), type="h")
+  # Replace NA values with continuing downward gradient in a clone dataframe:
+  p2 <- p
+  for(i in 2:(ncol(p2))){
+    for(j in 1:length(p2[, i][ao[[(i-1)]][-1]])){
+      p2[, i][ao[[(i-1)]][-1]][j] <- p2[, i][ao[[(i-1)]][1]] + j*mean(avDiff[1:5])
+    }
+  }
   
-  #bands<-c(0.04, 0.145, 0.45)
-  #frebands<-Freq(baseline_corrected, breaks = bands)
-  #Y1 <- fft(frebands[1])
+  # Calculate the average wave by row:
+  avWav <- c()
+  sdWav <- c()
+  medWav <- c()
+  for(i in 1:nrow(p2)){
+    rowVec <- c()
+    for(j in 2:(ncol(p2))){
+      rowVec[j-1] <- p2[i, j] 
+    }
+    avWav[i] <- mean(rowVec[!is.na(rowVec)])   
+    sdWav[i] <- sd(rowVec[!is.na(rowVec)]) 
+    medWav[i] <- median(rowVec[!is.na(rowVec)])
+  }
   
-  library('signal')
-  low<-0.04
-  high<-0.145
-  bf <- butter(2, c(low, high), type = "pass")
-  signal.filtered <- filtfilt(bf, baseline_corrected)
-  fourier <- fft(signal.filtered)
-  plot(abs(fourier), type="h")
+  # Find where the end of the average wave should end: 
+  # This is done by finding the average (mode) y-value of the final value of each wave (before trajectory continuation)
+  end <- c()
+  for(i in 2:ncol(p)){
+    end[i-1] <- p2[, i][ao[[(i-1)]][1]]
+  }
+  # define mode function
+  mode <- function(x) {
+    ux <- unique(x)
+    ux[which.max(tabulate(match(x, ux)))]
+  }
+  # Made this into a for loop because there can be waves that have no values after o, and if all waves are like that, end will be null
+  if(length(end) > 1){     
+    avEnd <- mode(round(end[!is.na(end)], digits = 2))
+    # Remove elements of average wave after where its end should be:
+    belowO <- which(avWav < avEnd)
+    # Find the first point in the last quarter of the wave that goes below baseline
+    if(sum(which(belowO > (length(avWav)/(4/3)))) > 0){
+      b. <- belowO[min(which(belowO > (length(avWav)/(4/3))))]
+    }else{
+      b. <- NA
+    }
+    # If the wave doesn't go below baseline, don't remove any 
+    if(is.na(b.) == FALSE){
+      # otherwise, remove those elements from the average:
+      avWav[b.:length(avWav)] <- NA
+    }
+  }
   
-  low<-0.145
-  high<-0.45
-  bf <- butter(2, c(low, high), type = "pass")
-  signal.filtered <- filtfilt(bf, baseline_corrected)
-  fourier2 <- fft(signal.filtered)
-  plot(abs(fourier2), type="h")
+  # Find the median of the first x-values - make that the start of average:
+  first <- c()
+  for(i in 2:ncol(p)){
+    stpqw <- p[, i][1:200]
+    stq <- stpqw[is.na(stpqw)]
+    first[i-1] <- length(stq) + 1
+  }
+  start <- median(first)-2
+  avWav[1:start] <- NA
   
-  spectralratio<-sum(fourier)/sum(fourier2) #ratio of LF/HF
-  spectralratio
-  return(spectralratio)
   
+  return(as.vector(avWav))
 }
+
 
 
 find_sd <- function(p, ao){
@@ -1415,57 +1192,211 @@ find_sd <- function(p, ao){
 }
 
 
-preclean_wuv <- function(w, uv, o, samp, sp, q = FALSE){
+
+diast_pk <- function(avw, sr, scale = F){
+  # Find the diastolic peak on the average wave to inform OSND finding (also some adjusment of x-values for removal of NA values):
+  avw <- avw[!is.na(avw)]
   
-  # Find where W lies from U to V on the x-axis, for each wave find the percentage distance to V: 
-  vDist <- c()
-  for(i in 1:length(w$wX)){
-    vDist[i] <- (w$wX[i] - uv$uX[i]) / (uv$vX[i] - uv$uX[i])*100
+  # Need to find new W position (0.5) after removing NAs
+  if(scale == TRUE){
+    xShift <- which(abs(avw-0.5) == min(abs(avw - 0.5)))
+  }else{
+    xShift <- which.min(abs(avw)) 
   }
-  #plot(w$wX, vDist, type = "l")
+  avWavePoly <- CubicInterpSplineAsPiecePoly(1:length(avw), avw, "natural")
+  avInflexX <- solve(avWavePoly, b = 0, deriv = 1)
+  avInflexY <- predict(avWavePoly, avInflexX)
   
-  # Make a vector of abnormal pdtv (allowing any values between 30 and 70): 
-  sdpdtv <- sd(vDist)
-  pdtvWaves <- c(which(vDist > (sdpdtv + median(vDist)) & vDist > 70), which(vDist < (median(vDist) - sdpdtv) & vDist < 30))
+  # Specify limitations for where the diastolic peak can first be found i.e between 120:230 on x-axis, and below 1 on y-axis:
+  #peaks <- order(avInflexY[which(avInflexX < 215 & avInflexX > 120 & avInflexY < 1)], decreasing = TRUE)  
+  #diastPk <- avInflexX[which(avInflexX < 215 & avInflexX > 120 & avInflexY < 1)][peaks[1]]
   
-  # Remove pdtvWaves:
-  if(length(pdtvWaves) > 0){
-    cat("\n", length(pdtvWaves), "waves removed due to abnormal distances between u, v and w" )
-    if(q == TRUE){
-      plotyyy <- 0
-      while(plotyyy == 0){
-        plotyy <- readline(prompt = "Would you like to view? (enter yes or no)")
-        if(plotyy == "yes"){
-          for(i in 1:length(pdtvWaves)){
-            if(pdtvWaves[i] == 1){
-              plot(1:(samp*10), sp[1:(samp*10)], type = "l")
-              points(w$wX, w$wY)
-              points(w$wX[pdtvWaves[i]], w$wY[pdtvWaves[i]], pch =19, col = 'red')
-              points(uv$uX, uv$uY)
-              points(uv$vX, uv$vY)
-            }else{
-              plot((w$wX[pdtvWaves[i]]-samp*5):(w$wX[pdtvWaves[i]]+samp*5), sp[(w$wX[pdtvWaves[i]]-samp*5):(w$wX[pdtvWaves[i]]+samp*5)], type = "l")
-              points(w$wX, w$wY)
-              points(w$wX[pdtvWaves[i]], w$wY[pdtvWaves[i]], pch =19, col = 'red')
-              points(uv$uX, uv$uY)
-              points(uv$vX, uv$vY)
-            }
-          }
-          plotyyy <- 1
-        }
-        if(plotyy == "no"){
-          cat("\n", "ok") 
-          plotyyy <- 1
-        }
-        if(plotyy != "yes" & plotyy != "no"){cat("\n", "please enter 'yes' or 'no'")}
-      }
-    }
-    w <- w[-pdtvWaves, ]
-    uv <- uv[-pdtvWaves, ]
+  # OR:
+  # Find any peaks (above 0):
+  peaks_above_0 <- which(avInflexY > 0)
+  peaks <- order(avInflexY[peaks_above_0], decreasing = TRUE)
+  peaks <- peaks_above_0[peaks]
+  diastPk <- avInflexX[peaks[2]]  
+  
+  
+  # diastPk will be NA for class 3 waveforms, in which case set a default value
+  if(is.na(diastPk) | diastPk < avInflexX[peaks[1]]){
+    diastPk <- 5*sr
   }
-  return(list(w, uv))
+  return(c(diastPk, xShift))
 }
 
+
+
+osnd_of_average <- function(aw, dp, diff, sr, plot = TRUE){
+  
+  switch <- 0
+  aw <- aw[!is.na(aw)]
+  
+  avWavPoly <- CubicInterpSplineAsPiecePoly(1:length(aw), aw, "natural")
+  sfunction <- splinefun(1:length(aw), aw, method = "natural")
+  d1Wav <- sfunction(1:length(aw), deriv = 1)
+  d1WavPoly <- CubicInterpSplineAsPiecePoly(1:length(aw), d1Wav, "natural") 
+  
+  # Find inflexion points on d1WavPoly
+  d1InflxX <- solve(d1WavPoly, b = 0, deriv = 1)
+  d1InflxY <- predict(d1WavPoly, d1InflxX)
+  
+  # Find OSND
+  wavInflxX <- solve(avWavPoly, b = 0, deriv = 1)
+  wavInflxY <- predict(avWavPoly, wavInflxX)
+  
+  # Finding notch based on x-axis:
+  # Find inflexion point closest to where the notch usually is (aka 75-80)
+  notchRange <- which(d1InflxX > (3.104572*sr - diff) & d1InflxX < dp) # 3.104572 used to be 3.5! #  dp used to be 5*sampling rate!
+  # If there is no inflexion point detected within the notch range, this could be because there is a plateu rather than a peak
+  # In this case, taking the mean value of the notch range boundaries gives a reasonable approximation
+  if(length(notchRange) < 1 | (length(notchRange) == 1 & d1InflxY[notchRange][1] < -0.02)){
+    new.n <- ((3.104572*sr) + dp)/2
+    # In case new.n is greater than the number of datapoints, set D to last inflection point on derivative (assuming the wave is very short)
+    if(new.n > length(aw)){
+      new.n <- d1InflxX[length(d1InflxX)]
+    }
+  }else{
+    a. <- which(d1InflxY[notchRange] == max(d1InflxY[notchRange]))
+    # In cases where the renal peak is higher on 1st deriv than the notch peak, make sure the notch peak is limited by x-axis
+    while(d1InflxX[notchRange[a.]] < sr*3){   # was 115 instead of sr*3
+      b. <- 2
+      a. <- order(d1InflxY[notchRange], decreasing = TRUE)[b.]
+      b. <- 3
+    }
+    # Make sure the 1st peak is not the notch:
+    if(which(d1InflxY == max(d1InflxY)) == notchRange[a.]){
+      notchRange <- notchRange[which(notchRange > notchRange[a.])]
+    }
+    new.n <- d1InflxX[notchRange[a.]]
+  }
+  new.ny <- predict(avWavPoly, new.n)
+  #plot(d1WavPoly)
+  #points(new.n, predict(d1WavPoly, new.n))
+  
+  
+  # After having found the notch on all waves, you can see if there are inflexion points either side:
+  # If inflexion point before is lower and inflexion point after is higher (on y axis), this must mean a second peak aka canonical wave
+  # Thus if this criterion is fulfilled you can create N and D separately 
+  if(length(wavInflxX) > 1 & wavInflxY[max(which(wavInflxX < new.n))] < new.ny){
+    new.n <- wavInflxX[max(which(wavInflxX < new.n))]
+    new.ny <-  predict(avWavPoly, new.n)
+    d. <- wavInflxX[min(which(wavInflxX > new.n))]
+    d.y <- predict(avWavPoly, d.)
+    # If no inflexion point after the notch, take instead the closest value to 0 on the 1st deriv wave after it (the next inflexion point on deriv1)
+    if(is.na(d.)){
+      d. <- d1InflxX[notchRange[a.+1]]
+      d.y <- predict(avWavPoly, d.)
+    }
+    switch <- 1
+  }
+  
+  if(plot == TRUE){
+    plot(avWavPoly)
+    points(wavInflxX, wavInflxY)
+    points(new.n, new.ny, col = "red")
+    if(switch == 1){
+      points(d., d.y, col = "blue")
+    }
+  }
+  
+  
+  
+  # Find W: the max inflection point on first deriv:
+  w. <- d1InflxX[which( d1InflxY ==  max(d1InflxY) & d1InflxX[which(d1InflxY ==  max(d1InflxY))] < new.n)]
+  w.y <- predict(avWavPoly, w.)
+  if(plot ==TRUE){points(w., w.y)}
+  
+  # Find U and V:
+  # Find half the height of w (on derivative y-axis)
+  hhaw <- max(d1InflxY)/2
+  # Find u and v for derivative:
+  halfHeights <- solve(d1WavPoly, b = hhaw)
+  #halfHeightsY <- predict(d1WavPoly, halfHeights)
+  
+  # If only one half height detected, assume the segment had quite a high O value such that O was higher than V:
+  if(length(halfHeights) < 2){
+    halfHeights[2] <- solve(d1WavPoly, b = d1Wav[1])[1]
+  }
+  
+  # If more than one half height detected:
+  if(length(halfHeights) > 2){
+    # Find the distance between each detected half height, compare their xvals to the peak, and keep only the two that have the most similar distance to the peak... 
+    # bear in mind, one has to be either side of w...
+    a <- halfHeights - w.
+    postW <- which(a > 0)
+    preW <- which(a < 0)
+    halfHeights <- c(  min(halfHeights[postW]),  max(halfHeights[preW]))
+  }
+  
+  u <- halfHeights[1]
+  v <- halfHeights[2] 
+  # Find u and v y-values for original wave:
+  uvY <- predict(avWavPoly, halfHeights)
+  uY <- uvY[1]
+  vY <- uvY[2]
+  if(plot == TRUE){
+    points(u, uY)
+    points(v, vY) 
+  }
+  
+  # If there are inflection points before w, use the maximum one as 0:
+  if(length(which(wavInflxX < w.)) > 0){
+    o. <- wavInflxX[max(which(wavInflxX < w.))]
+  }else{
+    # If there are no inflection points before w, check if there are any in the first deriv before w:
+    if(length(which(d1InflxX < w.)) < 1){
+      # If not, assign O to the first value
+      o. <- 1
+    }else{
+      # If there are, make sure the max inflection point is not greater than 0 on the original y-axis (which would be higher than U):
+      if((predict(avWavPoly, d1InflxX[max(which(d1InflxX < w.))]) > 0)){
+        # If the max inflection point is above 0, assign O to the first value
+        o. <- 1
+      }else{
+        # If the max inflection point is not above 0, assign O to it:
+        o. <- d1InflxX[max(which(d1InflxX < w.))]
+      }
+    }
+  }
+  o._yval <- predict(avWavPoly, o.)
+  if(plot == TRUE){points(o., o._yval, pch = 19)}
+  
+  
+  ## Find S:
+  # Find new S:
+  s2 <- w. + 2*(abs(v - w.))
+  s2Y <- predict(avWavPoly, s2)
+  #points(s2, s2Y)
+  # Define old s:
+  s1Y <- max(wavInflxY)
+  s1 <- wavInflxX[which(wavInflxY == max(wavInflxY))]
+  # Decide which S to use...
+  if((s1 - w.) < (s2 - w.)){
+    s. <- s1
+    s.y <- s1Y
+  }else{
+    s. <- s2
+    s.y <- s2Y
+  }
+  if(plot == TRUE){points(s., s.y, pch = 19)} 
+  
+  if(switch == 0){
+    x <- c(o., s., new.n, new.n)
+  }else{
+    x <- c(o., s., new.n, d.)
+  }
+  
+  if(switch == 0){
+    y <- c(o._yval, s.y, new.ny, new.ny)
+  }else{
+    y <- c(o._yval, s.y, new.ny, d.y)
+  }
+  
+  osnd <- data.frame(x, y)
+  return(osnd)
+}
 
 
 feature_extract <- function(oa, p, pw){
@@ -1581,137 +1512,4 @@ feature_extract <- function(oa, p, pw){
   
   features <- data.frame(s_vals, n_vals, d_vals, np_ratio, ppt, max_amp, auc, auc_s, l, ipa_ratio, pn_time, nt_ratio, ai, aai, ct)
   return(features)
-}
-  
-  
-preproc_iso <- function(ppg = data){
-  
-  lab.time = "time (s)"
-  lab.ppg = "Detrended"
-  lab.dt = "interval (s)"
-  
-  ppg <- data.frame(
-    time = (0:(nrow(ppg)-1)) / 40,
-    ppg = ppg[,1]
-  )
-  
-  names(ppg)[1] <- lab.time
-  names(ppg)[2] <- lab.ppg
-  
-  n <- dim(ppg)[1]
-  vpg <- ppg[2:n,2] - ppg[1:(n-1),2]
-  beat <- ppg[which(vpg[1:(n-1)] < 300 & vpg[2:n] >= 300),1]
-  nBeat <- length(beat)
-  beat <- data.frame(
-    beat = beat,
-    dt = (1:nBeat)*0.0
-  )
-  rm(vpg)
-  
-  UnDetrend <- function(ppg,factor=0,offset=1)    
-  {
-    k <- offset * (1-factor)
-    n <- nrow(ppg)
-    result <- (1:n)*0
-    result[1] = ppg[1,2]
-    for (i in 2:n)
-    {
-      result[i] = ppg[i,2] - ppg[i-1,2] * factor - k + result[i-1]
-    }
-    return(result)
-  }
-  
-  nBeats <- nrow(beat)
-  seg <- c(0,0,0)
-  i <- 1
-  beatTime <- beat[i,1]
-  nextTime <- if (i < nBeats){beat[i+1,1]}else{NA}
-  temp = seg[3]
-  seg <- model2.FindSegment(ppg,beat[i,1],nextTime)
-  if (temp > 0){
-    seg[1] = temp + 1
-  }
-  rm(temp)
-  data <- model2.GetSegment(ppg,seg)
-  plot(data)
-  tail <- c(data[nrow(data), 2], data[nrow(data)-1, 2], data[nrow(data)-2, 2], data[nrow(data)-3, 2], 
-            data[nrow(data)-4, 2])    # try making tail just the last 5 points instead of last 9...
-  tail <- rev(tail)
-  xx. <- 1:length(tail)
-  y. <- lm(tail~xx.)
-  y.[[1]][2] # gradient of the tail
-  
-  # Now adjust factor until gradient = 0
-  
-  print("Calculating factor...")
-  
-  factor_value <- 1.01
-  while(y.[[1]][2][1] > -20){   # may need to be steeper than -4... 
-    
-    factor_value <- factor_value - 0.01
-    ppg2 <- ppg
-    ppg2[, 2] <- UnDetrend(ppg,factor=factor_value,offset=1)
-    #plot(ppg2$`time (s)`[1:100], ppg2$Detrended[1:100], type = "l")
-    nBeats <- nrow(beat)
-    seg <- c(0,0,0)
-    beatTime <- beat[i,1]
-    nextTime <- if (i < nBeats){beat[i+1,1]}else{NA}
-    temp = seg[3]
-    seg <- model2.FindSegment(ppg,beat[i,1],nextTime)
-    if (temp > 0){
-      seg[1] = temp + 1
-    }
-    rm(temp)
-    data <- model2.GetSegment(ppg2,seg)
-    plot(data)
-    if(y.[[1]][2] > 0){
-      tail <- c(data[nrow(data)-5, 2], data[nrow(data)-6, 2], data[nrow(data)-7, 2], data[nrow(data)-8, 2], 
-                data[nrow(data)-9, 2])
-    }else{
-      tail <- c(data[nrow(data), 2], data[nrow(data)-1, 2], data[nrow(data)-2, 2], data[nrow(data)-3, 2], 
-                data[nrow(data)-4, 2])
-    }
-    tail <- rev(tail)
-    #plot(tail)
-    xx. <- 1:length(tail)
-    y. <- lm(tail~xx.)
-    #abline(a = y.[[1]][1], b = y.[[1]][2])
-    y.[[1]][2][1] # gradient of the tail
-    
-  }
-  
-  # Now you have a decent factor value (decay), you need a decent offset:
-  #plot(ppg[,1],UnDetrend(ppg,factor=factor_value,offset=1), type = "l") 
-  ppg3 <- data.frame(ppg[,1],UnDetrend(ppg,factor=factor_value,offset=1))
-  
-  vv. <- ppg3[, 1]      
-  yv. <- lm(ppg3[, 2]~vv.)
-  #abline(a = yv.[[1]][1], b = yv.[[1]][2], col = "red")
-  yv.[[1]][2] # gradient of the tail
-  
-  print("Calculating offset...")
-  
-  offset_value <- 1
-  while(yv.[[1]][2] > 0){
-    if(yv.[[1]][2] > 5){
-      offset_value <- offset_value + 1 # was 0.5
-    }else{
-      if(yv.[[1]][2] > 1){
-        offset_value <- offset_value + 0.5
-      }else{
-        offset_value <- offset_value + 0.05
-      }
-    }
-    ppg3 <- data.frame(ppg[,1],UnDetrend(ppg,factor=factor_value,offset=offset_value))
-    vv. <- ppg3[, 1]      
-    yv. <- lm(ppg3[, 2]~vv.)
-    #if(yv.[[1]][2]>0){plot(ppg[,1],UnDetrend(ppg,factor=factor_value,offset=offset_value), type = "l")}
-    #if(yv.[[1]][2]>0){abline(a = yv.[[1]][1], b = yv.[[1]][2], col = "red")}
-    #if(yv.[[1]][2]>0){print(yv.[[1]][2])} # gradient of the tail
-  }
-  
-  # Now you have a decent decay gradient and a decent offset, set that value to the actual trace:
-  ppg[,2] = UnDetrend(ppg,factor=factor_value,offset=offset_value)   
-  undetrended <- ppg$Detrended
-  return(undetrended)
 }
