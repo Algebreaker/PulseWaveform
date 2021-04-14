@@ -1,3 +1,5 @@
+# Cleaned version:
+
 setwd("Desktop/Scripts")
 
 library(tidyverse)                                 
@@ -9,8 +11,6 @@ library(spectral)
 library(DescTools)
 library(zoo)
 
-source("~/Desktop/WorkshopCS/Workshop2/model2.R")
-source("~/Desktop/WorkshopCS/Workshop2/simplex.R")
 source("~/Desktop/Scripts/PPG_funcs.R")
 source("~/Desktop/Scripts/iso_funcs.R")
 
@@ -21,7 +21,7 @@ all_beats <- TRUE
 subset <- TRUE
 
 # Load time series:
-ppg <- read.csv("~/Desktop/Khalsa_Fletcher_collaboration copy/Physio Dial/ISO_3.0/Iso_3_PhysioData/BJ194/scan_20191008/physiological_files/ECG_4_ISO_R1.1D", sep = "")   
+ppg <- read.csv("~/Desktop/Khalsa_Fletcher_collaboration copy/Physio Dial/ISO_3.0/Iso_3_PhysioData/AD421/scan_20170628/physiological_files/ECG_11_ISO_R6.1D", sep = "")   
 ppg <- data.frame(
   time = (0:(nrow(ppg)-1)) / samplingRate,
   ppg = ppg[,1]
@@ -57,8 +57,8 @@ inflexX <- solve(splinePoly, b = 0, deriv = 1)
 inflexY <- predict(splinePoly, inflexX)
 w <- find_w(d1p = deriv1Poly, deriv1 = deriv1, sp = splinePoly, sr = samplingRate)
 uv <- find_u_v(dat = undetrended, wx = w$wX, wy = w$wY, d1 = deriv1, d1p = deriv1Poly, spline = splinePoly, spline_o = spline1, plot=FALSE)
-o <- find_o(wx = w$wX, inx = inflexX, iny = inflexY, d1p = deriv1Poly, sp = splinePoly)  
-tmp <- preclean_wuv(w=w, uv=uv, o=o, samp = samplingRate, sp = spline1, q = F)  
+o <- find_o(wx = w$wX, inx = inflexX, iny = inflexY, d1p = deriv1Poly, sp = splinePoly)   
+tmp <- preclean_wuv(w=w, uv=uv, o=o, samp = samplingRate, sp = spline1, q = F)   
 w <- tmp[[1]]
 uv <- tmp[[2]]
 rm(tmp)
@@ -78,12 +78,13 @@ ibi <- tmp[[2]]
 oDiff <- tmp[[3]]
 rm(tmp, w, uv)
 waveLen <- round(median(oDiff)+15) 
-tmp <- sep_beats(odiff = oDiff, bc = baseCor, samp = samplingRate, wuv = wuv, wvlen = waveLen, ibi=ibi, o=o, inx = inflexX, scale = T, q = F, subset) 
+tmp <- sep_beats(odiff = oDiff, bc = baseCor, samp = samplingRate, wuv = wuv, wvlen = waveLen, ibi=ibi, o=o, inx = inflexX, scale = T, q = F, subset)  
 pulse <- tmp[[2]]
 avWave <- tmp[[1]]
 wuv <- tmp[[3]]
 rm(tmp)
 ppg[, 2] <- baseCor 
+
 
 # Check time series:
 plot(ppg$`time (s)`[1:1000], ppg$Detrended[1:1000], type = "l")
@@ -137,26 +138,26 @@ for(k in 1:(batch_number+1)){
   renal_param <- median(beat$NTime)
   dias_param <- median(beat$DTime)
   sys_time <- beat$STime
-  sys_amp <- beat$SAmplitude
   par <- as.numeric(beat[1,5:16])   
   beat_start <- beat[, 3]
   beat_end <- beat[, 4]
   beat_vector <- list(beats_in, beat_start, beat_end)
- 
+
   # Refine parameters:
   for(i in 1:4){
     if(i == 1){new_beat <- beat}
-    within_params <- FindWithinParams(beats_in, ppg, beat = new_beat, gs = model2.GetSegment, fp = model2.FixParams3, ms = simplex.MakeSimplex3, m2 = model2.ChiSq3, beat_vector = beat_vector, renal_param = renal_param, dias_param = dias_param, sys_time = sys_time, sys_amp = sys_amp, w = w)
-    across_params <- simplex.MakeSimplex2(data=ppg, param = par, f = model2.ChiSq3, inScale = 0.1, beat_vector = beat_vector, beat = new_beat, renal_param = renal_param, dias_param = dias_param, sys_time = sys_time, sys_amp = sys_amp, w = w)
+    within_params <- FindWithinParams(beats_in, ppg, beat = new_beat, gs = model2.GetSegment, fp = model2.FixParams3, ms = simplex.MakeSimplex3, m2 = model2.ChiSq3, beat_vector = beat_vector, renal_param = renal_param, dias_param = dias_param, sys_time = sys_time, w = w)
+    across_params <- simplex.MakeSimplex2(data=ppg, param = par, f = model2.ChiSq3, inScale = 0.1, beat_vector = beat_vector, beat = new_beat, renal_param = renal_param, dias_param = dias_param, sys_time = sys_time, w = w)
     mat <- make_matrix(across_params, within_params)
-    sim <- simplex.Run2(data = ppg, simplexParam = mat, f = model2.ChiSq3, optional=NULL, beat_vector = beat_vector, renal_param = renal_param, dias_param = dias_param, sys_time = sys_time, sys_amp = sys_time, w = w, run = c("run", i))
+    sim <- simplex.Run2(data = ppg, simplexParam = mat, f = model2.ChiSq3, optional=NULL, beat_vector = beat_vector, renal_param = renal_param, dias_param = dias_param, sys_time = sys_time, w = w, run = c("run", i))
     output <- extractOutput(beats_in, sim)
-    fixed <- FixOutput(beats_in, beat = new_beat, ppg, gs = model2.GetSegment, fp = model2.FixParams3, across = output[[1]], within = output[[2]], sys_time = sys_time, sys_amp = sys_amp)
+    fixed <- FixOutput(beats_in, beat = new_beat, ppg, gs = model2.GetSegment, fp = model2.FixParams3, across = output[[1]], within = output[[2]], sys_time = sys_time)
     new_beat <- UpdateBeat(beats_in, beat, fixed)
+    new_beat <- FixBaseline(new_beat, f = model2.ChiSq3, renal_param, dias_param, sys_time, w)
   }
   
   # Assess fit:
-  fit_check[[k]] <- model2.ChiSq4(data = ppg, params = NULL, beats = beat_vector, beat = new_beat, a = sim[1, ], plot = FALSE, renal_param = renal_param, dias_param = dias_param, sys_time = sys_time, sys_amp = sys_amp, w = w)
+  fit_check[[k]] <- model2.ChiSq4(data = ppg, params = NULL, beats = beat_vector, beat = new_beat, a = sim[1, ], plot = FALSE, renal_param = renal_param, dias_param = dias_param, sys_time = sys_time, w = w)
 
   # Finalise:
   beat2 <- new_beat       
@@ -169,19 +170,6 @@ for(k in 1:(batch_number+1)){
   # Add to overall beat:
   if(k == 1){beat_final <- beat2}else{beat_final <- rbind(beat_final, beat2)}
   
-}
-
-# Finalise final beat dataframe:
-beat_final <- cbind(beat_orig[1:nrow(beat_final), 1:4], beat_final)
-
-# Extract types of fits:
-batch_chisq <- c()
-wave_chisq <- list()
-wave_me <- list()
-for(i in 1:length(fit_check)){
-  batch_chisq[i] <- fit_check[[i]][[1]]
-  wave_chisq[[i]] <- fit_check[[i]][[2]]
-  wave_me[[i]] <- fit_check[[i]][[3]]
 }
 
 # Complete main script to find OSND and morphological features:
@@ -214,18 +202,25 @@ for(i in 2:ncol(pulse)){  #ncol(pulse)
   dpa <- dPeak - diff
   osnd_all[[i-1]] <- osnd_of_average(aw = wavi, dp = dpa, diff = diff, sr = samplingRate, plot = F)
 }
+# Can plot all OSND values against the average to see if there are any obvious anomalies:
+plot(avWave[!is.na(avWave)], type = "l")
+for(i in 1:length(osnd_all)){
+  points(osnd_all[[i]][3, 1], osnd_all[[i]][3, 2], col = "red")
+  points(osnd_all[[i]][4, 1], osnd_all[[i]][4, 2], col = "blue")
+  points(osnd_all[[i]][2, 1], osnd_all[[i]][2, 2])
+  points(osnd_all[[i]][1, 1], osnd_all[[i]][1, 2])
+}
 # Extract morphological features:
 for(i in 1:length(osnd_all)){
   osnd_all[[i]]$y <- osnd_all[[i]]$y - osnd_all[[i]]$y[1]
 }
 features <- feature_extract(oa = osnd_all, p = pulse, pw = polyWave)
 
+
+# Add first four columns to beat final:
+beat_final <- cbind(beat_orig[1:nrow(beat_final), 1:4], beat_final)
 # Calculate differnces in OSND
 osnd_fits <- osnd_fit(beat_final, ppg, plot = F)
-# Name the rows of the different output dataframes the same as the pulse dataframe:
-rownames(beat_final) <- colnames(pulse)[-1][1:nrow(beat_final)]
-rownames(features) <- colnames(pulse)[-1]
-
 # Confirm output waves are the same:
 nrow(beat_final)
 nrow(features)
@@ -234,4 +229,5 @@ length(osnd_fits)
 # Rename rows
 rownames(beat_final) <- colnames(pulse)[-1][1:nrow(beat_final)]
 rownames(features) <- colnames(pulse)[-1]
+
 
