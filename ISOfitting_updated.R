@@ -172,6 +172,13 @@ for(k in 1:(batch_number+1)){
   
 }
 
+# Calculate mean NRMSE from fit_check:
+batch_fits <- c()
+for(i in 1:length(fit_check)){
+  batch_fits[i] <- mean(fit_check[[i]][[4]], trim = 0)
+}
+mean_NRMSE <- mean(batch_fits, trim = 0)
+
 # Complete main script to find OSND and morphological features:
 polyWave <- list()
 for(i in 2:ncol(pulse)){
