@@ -603,7 +603,7 @@ model2.ChiSq3 <- function(data, params, debug=FALSE, beats, optional = NULL, bea
 }
 
 
-model2.ChiSq4 <- function(data, params,debug=FALSE, beats, optional = NULL, beat, a = NULL, plot = FALSE, renal_param, dias_param, sys_time, w){  
+model2.ChiSq4 <- function(data, params,debug=FALSE, beats, beat, a = NULL, plot = FALSE, renal_param, dias_param, sys_time, w){  
   
   # Across-beat parameter extraction:
   if(!is.null(a)){                                            # If a 66 parameter vector has been supplied, extract the first 6 
@@ -614,17 +614,17 @@ model2.ChiSq4 <- function(data, params,debug=FALSE, beats, optional = NULL, beat
   }
   
   # Calculation of ChiSq for all beats:
-  beat_fit <- list()
-  max_error <- list()
+  beat_fit <- c()   
+  max_error <- c()   
+  NRMSE <- c()
   for(i in 1:beats[[1]]){                                          # The number of beats is determined by the first object of beats
     
     # Within-beat parameter extraction:
     if(!is.null(a)){                                               # If a 66 parameter vector has been supplied, take those values
       par2 <- a[((i*6)+1):((i*6)+6)]    
-      par2 <- c(par2[1:4], 0, 0, par2[5], 0, 0, par2[6], 0, 0)
     }else{                                   
       if(!is.null(beat)){                                           # If not, take the values of beat. 
-        par2 <- as.numeric(beat[i, 5:16])
+        par2 <- as.numeric(beat[i, c(5:8, 11, 14)])
       }else{                                                        # If beat is also not provided, take them from the params input
         par2 <- par[c(1:4, 7, 10)]
       }                                                            
@@ -658,7 +658,39 @@ model2.ChiSq4 <- function(data, params,debug=FALSE, beats, optional = NULL, beat
     # Calculate fit, residue and max error:
     fit <- model2.Rebuild2(dat,dat[1,2],params = fixedPar)    
     residue <- dat[ ,2] - fit
-    max_error[[i]] <- max(residue)
+    max_error[i] <- max(residue)
+    
+    # Before weighting the residuals, calculate NRMSE for the region we are interested in:
+    if(plot == TRUE){
+      plot(dat, ylim = c(-500, 2500))
+      lines(dat[, 1], fit)
+      lines(dat[, 1], residue, col = "Red") 
+    }
+    
+    # Define region of interest:
+    rmse_begin <- floor((1+w.)/2)    # Begin half way from O to W
+    rmse_end <- end[1] + 10          # End 10 points after the d-peak (this corresponds to half way down the weighted tail)
+    
+    if(sum(is.na(residue[rmse_begin:rmse_end])) > 0){
+      rmse_residue <- residue[rmse_begin:length(residue)]    # If there are fewer than 10 data points after D, use as many as there are
+      ind_resid <- rmse_begin:length(residue)
+    }else{
+      rmse_residue <- residue[rmse_begin:rmse_end]
+      ind_resid <- rmse_begin:rmse_end
+    }
+    if(plot == TRUE){lines(dat[ind_resid, 1],rmse_residue, col = "green")} 
+    
+    # Define null model:
+    fit_null <- rep(mean(dat[ind_resid, 2], trim = 0), length(rmse_residue))
+    if(plot == TRUE){lines(dat[ind_resid, 1], fit_null)}
+    # Calculate residuals of the null model:
+    residuals_of_null_model <- dat[ind_resid, 2] - fit_null
+    
+    # Calculate NRMSE:
+    rmse_model2 <-  sqrt(mean(rmse_residue^2, trim = 0))
+    rmse_null <- sqrt(mean(residuals_of_null_model^2))
+    NRMSE. <- 1 - (rmse_model2 / rmse_null)
+    NRMSE[i] <- NRMSE.
     
     # Weighted region is W -> D (with slope)
     residue[w.:end[1]] <-  residue[w.:end[1]]*3
@@ -677,22 +709,19 @@ model2.ChiSq4 <- function(data, params,debug=FALSE, beats, optional = NULL, beat
     if(par2[1] == par2[2]){    # If baselines are the same, consider them as 1 parameter
       nPar <- nPar - 1
     }
-    beat_fit[[i]] <- (sum(residue*residue) / (nData-nPar)) + as.numeric(penalty)
+    beat_fit[i] <- (sum(residue*residue) / (nData-nPar)) + as.numeric(penalty)
     
-    if(plot == TRUE){
-      plot(dat,  ylim = c(-150, 2000))      #ylim = c(76, 86) for bioradio data, ylim = c(-150, 1600) for ISO
-      lines(dat[, 1], fit)
-    }
   }
   
   # Summate individual beat ChiSq values:
   temp <- c()
   for(i in 1:length(beat_fit)){
-    temp[i] <- beat_fit[[i]][1]
+    temp[i] <- beat_fit[i]
   }
   ts_fit <- sum(temp)
+  rm(temp)
   
-  fit <- list(ts_fit, beat_fit, max_error)
+  fit <- list(ts_fit, beat_fit, max_error, NRMSE)
   return(fit)
 }
 
