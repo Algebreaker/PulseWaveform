@@ -1,18 +1,15 @@
 # Cleaned version:
 
-setwd("Desktop/Scripts")
+setwd("C:/Users/jojuf/Documents/GitHub/Tulsa Model 2 Version 9")
 
-library(tidyverse)                                 
-library(TeachingDemos)
+library(tidyverse)
 library(splines2)
 library(pracma)
 library(SplinesUtils) 
-library(spectral)
-library(DescTools)
 library(zoo)
 
-source("~/Desktop/Scripts/PPG_funcs.R")
-source("~/Desktop/Scripts/iso_funcs.R")
+source("PPG_funcs.R")
+source("Iso_funcs.R")
 
 samplingRate <- 40
 beats_in <- 10
@@ -21,7 +18,7 @@ all_beats <- TRUE
 subset <- TRUE
 
 # Load time series:
-ppg <- read.csv("~/Desktop/Khalsa_Fletcher_collaboration copy/Physio Dial/ISO_3.0/Iso_3_PhysioData/AD421/scan_20170628/physiological_files/ECG_11_ISO_R6.1D", sep = "")   
+ppg <- read.csv("C:/Users/jojuf/Documents/GitHub/Tulsa Model 2 Version 5/ISO_3.0/ISO_3.0/Iso_3_PhysioData/AO139/scan_20170125/physiological_files/ECG_5_ISO_R1.1D", sep = "")
 ppg <- data.frame(
   time = (0:(nrow(ppg)-1)) / samplingRate,
   ppg = ppg[,1]
@@ -117,6 +114,7 @@ rm(temp)
 # Make and run simplex for each batch:
 beat_orig <- beat
 fit_check <- list()
+start_time <- Sys.time()
 for(k in 1:(batch_number+1)){         
   
   if(all_beats == TRUE){
@@ -144,6 +142,7 @@ for(k in 1:(batch_number+1)){
   beat_vector <- list(beats_in, beat_start, beat_end)
 
   # Refine parameters:
+  
   for(i in 1:4){
     if(i == 1){new_beat <- beat}
     within_params <- FindWithinParams(beats_in, ppg, beat = new_beat, gs = model2.GetSegment, fp = model2.FixParams3, ms = simplex.MakeSimplex3, m2 = model2.ChiSq3, beat_vector = beat_vector, renal_param = renal_param, dias_param = dias_param, sys_time = sys_time, w = w)
@@ -171,7 +170,8 @@ for(k in 1:(batch_number+1)){
   if(k == 1){beat_final <- beat2}else{beat_final <- rbind(beat_final, beat2)}
   
 }
-
+end_time <- Sys.time()
+end_time - start_time
 # Calculate mean NRMSE from fit_check:
 batch_fits <- c()
 for(i in 1:length(fit_check)){
