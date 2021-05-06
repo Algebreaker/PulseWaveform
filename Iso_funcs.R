@@ -7,34 +7,124 @@ const.pi = 3.1415926535897932384626433
 
 
 #Iso fitting funcs:
-# 1. Undetrend
-# 2. FactorAdjust
-# 3. OffsetAdjust
-# 4. AddOutput
-# 5. FindStartParams
-# 6. FindWithinParams
-# 7. make_matrix
-# 8. extractOutput
-# 9. FixOutput
-# 10. UpdateBeat
-# 11. FixBaseline
-# 12. PlotFits
-# 13. osnd_fit
-# 14. model2.GetSegment
-# 15. model2.Excess
-# 16. model2.Peak
-# 17. model2.SubtractExcessPeak
-# 18. model2.ChiSq3
-# 19. model2.ChiSq4
-# 20. model2.Rebuild2
-# 21. model2.Excess.Inv2
-# 22. model2.FIX_PAR3
-# 23. model2.FixParams3
-# 24. simplex.MakeSimplex2
-# 25. simplex.MakeSimplex3
-# 26. simplex.Run2
-# 27. simplex.HypoCentre
-# 28. simplex.SortHighLow 
+
+# 1. GetParticipants
+# 2. GetDirec
+# 3. GetPairs
+# 4. Undetrend
+# 5. FactorAdjust
+# 6. OffsetAdjust
+# 7. FindUndetrendingParams
+# 8. AddOutput
+# 9. FindStartParams
+# 10. FindWithinParams
+# 11. make_matrix
+# 12. extractOutput
+# 13. FixOutput
+# 14. UpdateBeat
+# 15. FixBaseline
+# 16. PlotFits
+# 17. osnd_fit
+# 18. ArrangeOutputs
+# 19. model2.GetSegment
+# 20. model2.Excess
+# 21. model2.Peak
+# 22. model2.SubtractExcessPeak
+# 23. model2.ChiSq3
+# 24. model2.ChiSq4
+# 25. model2.Rebuild2
+# 26. model2.Excess.Inv2
+# 27. model2.FIX_PAR3
+# 28. model2.FixParams3
+# 29. simplex.MakeSimplex2
+# 30. simplex.MakeSimplex3
+# 31. simplex.Run2
+# 32. simplex.HypoCentre
+# 33. simplex.SortHighLow
+# 34. PlotRejects
+# 35. PlotWavesCarriedForward
+
+
+
+GetParticipants <- function(direc){
+  string_list <- list.files(path = direc)
+  string_list <- string_list[-119]
+  string_list <- substr(string_list, 0, 5)
+  rejected_ts <- c("AL826", "AO139", "AP493", "AU602", "AZ985", "AZ883")
+  to_remove <- c()
+  for(i in 1:length(rejected_ts)){
+    tmp <- which(string_list == rejected_ts[i])
+    if(length(tmp) > 0){to_remove <- c(to_remove, tmp)}
+  }
+  string_list <- string_list[-to_remove]
+  return(string_list)
+}
+
+
+GetDirec <- function(run, Participants, dir){
+  subjectID <- Participants[run]
+  participant_number <- run
+  direc <- paste(dir, subjectID, sep = "")
+  scan_no <- list.files(direc)[grep(list.files(direc), pattern = "scan")]
+  # If it's an 'ISO_ONLY' file another step is needed:
+  if(length(scan_no) < 1){
+    a <- list.files(substr(direc, 1, nchar(direc)-5))
+    b <- grep(a, pattern = subjectID)
+    direc <- paste(dir, a[b], sep = "")
+    scan_no <- list.files(direc)[grep(list.files(direc), pattern = "scan")]
+  }
+  direc <- paste(direc, "/", scan_no, sep = "")
+  physio_file <- list.files(direc)[grep(list.files(direc), pattern = "physio")]
+  direc <- paste(direc, "/", physio_file, sep = "")
+  temp <- c(direc, subjectID)
+  return(temp)
+}
+
+
+
+GetPairs <- function(direc, run_order, participant_number, subjectID){
+  
+  str <- direc
+  direc <- list.files(path = direc)
+  
+  # Refine direc:
+  direc <- direc[-grep("REST", direc)]                                 # removing irrelevant files... 
+  direc <- direc[-grep(".fig", direc)]  
+  direc <- direc[-grep(".ecgpk", direc)]  
+  direc <- direc[-grep(".resppk", direc)]  
+  direc <- direc[-grep(".hrrv", direc)]  
+  direc <- direc[grep("ECG", direc)]                                  
+  
+  dose_numbers <- parse_number(direc)                                  # extracting numbers from files
+  direc <- direc[rev(order(dose_numbers, decreasing = T))]             # Arrange files in numerical order
+  if(length(direc) < 6){message("Warning: Some time series are missing from this folder")}
+  # Extract dose order:
+  dose_order <- run_order[which(run_order$subj_ID == subjectID), 3]    
+  dose_order <- as.numeric(unlist(strsplit(dose_order,",")))
+  
+  # Arrange files in order of escalating dose:
+  direc <- direc[rev(order(dose_order, decreasing = T))]
+  
+  # Randomized pairing (probability 0.5):                              # Setting the same seed and having individual participant numbers will mean randomization is reproducible and varied across participants
+  set.seed(32)
+  
+  if(rnorm(participant_number)[participant_number] > 0){
+    # Pair 1:5 and 2:6
+    pair1 <- c(direc[5], direc[1])
+    pair2 <- c(direc[6], direc[2])
+  }else{
+    # Pair 1:6 and 2:5
+    pair1 <- c(direc[6], direc[1])
+    pair2 <- c(direc[5], direc[2])
+  }
+  
+  pairs <- list(pair1, pair2)
+  
+  # Return pairs:
+  return(pairs)
+}
+
+
 
 UnDetrend <- function(ppg,factor=0,offset=1)    
 {
@@ -51,47 +141,51 @@ UnDetrend <- function(ppg,factor=0,offset=1)
   return(result)
 }
 
-FactorAdjust <- function(ppg, beat, gs = model2.GetSegment, u = UnDetrend, factorCutoff = -20, plot = T){
-  # Extract the first beat:
-  beatTime <- beat[1,1]
-  nextTime <- beat[2, 1] 
-  seg <- c(which(ppg$`time (s)` ==  beatTime), 0, which(ppg$`time (s)` == nextTime))
-  data <- gs(ppg,seg)
-  if(plot == TRUE){plot(data)} 
+
+FactorAdjust <- function(data, factorCutoff, ppg, u, beat, a., test, gs=gs, beatTime, nextTime, plot = T){
+  
   # Calculate the Gradient of the tail of the beat:
   tail <- c(data[nrow(data), 2], data[nrow(data)-1, 2], data[nrow(data)-2, 2], data[nrow(data)-3, 2], 
             data[nrow(data)-4, 2])    
   tail <- rev(tail)
   xx. <- 1:length(tail)
   y. <- lm(tail~xx.)
-  # Adjust the factor value until the gradient of the tail reaches an appropriate threshold:
-  factor_value <- 1.01
-  while(y.[[1]][2] > factorCutoff){    
+  # Adjust the factor value until the gradient of the tail reaches an appropriate threshold, and the min value is not the notch:
+  factor_value <- 1  # was 1.01
+  while(y.[[1]][2] > factorCutoff | (which.min(data[, 2]) > quantile(1:nrow(data))[[2]] & which.min(data[, 2]) < quantile(1:nrow(data))[[4]]) ){    
+    if(factor_value < 0.7){break}
     factor_value <- factor_value - 0.01
     ppg2 <- ppg
     ppg2[, 2] <- u(ppg,factor=factor_value,offset=1)
-    beatTime <- beat[1,1]
-    nextTime <- beat[2, 1]   
+    beatTime <- beat[test + a., 1]   # same adjustments made here as first two lines
+    nextTime <- beat[test + (a. + 1), 1] 
     seg <- c(which(ppg$`time (s)` ==  beatTime), 0, which(ppg$`time (s)` == nextTime))
     data <- gs(ppg2,seg)
     if(plot == TRUE){plot(data)}
+    # If the gradient is positive, ignore the last 5 values... 
     if(y.[[1]][2] > 0){
       tail <- c(data[nrow(data)-5, 2], data[nrow(data)-6, 2], data[nrow(data)-7, 2], data[nrow(data)-8, 2], 
-                data[nrow(data)-9, 2])
+                data[nrow(data)-9, 2], data[nrow(data)-10, 2], data[nrow(data)-11, 2], data[nrow(data)-12, 2],
+                data[nrow(data)-13, 2], data[nrow(data)-14, 2])
     }else{
       tail <- c(data[nrow(data), 2], data[nrow(data)-1, 2], data[nrow(data)-2, 2], data[nrow(data)-3, 2], 
-                data[nrow(data)-4, 2])
+                data[nrow(data)-4, 2], data[nrow(data)-5, 2], data[nrow(data)-6, 2], data[nrow(data)-7, 2], 
+                data[nrow(data)-8, 2], data[nrow(data)-9, 2])
     }
     tail <- rev(tail)
     xx. <- 1:length(tail)
     y. <- lm(tail~xx.)
   }
+  
   return(factor_value)
 }
 
 
-
-OffsetAdjust <- function(ppg3, ppg, u = UnDetrend, factor_value, plot = T){
+OffsetAdjust <- function(ppg3, ppg, u = UnDetrend, factor_value, plot = F){
+  if(factor_value == 1){   # if no changes in factor value were needed, no need to correct offset
+    print("no adjustment needed")
+    return(1)
+  } 
   vv. <- ppg3[, 1]      
   yv. <- lm(ppg3[, 2]~vv.)
   offset_value <- 1
@@ -117,6 +211,122 @@ OffsetAdjust <- function(ppg3, ppg, u = UnDetrend, factor_value, plot = T){
   return(offset_value)
 }
 
+
+FindUndetrendingParams <- function(direc, gs = model2.GetSegment, u = UnDetrend, oa = OffsetAdjust, fa = FactorAdjust, factorCutoff = 0, sr = samplingRate, pk_thrshd, pairs, plot = T){
+ 
+  if(plot == TRUE){p <- TRUE}else{p <- FALSE}
+  
+  # Factor Value Adjustment (4 waves from each time series):
+  
+  factor_value_vec <- c()
+  for(ps in 1:2){
+    if(ps == 1){pair <- pairs[[1]]}else{pair <- pairs[[2]]}
+    for(pr in 1:2){
+      new_direc <- paste(direc, "/", pair[pr], sep = "")
+      ppg <- read.csv(new_direc, sep = "")   
+      ppg <- data.frame(
+        time = (0:(nrow(ppg)-1)) / samplingRate,
+        ppg = ppg[,1]
+      )
+      names(ppg)[1] <- "time (s)"
+      names(ppg)[2] <- "Detrended"
+      
+      # Find beats:    
+      n <- dim(ppg)[1]
+      vpg <- ppg[2:n,2] - ppg[1:(n-1),2]
+      beat <- data.frame(ppg[which(vpg[1:(n-1)] < pk_thrshd & vpg[2:n] >= pk_thrshd),1])  
+      if(nrow(beat) < length(vpg)/(sr*2)){    # if number of beats found suggests a HR of < 30bpm, trigger warning
+        message("Warning: Minimal peaks found - consider resetting vpg peak threshold")
+        Sys.sleep(10)
+      }
+    
+      t_value <- c()
+      for(i in 1:4){
+         print(i)
+        # We don't know the exact time of onset of iso at this point, but we can infer the IBI from beat and identify
+        # waves around the minimum point:
+        
+        # Find rolling median:
+        pre_ibi <- abs(beat[1:(nrow(beat)-1), 1] - beat[2:nrow(beat), 1])
+        meds <- rollmedian(pre_ibi, k = 19)
+        # plot(meds)
+        
+        # Failsafes in case the minimum is close to the end / beginning
+        min <- which.min(meds)
+        if((min - 10) < 1){min = 11}
+        if((min + 10) > length(meds)){min = length(meds) - 11}
+        test <- round(quantile((min-10):(min+30)))[[i]]
+        
+        # Extract the relevant beat:
+        beatTime <- beat[test, 1]   
+        nextTime <- beat[(test + 1), 1]
+        seg <- c(which(ppg$`time (s)` ==  beatTime), 0, which(ppg$`time (s)` == nextTime))
+        data <- gs(ppg,seg)
+        
+        # Since we are using a less robust method to find beats, there is a chance of multi-beat segments:
+        # Detect them and choose the next segment if so...:
+        a. <- 0
+        while (nrow(data) > sr*1.5 | nrow(data) < (0.375*sr)){
+          beatTime <- beat[test + a., 1]  
+          nextTime <- beat[test + (a. + 1), 1]
+          seg <- c(which(ppg$`time (s)` ==  beatTime), 0, which(ppg$`time (s)` == nextTime))
+          data <- gs(ppg,seg)
+          a. <- a. + 1
+        }
+        if(a. != 0){
+          a. <- a. - 1
+        }
+        
+        if(plot == TRUE){plot(data)}
+        t_value[i] <- fa(data, factorCutoff, ppg, u, beat, a., test, gs, beatTime, nextTime, plot = p)
+      }
+
+      factor_value_vec <- c(factor_value_vec, t_value) 
+    }
+  }
+  
+  # Find the 2nd from minimum factor value (and check which dose level time series it comes from):
+  min2 <- order(factor_value_vec)[2]  # ascending order
+  if(sum(min2 == 5:8) > 0 | sum(min2 == 13:16) > 0){
+    message("Warning: factor value taken from 0mg time series")
+    Sys.sleep(8)
+    min1 <- order(factor_value_vec)[1]
+    if(sum(min1 == 5:8) > 0 | sum(min1 == 13:16) > 0){
+      message("though minimum factor value found in 2mg time series")
+      Sys.sleep(8)
+    }
+  }
+  factor_value <- factor_value_vec[min2]
+  
+  # Offset Value Adjustment:
+  
+  offset_value <- c()
+  for(ps in 1:2){
+    if(ps == 1){pair <- pairs[[1]]}else{pair <- pairs[[2]]}
+    for(pr in 1:2){
+      new_direc <- paste(direc, "/", pair[pr], sep = "")
+      # Load time series:
+      ppg <- read.csv(new_direc, sep = "")   
+      ppg <- data.frame(
+        time = (0:(nrow(ppg)-1)) / samplingRate,
+        ppg = ppg[,1]
+      )
+      names(ppg)[1] <- "time (s)"
+      names(ppg)[2] <- "Detrended"
+      # Adjust factor:  
+      ppg3 <- data.frame(ppg[,1],UnDetrend(ppg,factor=factor_value,offset=1))
+      # Adjust offset:
+      offset_value <- c(offset_value, oa(ppg3, ppg, u = UnDetrend, factor_value, plot = p))
+    }
+  }
+  
+  offset_value <- median(offset_value)
+  values <- c(factor_value, offset_value)
+  return(values)
+}
+
+
+
 AddOutput <- function(beat){
   beat$First      = 1:nrow(beat) * 0
   beat$Last       = 1:nrow(beat) * 0
@@ -136,7 +346,7 @@ AddOutput <- function(beat){
 }
 
 
-FindStartParams <- function(batch_number, beats_in, beat, ppg, gs = model2.GetSegment, e = model2.Excess, sep = model2.SubtractExcessPeak, all_beats = FALSE, plot = FALSE){
+FindStartParams <- function(batch_number, beats_in, beat, ppg, gs = model2.GetSegment, e = model2.Excess, sep = model2.SubtractExcessPeak, o_points = inflexX[o_orig], wuv = wuv, inflexX = inflexX, all_beats = FALSE, plot = FALSE){
   nBeats <- nrow(beat)
   seg <- c(0,0,0)
   if((batch_number*beats_in) > nBeats){
@@ -146,25 +356,31 @@ FindStartParams <- function(batch_number, beats_in, beat, ppg, gs = model2.GetSe
     maxn <-(batch_number*beats_in)
     if(all_beats == TRUE){maxn <- maxn + (nrow(beat) - maxn)}
   }
-  ob <- c()
-  for(i in 1:(nrow(beat)-1)){
-   ob[i] <- beat[i+1, 1] - beat[i, 1]    
-  }
-  ob_thrld <- mean(ob) + sd(ob)*4
-  for(i in 1:maxn){  
+  
+  # You can check 02 and 0 points imported with the following plot (useful for debugging):
+  # plot(5900:6500, ppg$Detrended[5900:6500], type = "l")
+  # points(o_points, rep(0, length(o_points)))
+  # points(inflexX[wuv$o2], rep(0, length(wuv$o2)), col = "red")
+  
+  for (i in 1:maxn){  
       
-      beatTime <- beat[i,1]
-      a <- min(which(ppg[round(inflexX[o]), 1] > beatTime))  
-      nextTime <- ppg[round(inflexX[o])[a], 1]
-      # If nextBeat is unreasonably late, shorten the segment:
-       if(nextTime - beatTime >  ob_thrld){        
-        nextTime <- beatTime + round(median(ob)) - 0.2      
-       }
-      seg <- c(which(ppg$`time (s)` ==  beatTime), 0, which(abs(ppg[, 1] - nextTime) == min(abs(ppg[, 1] - nextTime))))
-      data <- gs(ppg,seg)
-      if(plot == TRUE){plot(data)}
-
-    if(nrow(data) < 10){next}
+    # Find Beat:
+    beatTime <- beat[i,1]
+    current_o <- which(ppg[, 1] == beatTime)
+    # Find the minimum o_point that is after the current o point
+    next_o <- min(which(o_points > current_o))
+    next_o <- o_points[next_o]
+    # Make sure that through rounding you haven't chosen the same o twice
+    if ((next_o - current_o) < 5){
+      next_o <- min(which(o_points > current_o)) + 1
+      next_o <- o_points[next_o]
+    }
+    # Find the closest ppg time value to the next_o (perhaps a rounding issue was causing problems before...?)
+    nextTime <- ppg[round(next_o), 1]
+    seg <- c(which(ppg$`time (s)` ==  beatTime), 0, which(abs(ppg[, 1] - nextTime) == min(abs(ppg[, 1] - nextTime))))
+    data <- gs(ppg,seg)
+    if(plot == TRUE){plot(data)}
+      
     tStart <- ppg[seg[1],1]
     yPrev <- ppg[max(seg[1]-1,1),2]
     
@@ -254,7 +470,6 @@ FindWithinParams <- function(beats_in, ppg, beat, gs = model2.GetSegment, fp = m
     
     par <- as.numeric(beat[i,5:16])
     #par <- fp(data[, 1:2], par, rp = renal_param, sys_t = sys_t)      # Do we need to fix the parameters here...?
-    
     beat_indi <- list(1, beat_vector[[2]][i], beat_vector[[3]][i])
                                                                                     
     a[[i]] <- ms(ppg = ppg, param = par, f = m2, inScale = 0.1, inTol=-1, beat_vector = beat_indi, renal_param = renal_param, dias_param = dias_param, sys_time = sys_time[i], w = w[i]) 
@@ -284,7 +499,7 @@ make_matrix <- function(sim, a){
   
   
   # Assemble Matrix:
-  
+
   # Bind replicate rows of top_row for each beat to sim:              
   for(i in 1:beats_in){
     sim <- cbind(sim, top_row[[i]])
@@ -393,7 +608,7 @@ PlotFits <- function(beats_in, ppg, beat2, gs = model2.GetSegment, rb = model2.R
     xNext <- ppg[seg[3], 1]
     rm(seg)
     temp<-model2.Rebuild2(data, yPrev, as.double(beat2[i,]),TRUE)    
-    plot(data[, 1], data[, 2], ylim = c(-400, 2500), main = c("batch", k, ", wave", i))   # ylim = c(76, 86)
+    plot(data[, 1], data[, 2], ylim = c(-400, 2500), main = paste(c("batch", k, "wave", i), collapse = " "))   # ylim = c(76, 86)
     lines(data[,1],temp)
     # Plot baselines:
     lines(c(xPrev, (beat2[i, 3]  + (1*beat2[i, 6]))), rep(beat2[i, 1], 2))   
@@ -421,7 +636,7 @@ PlotFits <- function(beats_in, ppg, beat2, gs = model2.GetSegment, rb = model2.R
 osnd_fit <- function(bf = beat_final, ppg, gs = model2.GetSegment, r = model2.Rebuild2, sf = splinefun, dp = diast_pk, oa = osnd_of_average, sr = samplingRate, plot = FALSE){
   
   osnd_diff <- list()
-  for(i in 1:nrow(bf)){  
+  for(i in 1:nrow(bf)  ){  #nrow(bf)  
     # Find the correct data segments and corresponding model fit:
     seg <- c(bf[i,3],0,bf[i,4])  
     data <- gs(ppg,seg)
@@ -438,8 +653,11 @@ osnd_fit <- function(bf = beat_final, ppg, gs = model2.GetSegment, r = model2.Re
     sfunction <- sf(1:length(data[, 2]), data[, 2], method = "natural")
     dat <-  sfunction(seq(1, length(data[, 2]), 0.1), deriv = 0)
     
+    # plot(dat)
+    # plot(fit)
+    
     # Find OSND of fit:
-    tmp <- dp(avw = fit, sr = sr, scale = T)  
+    tmp <- dp(avw = fit, sr = sr, scale = T, dias_param = bf[i, 10]*sr*10)      # pass in the Dparam to help find D on fit waves
     dPeak <- tmp[1]
     xShift <- tmp[2]
     rm(tmp)
@@ -465,6 +683,40 @@ osnd_fit <- function(bf = beat_final, ppg, gs = model2.GetSegment, r = model2.Re
     }
   }
   return(osnd_diff)
+}
+
+
+ArrangeOutputs <- function(beat_final, beat_orig, features, pulse, fit_check, ps, pr){
+  
+  # Rename rows
+  rownames(beat_final) <- colnames(pulse)[-1][1:nrow(beat_final)]
+  rownames(features) <- colnames(pulse)[-1]
+  
+  # Reorganize fit_check:
+  # Individual wave fits:
+  wave_fits <- c()
+  for(i in 1:length(fit_check)){
+    wave_fits <- c(wave_fits, as.numeric(fit_check[[i]][[2]]))
+  }
+  # Maximum error:
+  max_err <- c()
+  for(i in 1:length(fit_check)){
+    max_err <- c(max_err, as.numeric(fit_check[[i]][[3]]))
+  }
+  # NRMSE:
+  NRMSE <- c()
+  for(i in 1:length(fit_check)){
+    NRMSE <- c(NRMSE, as.numeric(fit_check[[i]][[4]]))
+  }
+  # aNRMSE:
+  aNRMSE <- c()
+  for(i in 1:length(fit_check)){
+    aNRMSE <- c(aNRMSE, as.numeric(fit_check[[i]][[5]]))
+  }
+  fit_check <- list(wave_fits, max_err, NRMSE, aNRMSE)
+  
+  tmp <- list(beat_final, features, fit_check)
+  return(tmp)
 }
 
 
@@ -583,7 +835,7 @@ model2.ChiSq3 <- function(data, params, debug=FALSE, beats, optional = NULL, bea
     
     # Calculate Reduced Chi-Square for the beat:
     nData <- nrow(dat)    
-    nPar <- length(par2) + 6
+    nPar <- length(par2) 
     beat_fit[[i]] <- (sum(residue*residue) / (nData-nPar)) + as.numeric(penalty)
     
     if(plot == TRUE){
@@ -617,6 +869,7 @@ model2.ChiSq4 <- function(data, params,debug=FALSE, beats, beat, a = NULL, plot 
   beat_fit <- c()   
   max_error <- c()   
   NRMSE <- c()
+  aNRMSE <- c()
   for(i in 1:beats[[1]]){                                          # The number of beats is determined by the first object of beats
     
     # Within-beat parameter extraction:
@@ -660,7 +913,7 @@ model2.ChiSq4 <- function(data, params,debug=FALSE, beats, beat, a = NULL, plot 
     residue <- dat[ ,2] - fit
     max_error[i] <- max(residue)
     
-    # Before weighting the residuals, calculate NRMSE for the region we are interested in:
+    # Before weighting the residuals, calculate NMRSE for the region we are interested in:
     if(plot == TRUE){
       plot(dat, ylim = c(-500, 2500))
       lines(dat[, 1], fit)
@@ -670,27 +923,32 @@ model2.ChiSq4 <- function(data, params,debug=FALSE, beats, beat, a = NULL, plot 
     # Define region of interest:
     rmse_begin <- floor((1+w.)/2)    # Begin half way from O to W
     rmse_end <- end[1] + 10          # End 10 points after the d-peak (this corresponds to half way down the weighted tail)
-    
     if(sum(is.na(residue[rmse_begin:rmse_end])) > 0){
-      rmse_residue <- residue[rmse_begin:length(residue)]    # If there are fewer than 10 data points after D, use as many as there are
+      residue_roi <- residue[rmse_begin:length(residue)]    # If there are fewer than 10 data points after D, use as many as there are
       ind_resid <- rmse_begin:length(residue)
     }else{
-      rmse_residue <- residue[rmse_begin:rmse_end]
+      residue_roi <- residue[rmse_begin:rmse_end]
       ind_resid <- rmse_begin:rmse_end
     }
-    if(plot == TRUE){lines(dat[ind_resid, 1],rmse_residue, col = "green")} 
-    
+    if(plot == TRUE){lines(dat[ind_resid, 1],residue_roi, col = "green")} 
+  
     # Define null model:
-    fit_null <- rep(mean(dat[ind_resid, 2], trim = 0), length(rmse_residue))
+    fit_null <- rep(mean(dat[ind_resid, 2], trim = 0), length(residue_roi))
     if(plot == TRUE){lines(dat[ind_resid, 1], fit_null)}
     # Calculate residuals of the null model:
     residuals_of_null_model <- dat[ind_resid, 2] - fit_null
     
     # Calculate NRMSE:
-    rmse_model2 <-  sqrt(mean(rmse_residue^2, trim = 0))
+    rmse_model2 <-  sqrt(mean(residue_roi^2, trim = 0))
     rmse_null <- sqrt(mean(residuals_of_null_model^2))
     NRMSE. <- 1 - (rmse_model2 / rmse_null)
     NRMSE[i] <- NRMSE.
+    
+    # Alternative NRMSE method (Wang et al 2013):
+    # SSE / Sum of squared datapoints 
+    aNRMSE[i] <- (sum(residue_roi^2) / sum(dat[ind_resid, 2]^2))*100 
+    #plot(dat[ind_resid, 1], dat[ind_resid, 2]^2, type = "l")
+    #lines(dat[ind_resid, 1], residue_roi^2, col = "red")
     
     # Weighted region is W -> D (with slope)
     residue[w.:end[1]] <-  residue[w.:end[1]]*3
@@ -705,7 +963,7 @@ model2.ChiSq4 <- function(data, params,debug=FALSE, beats, beat, a = NULL, plot 
     
     # Calculate Reduced Chi-Square for the beat:
     nData <- nrow(dat)    
-    nPar <- length(par2) + 6
+    nPar <- length(par2) 
     if(par2[1] == par2[2]){    # If baselines are the same, consider them as 1 parameter
       nPar <- nPar - 1
     }
@@ -721,7 +979,7 @@ model2.ChiSq4 <- function(data, params,debug=FALSE, beats, beat, a = NULL, plot 
   ts_fit <- sum(temp)
   rm(temp)
   
-  fit <- list(ts_fit, beat_fit, max_error, NRMSE)
+  fit <- list(ts_fit, beat_fit, max_error, NRMSE, aNRMSE)
   return(fit)
 }
 
@@ -1110,7 +1368,7 @@ simplex.MakeSimplex3 <- function(ppg, param,f,inScale, directions=NULL, inTol=-1
   useDirections = !is.null(directions)
   if (useDirections){ useDirections <- nrow(directions) == nPar & ncol(directions) == nPar }
   
-  for (i in c(1:4, 7, 10)){    # within-beat parameters only  
+  for(i in c(1:4, 7, 10)){    # within-beat parameters only  
     if (debug){ print(paste("Parameter",i)) }
     tParam <- param
     
@@ -1215,8 +1473,6 @@ simplex.MakeSimplex3 <- function(ppg, param,f,inScale, directions=NULL, inTol=-1
   if (debug){ print("/MakeSimplex") }
   return(result)
 }
-
-
 
 
 
@@ -1330,8 +1586,8 @@ simplex.Run2 <- function(data = ppg,simplexParam = mat, f = model2.ChiSq3, optio
   debugRtol[MAX_STEP+1] <- rtol
   debugMin[MAX_STEP+1] <- chiSqMin
   debugMax[MAX_STEP+1] <- chiSqMax
-  plot(debugMax,type='l')
-  lines(debugMin)
+  # plot(debugMax,type='l')
+  # lines(debugMin)
   
   
   print(paste("Terminated downhill simplex after",MAX_STEP,"iterations."))
@@ -1378,4 +1634,357 @@ simplex.SortHighLow <- function(vec_ChiSq){
   }
   
   return(c(low,nHigh,high))  
+}
+
+
+# This is an exceptionally inefficient use of space, and needs to be revisited:
+
+PlotRejects <- function(rejected_waves_list1, rejected_waves_list3){
+  
+  participant_extra_long_waves <- c()
+  for(k in 1:2){
+    
+    if(k == 1){
+      new_vec <- rejected_waves_list1
+    }else{
+      new_vec <- rejected_waves_list3
+    }
+    
+    extra_long_waves <- c()
+    for(i in 1:length(new_vec)){
+      if(!is.null(new_vec[[i]][[1]])){
+        extra_long_waves[[i]] <- new_vec[[i]][[1]]
+      }
+    }
+    non_null_names <- which(!sapply(extra_long_waves, is.null))
+    extra_long_waves <- extra_long_waves[non_null_names]
+    if(length(non_null_names) > 0){names(extra_long_waves) <- non_null_names}
+    
+    if(length(extra_long_waves) > 0){
+      for(j in 1:length(extra_long_waves)){
+        
+        no_of_rejected_waves <- length(extra_long_waves[[j]])
+        
+        paticip <- as.numeric(rownames(summary(extra_long_waves[j])))
+        
+        participant_extra_long_waves[paticip] <- length(participant_extra_long_waves[paticip]) + no_of_rejected_waves 
+      }
+    }
+  }
+  if(length(participant_extra_long_waves) > 0){
+    for(i in 1:length(participant_extra_long_waves)){
+      if(is.na(participant_extra_long_waves[i])){
+        participant_extra_long_waves[i] <- 0
+      }
+    }
+  }
+
+  
+  participant_extra_short_waves <- c()
+  for(k in 1:2){
+    
+    if(k == 1){
+      new_vec <- rejected_waves_list1
+    }else{
+      new_vec <- rejected_waves_list3
+    }
+    
+    extra_short_waves <- list()
+    for(i in 1:length(new_vec)){
+      if(!is.null(new_vec[[i]][[2]])){
+        extra_short_waves[[i]] <- new_vec[[i]][[2]]
+      }
+    }
+    non_null_names <- which(!sapply(extra_short_waves, is.null))
+    extra_short_waves <- extra_short_waves[non_null_names]
+    if(length(non_null_names) > 0){names(extra_short_waves) <- non_null_names}
+    
+    if(length(extra_short_waves) > 0){
+      for(j in 1:length(extra_short_waves)){
+        
+        no_of_rejected_waves <- length(extra_short_waves[[j]])
+        
+        paticip <- as.numeric(rownames(summary(extra_short_waves[j])))
+        
+        participant_extra_short_waves[paticip] <- length(participant_extra_short_waves[paticip]) + no_of_rejected_waves 
+      }
+    }
+  }
+  if(length(participant_extra_short_waves) > 0){
+    for(i in 1:length(participant_extra_short_waves)){
+      if(is.na(participant_extra_short_waves[i])){
+        participant_extra_short_waves[i] <- 0
+      }
+    }
+  }
+  
+  participant_double_segments <- c()
+  for(k in 1:2){
+    
+    if(k == 1){
+      new_vec <- rejected_waves_list1
+    }else{
+      new_vec <- rejected_waves_list3
+    }
+    
+    double_segments <- list()
+    for(i in 1:length(new_vec)){
+      if(!is.null(new_vec[[i]][[3]])){
+        double_segments[[i]] <- new_vec[[i]][[3]]
+      }
+    }
+    non_null_names <- which(!sapply(double_segments, is.null))
+    double_segments <- double_segments[non_null_names]
+    if(length(non_null_names) > 0){names(double_segments) <- non_null_names}
+    
+    if(length(double_segments) > 0){
+      for(j in 1:length(double_segments)){
+        
+        no_of_rejected_waves <- length(double_segments[[j]])
+        
+        paticip <- as.numeric(rownames(summary(double_segments[j])))
+        
+        participant_double_segments[paticip] <- length(participant_double_segments[paticip]) + no_of_rejected_waves 
+      }
+    }
+  }
+  if(length(participant_double_segments) > 0){
+    for(i in 1:length(participant_double_segments)){
+      if(is.na(participant_double_segments[i])){
+        participant_double_segments[i] <- 0
+      }
+    }
+  }
+ 
+  
+  
+  participant_systolic_endings <- c()
+  for(k in 1:2){
+    
+    if(k == 1){
+      new_vec <- rejected_waves_list1
+    }else{
+      new_vec <- rejected_waves_list3
+    }
+    
+    systolic_endings <- list()
+    for(i in 1:length(new_vec)){
+      if(!is.null(new_vec[[i]][[4]])){
+        systolic_endings[[i]] <- new_vec[[i]][[4]]
+      }
+    }
+    non_null_names <- which(!sapply(systolic_endings, is.null))
+    systolic_endings <- systolic_endings[non_null_names]
+    if(length(non_null_names) > 0){names(systolic_endings) <- non_null_names}
+    
+    if(length(systolic_endings) > 0){
+      for(j in 1:length(systolic_endings)){
+        
+        no_of_rejected_waves <- length(systolic_endings[[j]])
+        
+        paticip <- as.numeric(rownames(summary(systolic_endings[j])))
+        
+        participant_systolic_endings[paticip] <- length(participant_systolic_endings[paticip]) + no_of_rejected_waves 
+      }
+    }
+    
+  }
+  if(length(participant_systolic_endings) > 0){
+    for(i in 1:length(participant_systolic_endings)){
+      if(is.na(participant_systolic_endings[i])){
+        participant_systolic_endings[i] <- 0
+      }
+    }
+  }
+ 
+  
+  
+  participant_drops_below_o <- c()
+  for(k in 1:2){
+    
+    if(k == 1){
+      new_vec <- rejected_waves_list1
+    }else{
+      new_vec <- rejected_waves_list3
+    }
+    
+    drops_below_o <- list()
+    for(i in 1:length(new_vec)){
+      if(!is.null(new_vec[[i]][[5]])){
+        drops_below_o[[i]] <- new_vec[[i]][[5]]
+      }
+    }
+    non_null_names <- which(!sapply(drops_below_o, is.null))
+    drops_below_o <- drops_below_o[non_null_names]
+    if(length(non_null_names) > 0){names(drops_below_o) <- non_null_names}
+    
+    if(length(drops_below_o) > 0){
+      for(j in 1:length(drops_below_o)){
+        
+        no_of_rejected_waves <- length(drops_below_o[[j]])
+        
+        paticip <- as.numeric(rownames(summary(drops_below_o[j])))
+        
+        participant_drops_below_o[paticip] <- length(participant_drops_below_o[paticip]) + no_of_rejected_waves 
+      }
+    }
+   
+  }
+  if(length(participant_drops_below_o) > 0){
+    for(i in 1:length(participant_drops_below_o)){
+      if(is.na(participant_drops_below_o[i])){
+        participant_drops_below_o[i] <- 0
+      }
+    }
+  }
+
+  
+  participant_hrsd_waves <- c()
+  for(k in 1:2){
+    
+    if(k == 1){
+      new_vec <- rejected_waves_list1
+    }else{
+      new_vec <- rejected_waves_list3
+    }
+    
+    hrsd_waves <- list()
+    for(i in 1:length(new_vec)){
+      if(!is.null(new_vec[[i]][[6]])){
+        hrsd_waves[[i]] <- new_vec[[i]][[6]]
+      }
+    }
+    non_null_names <- which(!sapply(hrsd_waves, is.null))
+    hrsd_waves <- hrsd_waves[non_null_names]
+    if(length(non_null_names) > 0){names(hrsd_waves) <- non_null_names}
+    
+    if(length(hrsd_waves) > 0){
+      for(j in 1:length(hrsd_waves)){
+        
+        no_of_rejected_waves <- length(hrsd_waves[[j]])
+        
+        paticip <- as.numeric(rownames(summary(hrsd_waves[j])))
+        
+        participant_hrsd_waves[paticip] <- length(participant_hrsd_waves[paticip]) + no_of_rejected_waves 
+      }
+    }
+
+  }
+  if(length(participant_hrsd_waves) > 0){
+    for(i in 1:length(participant_hrsd_waves)){
+      if(is.na(participant_hrsd_waves[i])){
+        participant_hrsd_waves[i] <- 0
+      }
+    }
+  }
+
+  
+  participant_outlier_waves <- c()
+  for(k in 1:2){
+    
+    if(k == 1){
+      new_vec <- rejected_waves_list1
+    }else{
+      new_vec <- rejected_waves_list3
+    }
+    
+    outlier_waves <- list()
+    for(i in 1:length(new_vec)){
+      if(!is.null(new_vec[[i]][[7]])){
+        outlier_waves[[i]] <- new_vec[[i]][[7]]
+      }
+    }
+    non_null_names <- which(!sapply(outlier_waves, is.null))
+    outlier_waves <- outlier_waves[non_null_names]
+    if(length(non_null_names) > 0){names(outlier_waves) <- non_null_names}
+    
+    if(length(outlier_waves) > 0){
+      for(j in 1:length(outlier_waves)){
+        
+        no_of_rejected_waves <- length(outlier_waves[[j]])
+        
+        paticip <- as.numeric(rownames(summary(outlier_waves[j])))
+        
+        participant_outlier_waves[paticip] <- length(participant_outlier_waves[paticip]) + no_of_rejected_waves 
+      }
+    }
+    
+  }
+  if(length(participant_outlier_waves) > 0){
+    for(i in 1:length(participant_outlier_waves)){
+      if(is.na(participant_outlier_waves[i])){
+        participant_outlier_waves[i] <- 0
+      }
+    }
+  }
+
+  # Make them all the same length:
+  if(length(participant_extra_long_waves) < length(Participants)){
+    diff <- length(Participants) - length(participant_extra_long_waves)
+    participant_extra_long_waves <- c(participant_extra_long_waves, rep(0, diff))
+  }
+  if(length(participant_extra_short_waves) < length(Participants)){
+    diff <- length(Participants) - length(participant_extra_short_waves)
+    participant_extra_short_waves <- c(participant_extra_short_waves, rep(0, diff))
+  }
+  if(length(participant_double_segments) < length(Participants)){
+    diff <- length(Participants) - length(participant_double_segments)
+    participant_double_segments <- c(participant_double_segments, rep(0, diff))
+  }
+  if(length(participant_systolic_endings) < length(Participants)){
+    diff <- length(Participants) - length(participant_systolic_endings)
+    participant_systolic_endings <- c(participant_systolic_endings, rep(0, diff))
+  }
+  if(length(participant_drops_below_o) < length(Participants)){
+    diff <- length(Participants) - length(participant_drops_below_o)
+    participant_drops_below_o <- c(participant_drops_below_o, rep(0, diff))
+  }
+  if(length(participant_hrsd_waves) < length(Participants)){
+    diff <- length(Participants) - length(participant_hrsd_waves)
+    participant_hrsd_waves <- c(participant_hrsd_waves, rep(0, diff))
+  }
+  if(length(participant_outlier_waves) < length(Participants)){
+    diff <- length(Participants) - length(participant_outlier_waves)
+    participant_outlier_waves <- c(participant_outlier_waves, rep(0, diff))
+  }
+  # Find total of all rejected beats:
+  total_rejected_beats <- participant_extra_long_waves + participant_extra_short_waves + participant_double_segments + 
+    participant_systolic_endings + participant_drops_below_o + participant_hrsd_waves + participant_outlier_waves
+  
+  
+  # Plot:
+  plot(participant_extra_long_waves, t = "l", ylim = c(0, 30), xlim = c(1, 112), ylab = "rejected beats (absolute)", xlab = "participants", lty = "dotted", lwd = 1.5)
+  lines(participant_extra_short_waves, col = "red", lty = "dotted", lwd = 1.5)
+  lines(participant_double_segments, col = "blue", lty = "dotted", lwd = 1.5)
+  lines(participant_systolic_endings, col = "green", lty = "dotted", lwd = 1.5)
+  lines(participant_drops_below_o, col = "orange", lty = "dotted", lwd = 1.5)
+  lines(participant_hrsd_waves, col = "brown", lty = "dotted", lwd = 1.5)
+  lines(participant_outlier_waves, col = "purple", lty = "dotted", lwd = 1.5)
+  lines(total_rejected_beats, lwd = 1)
+  
+}
+
+
+PlotWavesCarriedForward <- function(waves_carried_forward1, waves_carried_forward3){
+  
+  test_vec1 <- waves_carried_forward1
+  waves_carried_over <- c()
+  for(i in 1:length(test_vec1)){
+    if(!is.null(test_vec1[[i]])){
+      waves_carried_over[i] <- test_vec1[[i]]
+    }
+  }
+  
+  test_vec2 <- waves_carried_forward3
+  waves_carried_over2 <- c()
+  for(i in 1:length(test_vec2)){
+    if(!is.null(test_vec2[[i]])){
+      waves_carried_over2[i] <- test_vec2[[i]]
+    }
+  }
+  waves_carried_over <- c(waves_carried_over, waves_carried_over2)
+  
+  # Currently representing all 2mg times series:
+  hist(waves_carried_over, breaks = 30, xlim = c(0, 200))
+  
 }
