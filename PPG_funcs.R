@@ -1,6 +1,6 @@
 # PPG function list:
-# 1. Preproc
-# 2. find_w
+# 1. Preproc  (note for bioradio data only)
+# 2. find_w   
 # 3. find_u_v
 # 4. find_o
 # 5. preclean_wuv
@@ -95,93 +95,103 @@ preproc <- function(data){
 
 
 find_w <- function(d1p, deriv1, sp, sr){
+  ########################################################################################################################################
+  # FindW identifies peaks in the first derivative of the PPG time series (denoted w on the original PPG pulse wave (Elgendi et al, 2018)).  
+  # A rolling window relative to heart rate is applied to identify beats and artefacts. 
+  # Peaks identified within a window are confirmed as genuine / artefactual with a series of checks against thresholds derived from beats 
+  # local to the window and across the entire time series. 
   
-  d1InflxX <- solve(d1p, b = 0, deriv = 1)                                       # Find inflexion points 1st deriv
+  # Inputs: 
+  # d1p (polynomial spline of first derivative of the PPG time series)
+  # deriv1 (first derivative in discrete form)
+  # sp (polynomial spline of original time series)
+  # sr (sample rate)
+  
+  # Outputs:
+  # wX (x axis coordinates of all w points) 
+  # wY (y axis coordinates of all w points on original PPG trace)
+  # wYD1 (y axis coordinates of all w points on 1st derivative trace)
+  ########################################################################################################################################
+  
+  d1InflxX <- solve(d1p, b = 0, deriv = 1)                 # Find inflection points on 1st deriv
   d1InflxY <- predict(d1p, d1InflxX)
-  wX <- c()                                                                           # Create vectors for w values to be stored
+  wX <- c()                                                # Create vectors for w values to be stored
   wY <- c()
-  window <- list()                                                                              # Define 'window' as the timeframe you will look for peaks in
-  prevPkDist <- c()
+  window <- list()                                         # Define window within which to identify peaks 
+  prevPkDist <- c()                                        # Create vector to store peak to peak distances
   
-  # Confirm first two peaks:
-  a <- 2
-  while(length(wX) < 2){
+  ############# Identify first two peaks: #############
+  
+  a <- 2                                                                                                                                        # Start with a very small window (spanning three (1 + a) inflection points), 
+  while(length(wX) < 2){                                                                                                                        # and widen until two peaks are identified within the window
     
-    firstWindow <- data.frame(d1InflxX[1]:d1InflxX[1+a], deriv1[d1InflxX[1]:d1InflxX[1+a]])
-    windowInflxY <- d1InflxY[which(d1InflxX > firstWindow[1, 1] & d1InflxX < firstWindow[, 1][length(firstWindow[, 1])])]
-    windowInflxX <- d1InflxX[which(d1InflxX > firstWindow[1, 1]  & d1InflxX < firstWindow[, 1][length(firstWindow[, 1])])]                      # Find inflection within the window from the greater array
-    threshold <- quantile(firstWindow[, 2], probs=c(.95))                                                                                                                                                 # Define a threshold for finding peaks, of 0.95 
-    windowPks <- which(windowInflxY > threshold)       
+    firstWindow <- data.frame(d1InflxX[1]:d1InflxX[1+a], deriv1[d1InflxX[1]:d1InflxX[1+a]])                                                     # Create window
+    windowInflxY <- d1InflxY[which(d1InflxX > firstWindow[1, 1] & d1InflxX < firstWindow[, 1][length(firstWindow[, 1])])]                       # Find the inflection points which fall within the window 
+    windowInflxX <- d1InflxX[which(d1InflxX > firstWindow[1, 1]  & d1InflxX < firstWindow[, 1][length(firstWindow[, 1])])]                     
+    threshold <- quantile(firstWindow[, 2], probs=c(.95))                                                                                       # Define a threshold for finding peaks, of 0.95 
+    windowPks <- which(windowInflxY > threshold)                                                                                                # Identify inflection points above the threshold as peaks
     
-    # Very occassionely, the second peak is below the threshold of 0.95, creating a leapfrog error
-    # If the number of inflexion points is significant between the first two peaks aka leapfrog error has occurred, check there are no peaks in between that are in fact above threshold
-    if(length(windowPks) == 2 & windowPks[2] - windowPks[1] > 40){
-      confirmWindow <- data.frame(d1InflxX[windowPks[1]+2]:d1InflxX[windowPks[2]-2],   deriv1[d1InflxX[windowPks[1]+2]:d1InflxX[windowPks[2]-2]]  ) 
+                                                                                                                                                       
+    if(length(windowPks) == 2 & windowPks[2] - windowPks[1] > sr){                                                                                      # If the first two peaks indicate a heart rate < 60 bpm, 
+      confirmWindow <- data.frame(d1InflxX[windowPks[1]+2]:d1InflxX[windowPks[2]-2],   deriv1[d1InflxX[windowPks[1]+2]:d1InflxX[windowPks[2]-2]])       # ensure a peak between them has not been missed with the current threshold
       inflxConformY <- d1InflxY[which(d1InflxX > confirmWindow[1, 1] & d1InflxX < confirmWindow[, 1][length(confirmWindow[, 1])])]
-      inflxConformX <- d1InflxX[which(d1InflxX > confirmWindow[1, 1]  & d1InflxX < confirmWindow[, 1][length(confirmWindow[, 1])])]                      # Find inflection within the window from the greater array
+      inflxConformX <- d1InflxX[which(d1InflxX > confirmWindow[1, 1]  & d1InflxX < confirmWindow[, 1][length(confirmWindow[, 1])])]                     # Find inflection points within the window (defined as between peaks 1 and 2)
       threshold <- quantile(confirmWindow[, 2], probs=c(.95))       
-      missedPks <- inflxConformX[which(inflxConformY > threshold)]
-      # now match up the first missed peak to inflexion_points in firstWindow
-      missedPks <- which(windowInflxX == missedPks[1])
-      # now assign the first missed peak as the second window_poly_peak
-      windowPks[2] <- missedPks[1]
+      missedPks <- inflxConformX[which(inflxConformY > threshold)]                                                                                      # Identify peaks above threshold
+      missedPks <- which(windowInflxX == missedPks[1])                                                                                                  # Identify the inflection point in the original window which corresponds to the missed peak 
+      windowPks[2] <- missedPks[1]                                                                                                                      # Assign the missed peak as the second peak
     }
     
-    # Also very occassionely, the first peak is double-peaked, so make sure peaks are not too close together:
-    if(length(windowPks) == 2 & windowPks[2] - windowPks[1] < 4){  
-      windowPks <- windowPks[-2]   # this line removes the second element, allowing a third to become the second
+    if(length(windowPks) == 2 & windowPks[2] - windowPks[1] < (sr/10)){                                                                         # Rarely, the first peak contains two inflection points above threshold, 
+      windowPks <- windowPks[-2]                                                                                                                # if peaks are too close (< 1/10th of a second), the second peak is discounted
     }
     
-    # Find which inflection points are above threshold
-    windowPksY <- windowInflxY[windowPks]
+    windowPksY <- windowInflxY[windowPks]                                                                                                       # Identify the inflection points corresponding to peaks
     windowPks <- windowInflxX[windowPks]     
     
-    # This is a special case for when the first legitimate peak happens to have 3 very close together inflection points
-    if(length(windowPks) > 2 & (windowPks[3] - windowPks[1] < 1)){
+    if(length(windowPks) > 2 & (windowPks[3] - windowPks[1] < 1)){                                                                              # Very rarely, the first peak contains three inflection points above threshold. Discount two. 
       windowPks <- windowPks[-c(1, 3)]
     }
     
-    m <- mean(d1InflxY[1:(1+a)])       # Calculate mean and SD of inflection points within the window
+    m <- mean(d1InflxY[1:(1+a)])                                                                                                                # Calculate mean and SD of inflection points within the window
     std <- sd(d1InflxY[1:(1+a)])
     
-    if(length(windowPks) == 2){                    # If two peaks are found, confirm that they are both significantly higher than surrounding inflection points,                                                                                  
-      if(windowPksY[1] > (m + (1.5*std)) & windowPksY[1] > (median(deriv1[1:100])+std(deriv1[1:100]))){      # and that the second peak is greater than half the height of the first peak (unless the first peak is an artefact)       #MOST RECENT CHANGE 14/10/20: changed the | to & and changed so that only first 100 samples of deriv1 are looked at (rather than all of deriv1)
-        wX[1] <-  windowPks[1]                                                                              
+    if(length(windowPks) == 2){                                                                                                                 # If two peaks are found, confirm that they are both significantly higher than surrounding                                                                                 
+      if(windowPksY[1] > (m + (1.5*std)) & windowPksY[1] > (median(deriv1[1:100])+std(deriv1[1:100]))){                                         # inflection points, and that the second peak is greater than half the height of the first     
+        wX[1] <-  windowPks[1]                                                                                                                  # peak (unless the first peak is an artefact)
         if(windowPksY[2] > (m + (1.5*std)) & windowPksY[2] > (windowPksY[1]/2) | windowPksY[1] > (mean(deriv1) + (5*std(deriv1)))){  
           wX[2] <-  windowPks[2]                                                                                                                          
         }
       }
-    }
+    }   
     
-    if(length(windowPks) > 3){      # If more than 3 peaks identified, assume the time series begins with an artefact and skip forward
-      d1InflxX <- d1InflxX[-c(1:(sr*(100/75)))]      
+    if(length(windowPks) > 3){                                                                                                                  # If more than 3 peaks identified, assume the time series begins with an artefact and skip 
+      d1InflxX <- d1InflxX[-c(1:(sr*(100/75)))]                                                                                                 # forward, resetting a. 
       d1InflxY <- d1InflxY[-c(1:(sr*(100/75)))]
-      a <- -3  # reset a
+      a <- -3  
     }
     
-    a <- a + 5      # Widen the window looking for two peaks and continue increasing until two legitimate peaks are found
+    a <- a + 5                                                                                                                                  # Increases until two legitimate peaks are found
   }
   
+  ############# Find remaining peaks (with dynamic moving window dependent on peak to peak distance): #############
   
-  # Find remaining peaks based on p_p distance:
-  artefacts <- c()
-  # Calculate mean and SD of inflection points generally
-  m <- mean(d1InflxY)       
+  artefacts <- c()                                                                                                                              # Create vector to store artefactual peaks
+  m <- mean(d1InflxY)                                                                                                                           # Calculate mean and SD of inflection points across the time series
   std <- sd(d1InflxY)
-  for(i in 3:length(d1InflxX)){   # length(d1InflxX)
-    prevPkDist[i] <- wX[length(wX)] - wX[length(wX)-1]   # prevPkDist defined as distance between two previous peaks
-    if(prevPkDist[i] > (mean(prevPkDist[!is.na(prevPkDist)])*2)){    # if prevPkDist is unusually, this can be because there was a large gap between an artefact and the next legitimate peak 
-      prevPkDist[i] <- prevPkDist[3]      # correct any abnormal prevPkDist to avoid leapfrogging
-    }
-    if((wX[length(wX)] + (4*prevPkDist[i]) > length(deriv1))){                            # If the next window goes beyond the length of the data, break the loop
-      break
+  for(i in 3:length(d1InflxX)){  
+    prevPkDist[i] <- wX[length(wX)] - wX[length(wX)-1]                                                                                          # Peak to peak distance defined as distance between two previous peaks
+    if(prevPkDist[i] > (mean(prevPkDist[!is.na(prevPkDist)])*2)){                                                                               # Identify abnormally large peak to peak distances (this can be because 
+      prevPkDist[i] <- prevPkDist[3]                                                                                                            # there was a large gap between an artefact and the next legitimate peak) 
+    }                                                                                                                                           # and correct them by resetting the value (this avoids leapfrogging)     
+    if((wX[length(wX)] + (4*prevPkDist[i]) > length(deriv1))){                            
+      break                                                                                                                                     # If the next window goes beyond the length of the data, break the loop
     }                                      
     windowPks <- c()
-    windowExtnd <- 1.35
+    windowExtnd <- 1.35                                                                                                                         # Define parameters by which to extend the window or move it forward
     windowStart <- 0.5
     printed <- NA
-    # Adjust mean and standard deviation to remove any artefacts that have been identified
-    if(length(artefacts) > 0){
+    if(length(artefacts) > 0){                                                                                                                  # Recalculate mean and standard deviation after removing any artefacts identified 
       remove <- c()
       for(j in artefacts[which(artefacts < length(wX))]){
         remove[j] <- which(abs(d1InflxX - wX[j]) == min(abs(d1InflxX - wX[j])))
@@ -189,156 +199,198 @@ find_w <- function(d1p, deriv1, sp, sr){
       remove <- remove[!is.na(remove)]
       newRem <- c()
       for(j in 1:length(remove)){
-        newRem[(length(newRem)+1):(length(newRem)+21)] <- (remove[j] -10): (remove[j] + 10)   # remove inflection points around artefact peaks
+        newRem[(length(newRem)+1):(length(newRem)+21)] <- (remove[j] -10): (remove[j] + 10)                                                     # Remove inflection points around artefact peaks
       }
-      if(sum(newRem < 1) > 0){  # running whats inside the for loop will result in a null newRem vector so only run it if there are in fact negative / 0 values in newRem
+      if(sum(newRem < 1) > 0){  
         newRem <- newRem[-(which(newRem < 1))] 
       }    
       m <- mean(d1InflxY[-newRem])       
       std <- sd(d1InflxY[-newRem])  
     }
     
-    while(length(windowPks) < 1){
+    while(length(windowPks) < 1){                                                                                                               # Each subsequent window will adjust (if required) until the next peak is detected
       
-      if(windowExtnd > 10){
+      if(windowExtnd > 10){                  
         windowStart <- 2
         windowExtnd <- 2.5
       }
       
-      window[[i]] <- data.frame((wX[length(wX)] + windowStart*prevPkDist[i]):(wX[length(wX)] + windowExtnd*prevPkDist[i]),  deriv1[(wX[length(wX)] + windowStart*prevPkDist[i]):(wX[length(wX)] + windowExtnd*prevPkDist[i])])    # window initially defined as (the previous peak + 0.5*prevPkDist) to (previous peak + 1.35*prevPkDist)
-      windowInflxY <- d1InflxY[which(d1InflxX > window[[i]][1, 1] & d1InflxX < window[[i]][length(window[[i]][, 1]), 1])]
-      windowInflxX <- d1InflxX[which(d1InflxX > window[[i]][1, 1] & d1InflxX < window[[i]][length(window[[i]][, 1]), 1])]                          
-      threshold <- quantile(window[[i]][, 2], probs=c(0.95))           # If the window is somehow too long for the time series, this line will spring an error                                 
-      windowPks <- which(windowInflxY > threshold)                      
+      window[[i]] <- data.frame((wX[length(wX)] + windowStart*prevPkDist[i]):(wX[length(wX)] + windowExtnd*prevPkDist[i]),                      # Define the window initially as from (the previous peak + (peak to peak distance / 2)) 
+                     deriv1[(wX[length(wX)] + windowStart*prevPkDist[i]):(wX[length(wX)] + windowExtnd*prevPkDist[i])])                         # to (previous peak + (peak to peak distance * 1.35))
+      windowInflxY <- d1InflxY[which(d1InflxX > window[[i]][1, 1] & d1InflxX < window[[i]][length(window[[i]][, 1]), 1])]        
+      windowInflxX <- d1InflxX[which(d1InflxX > window[[i]][1, 1] & d1InflxX < window[[i]][length(window[[i]][, 1]), 1])]                       # Identify which inflection points are within the window       
+      threshold <- quantile(window[[i]][, 2], probs=c(0.95))                                                                                    # Define threshold                                 
+      windowPks <- which(windowInflxY > threshold)                                                                                              # Identify peaks
       windowPksY <- windowInflxY[windowPks]
       windowPks <- windowInflxX[windowPks]     
       
-      #plot(window[[i]], type = "l")
-      #points(windowPks, windowPksY, pch = 19)
+      # plot(window[[i]], type = "l")                                                                                                           # For debugging purposes, the window can be plotted
+      # points(windowPks, windowPksY, pch = 19)
       
-      if(length(windowPks) > 2){                  # If three peaks are identified, this can be due to four reasons: 1. a window does not include a genuine peak (so there are multiple secondary ones of similar height) 2. there is an artefact that causes three peaks to be in the same window 3. there are significantly large secondary peaks that they also exceed the threshold for identification 4. the peak of the 1st derivative itself has multiple inflection points e.g in participant 38 this occurs                                                                                                               # If the these criteria are met, go to the next loop
-        if(max(windowPksY) > (m+(2*std)) |  max(windowPksY) > (mean(deriv1[windowPks[1]:(windowPks[1] + (3*prevPkDist[i]))]) + 2*std(deriv1[windowPks[1]:(windowPks[1] + (3*prevPkDist[i]))]))  ){        # If peaks are high, include the highest one as a peak. Mark it as an artefact if the other two peaks exceed m+(2*std) aka are not secondary peaks. 
-          wX[length(wX)+1] <- windowPks[which(windowPksY == max(windowPksY))]  # Mark max peak as a peak
-          lowPks <- windowPksY[order(windowPksY)[1:2]]  # Find the two lowest peaks
-          if(lowPks[1] > m+(2*std) & lowPks[2] > m+(2*std) & (windowPks[3] - windowPks[1]) > (prevPkDist[i]/10)){    # If the two lower peaks are also high, and not so close together as to be multiple inflection points on the same peak, label the peak as an artefact. 
-            cat('\n','Potential artefact',  ', plot(', (wX[i-1]-100), ':', (wX[i-1]+300), ', deriv1[', (wX[i-1]-100), ':', (wX[i-1]+300), '], type = "l") ,', 'wave', i, '+/- 2 removed because the non-max peaks were high') 
-            artefacts[length(artefacts) + c(1, 2, 3, 4, 5)] <- c(i-2, i-1, i, i+1, i+2) 
+      ############# Window Peak Confirmation Criteria: #############
+                                                                                                                                                
+      if(length(windowPks) > 2){                                                                                                                # If more than 2 peaks are identified within the window, this can be due to four reasons:
+        if(max(windowPksY) > (m+(2*std)) |  max(windowPksY) > (mean(deriv1[windowPks[1]:(windowPks[1]                                           # 1. a window does not include a genuine peak, and there are multiple secondary ones of similar height 
+                           + (3*prevPkDist[i]))]) + 2*std(deriv1[windowPks[1]:(windowPks[1] + (3*prevPkDist[i]))]))){                           # 2. there is an artefact with more than two peaks
+                                   wX[length(wX)+1] <- windowPks[which(windowPksY == max(windowPksY))]                                          # 3. there are significantly large secondary peaks that also exceed the threshold for identification
+                                   lowPks <- windowPksY[order(windowPksY)[1:2]]                                                                 # 4. a genuine peak has multiple inflection points   
+          if(lowPks[1] > m+(2*std) & lowPks[2] > m+(2*std)                                                                                      
+             & (windowPks[3] - windowPks[1]) > (prevPkDist[i]/10)){                                                                             # Check if the maximum peak is above a threshold relative to the time series (no 1)    
+               cat('\n','Potential artefact',  ', plot(', (wX[i-1]-100), ':', (wX[i-1]+300), ', deriv1[', (wX[i-1]-100), ':', (wX[i-1]+300),    # If it is, check if both lower peaks also exceed the threshold, 
+               '], type = "l") ,', 'wave', i, '+/- 2 removed because the non-max peaks were high')                                              # if so mark them as artefactual (no 2), if not assume they are secondary peaks (no 3)
+               artefacts[length(artefacts) + c(1, 2, 3, 4, 5)] <- c(i-2, i-1, i, i+1, i+2)                                                      # An additional condition of the above is that the 'peaks' are not too close together so as to be inflection points (no 4)
           }
-        }else{                                           # If peaks are low, assume they are secondary and extend the window
-          windowExtnd <- windowExtnd + 0.5
+        }else{                                                                                                                                  
+          windowExtnd <- windowExtnd + 0.5                                                                                                      # If no 1 is the case, extend the window to look for peaks again
           windowPks <- c()
         }
       }
       
-      
-      if(length(windowPks) == 2){
-        if(max(windowPksY) > (m+(2*std)) | max(windowPksY) > (mean(deriv1[windowPks[1]:(windowPks[1] + (3*prevPkDist[i]))]) + 2*std(deriv1[windowPks[1]:(windowPks[1] + (3*prevPkDist[i]))])) ){   # at least one of the peaks high?    (occassionely there is a series of low amplitude waves that are far below average for the time series, to account for this there is also a test of height relative to the peaks local to it)
-          if((windowPks[2] - windowPks[1]) < (prevPkDist[i]/3)){   # peaks close togetber?
-            wX[length(wX)+1] <- windowPks[which(windowPksY == max(windowPksY))]  # If they are, take the highest peak and mark it as an artefact
-            cat('\n','Potential artefact',  ', plot(', (wX[i-1]-100), ':', (wX[i-1]+300), ', deriv1[', (wX[i-1]-100), ':', (wX[i-1]+300), '], type = "l") ,', 'wave', i, '+/- 2 removed because two peaks found too close together') 
-          }else{      # If peaks are not too close together..
-            if((windowPksY[1] > (m+(2*std))) | windowPksY[1] > (mean(deriv1[windowPks[1]:(windowPks[1] + (3*prevPkDist[i]))]) + 2*std(deriv1[windowPks[1]:(windowPks[1] + (3*prevPkDist[i]))])) & windowPksY[1] > (windowPksY[2]/2)){ # Check if first peak is legit by 1. comparing to m+(2*std)  or 2. 
-              wX[length(wX)+1] <- windowPks[1]    # If so mark it as a peak
-              if(windowPksY[2] > (m+(2*std)) |  windowPksY[2] > (mean(deriv1[windowPks[1]:(windowPks[1] + (3*prevPkDist[i]))]) + 2*std(deriv1[windowPks[1]:(windowPks[1] + (3*prevPkDist[i]))]))  & windowPksY[2] > (windowPksY[1]/2)){   # and check if the second one is legit...
-                wX[length(wX)+1] <- windowPks[2]  # and if so mark it also as a a peak
+      if(length(windowPks) == 2){                                                                                                               # If two peaks are identified, they should be confirmed as genuine:
+        if(max(windowPksY) > (m+(2*std)) | max(windowPksY) > (mean(deriv1[windowPks[1]:(windowPks[1]                                            # Check if the maximum peak exceeds the global or local threshold 
+           + (3*prevPkDist[i]))]) + 2*std(deriv1[windowPks[1]:(windowPks[1] + (3*prevPkDist[i]))]))){                                           # (local defined relative to peak to peak distance)
+          if((windowPks[2] - windowPks[1]) < (prevPkDist[i]/3)){                                                                                # If it does, check if the two peaks are close togetber in time 
+            wX[length(wX)+1] <- windowPks[which(windowPksY == max(windowPksY))]                                                                 # (within 1/3rd of the peak to peak distance) 
+            cat('\n','Potential artefact',  ', plot(', (wX[i-1]-100), ':', (wX[i-1]+300),                                                       # If they are, mark the highest peak as artefactual
+                ', deriv1[', (wX[i-1]-100), ':', (wX[i-1]+300), '], type = "l") ,', 'wave',
+                i, '+/- 2 removed because two peaks found too close together') 
+          }else{                                                                                                                                # If they are not, go through both peaks in turn to confirm if genuine:
+            if((windowPksY[1] > (m+(2*std))) | windowPksY[1] > (mean(deriv1[windowPks[1]:(windowPks[1]                                          # Check if the first peak can be marked as genuine by:
+              + (3*prevPkDist[i]))]) + 2*std(deriv1[windowPks[1]:(windowPks[1] + (3*prevPkDist[i]))])) &                                        # 1. comparing to time series threshold 
+              windowPksY[1] > (windowPksY[2]/2)){                                                                                               # 2. comparing to local threshold 
+                wX[length(wX)+1] <- windowPks[1]                                                                                                # 3. comparing to height of the other peak (should exceed it's half maximum)
+                if(windowPksY[2] > (m+(2*std)) | windowPksY[2] > (mean(deriv1[windowPks[1]:(windowPks[1]                                        # If it can, the second peak can be marked as genuine with the same criteria
+                + (3*prevPkDist[i]))]) + 2*std(deriv1[windowPks[1]:(windowPks[1] + (3*prevPkDist[i]))])) &                                      
+                windowPksY[2] > (windowPksY[1]/2)){   
+                  wX[length(wX)+1] <- windowPks[2]  
               }
-            }else{   # If first peak is not legit
-              if(windowPksY[2] > (m+(2*std)) | windowPksY[2] > (mean(deriv1[windowPks[1]:(windowPks[1] + (3*prevPkDist[i]))]) + 2*std(deriv1[windowPks[1]:(windowPks[1] + (3*prevPkDist[i]))]))  & windowPksY[2] > (windowPksY[1]/2)){
+            }else{                                                                                                                              # If the first peak is not genuine, check the second and identify only the 
+              if(windowPksY[2] > (m+(2*std)) | windowPksY[2] > (mean(deriv1[windowPks[1]:(windowPks[1] +                                        # second peak as genuine if appropriate. 
+                (3*prevPkDist[i]))]) + 2*std(deriv1[windowPks[1]:(windowPks[1] + (3*prevPkDist[i]))])) & 
+                windowPksY[2] > (windowPksY[1]/2)){
                 wX[length(wX)+1] <- windowPks[2] 
               }
             }
           }
-        }else{     # If peaks not high, extend window
+        }else{                                                                                                                                  # If the maximum peak did not exceed threshold, extend the window and look again. 
           windowExtnd <- windowExtnd + 0.5
           windowPks <- c()
         }   
       }
       
-      
-      if(length(windowPks) == 1){                # If one peak is identified, confirm 1. that the peak is sufficiently high so as not to be a secondary peak 
-        if(windowPksY > (m+(2*std)) | windowPksY > (mean(deriv1[windowPks[1]:(windowPks[1] + (3*prevPkDist[i]))]) + 2*std(deriv1[windowPks[1]:(windowPks[1] + (3*prevPkDist[i]))])) | windowPksY > (predict(d1p, wX[i-1])*0.9)  ){                                                                                                                           
-          wX[length(wX)+1] <- windowPks 
-        }else{
-          if((i-1) %in% artefacts){
+      if(length(windowPks) == 1){                                                                                                               # If one peak is identified, confirm it is genuine by: 
+        if(windowPksY > (m+(2*std)) | windowPksY > (mean(deriv1[windowPks[1]:(windowPks[1] +                                                    # 1. comparing to time series threshold
+          (3*prevPkDist[i]))]) + 2*std(deriv1[windowPks[1]:(windowPks[1] + (3*prevPkDist[i]))])) |                                              # 2. comparing to local threshold
+          windowPksY > (predict(d1p, wX[i-1])*0.9)){                                                                                            # 3. comparing it to the height of the previous peak                               
             wX[length(wX)+1] <- windowPks 
-          }else{
+        }else{
+          if((i-1) %in% artefacts){                                                                                                             # If the above criteria are not met, check if the previous peak was artefactual
+            wX[length(wX)+1] <- windowPks                                                                                           
+          }else{                                                                                                                                # If it was not, extend the window
             windowExtnd <- windowExtnd + 0.5
             windowPks <- c()
           }
         }
       }
       
-      if(windowExtnd > 2 & is.na(printed)){        # If the window has been extended more than twice to find a peak, it is likely that that peak may be an artefact; label it as such
-        cat('\n','Potential artefact',  ', plot(', (wX[i-1]-100), ':', (wX[i-1]+300), ', deriv1[', (wX[i-1]-100), ':', (wX[i-1]+300), '], type = "l") ,', 'wave', i, '+/- 2 removed because window needed extending')  # i-1 because wX[i] doesn't exist yet - as such the range has also been adjusted
+      #############Window Artefact Identification: #############
+      
+      if(windowExtnd > 2 & is.na(printed)){                                                                                                     # If the window has been extended more than twice to find a peak, 
+        cat('\n','Potential artefact',  ', plot(', (wX[i-1]-100), ':', (wX[i-1]+300), ', deriv1[',                                              # it is likely that that peak may be an artefact; label it as such
+           (wX[i-1]-100), ':', (wX[i-1]+300), '], type = "l") ,', 'wave', i, '+/- 2 removed because window needed extending')  
         printed <- 1 
+        artefacts[length(artefacts) + c(1, 2, 3, 4, 5)] <- c(i-2, i-1, i, i+1, i+2)                                                             # i-1 and subsequent adjustments are used because wX[i] does not yet exist
+      }
+      
+      if(min(window[[i]]) < (m-(3*std)) & is.na(printed)){                                                                                      # If a window contains a value that drops considerably below the mean, 
+        cat('\n','Potential artefact',  ', plot(', (wX[i-1]-100), ':', (wX[i-1]+300), ', deriv1[',                                              # label the peak found in that window as an artefact 
+           (wX[i-1]-100), ':', (wX[i-1]+300), '], type = "l") ,', 'wave', i, '+/- 2 removed because the window contains a very low value') 
         artefacts[length(artefacts) + c(1, 2, 3, 4, 5)] <- c(i-2, i-1, i, i+1, i+2)
       }
       
-      if(min(window[[i]]) < (m-(3*std)) & is.na(printed)){   # If a window contains a value that drops considerably below the mean, label the peak found in that window as an artefact 
-        cat('\n','Potential artefact',  ', plot(', (wX[i-1]-100), ':', (wX[i-1]+300), ', deriv1[', (wX[i-1]-100), ':', (wX[i-1]+300), '], type = "l") ,', 'wave', i, '+/- 2 removed because the window contains a very low value') 
-        artefacts[length(artefacts) + c(1, 2, 3, 4, 5)] <- c(i-2, i-1, i, i+1, i+2)
-      }
-      
-      windowExtnd <- windowExtnd + 0.1   # If no peaks are found in a window (or only spurious ones found) extend the window and look again
-    }
-  }                                                                                                                         
-  d1wY <- predict(d1p, wX)
-  #Find m and std for wX:
+      windowExtnd <- windowExtnd + 0.1                                                                                                          # If no peaks are found in a window (or only spurious ones found), 
+    }                                                                                                                                           # extend the window and look again
+  }       
+  
+  #############Post Peak Identification Cleaning: #############
+  
+  d1wY <- predict(d1p, wX)                                                                                                                      # Find summary statistics of identified peak y-values
   m <- mean(d1wY) 
   std <- sd(d1wY) 
-  # Redefine wX as without artefacts
-  if(length(artefacts) > 0){
+  if(length(artefacts) > 0){                                                                                                                    # Remove identified artefacts (should this be before calculating mean??)
     wX <- wX[-artefacts]
     d1wY <- d1wY[-artefacts]
   }
-  # Now that all peaks have been found, and artefacts removed, go through once more to look for any unusually tall peaks, and label them as artefacts
-  artefacts <- c()
+  
+  artefacts <- c()                                                                                                                              # Check for unusually tall peaks, and label them as artefacts if:
   for(i in 2:(length(wX)-1)){     
-    if(d1wY[i] > 1.5*d1wY[i+1] & d1wY[i] > 1.5*d1wY[i-1] | d1wY[i] > (m+(5*std))){  # consider too tall if greater than 1.5* the wave before and the wave after OR greater than (m+(5*std)) 
-      cat('\n','Potential artefact',  ', plot(', (wX[i-1]-100), ':', (wX[i-1]+300), ', deriv1[', (wX[i-1]-100), ':', (wX[i-1]+300), '], type = "l") ,', 'wave', i, '+/- 2 removed because of a very tall peak')
+    if(d1wY[i] > 1.5*d1wY[i+1] & d1wY[i] > 1.5*d1wY[i-1] | d1wY[i] > (m+(5*std))){                                                              # 1. the ith wave height exceeds local (comparison with i-1 and i+1) or time series thresholds
+      cat('\n','Potential artefact',  ', plot(', (wX[i-1]-100), ':', (wX[i-1]+300), ', deriv1[',
+          (wX[i-1]-100), ':', (wX[i-1]+300), '], type = "l") ,', 'wave', i, '+/- 2 removed because of a very tall peak')
       artefacts[length(artefacts) + c(1, 2, 3, 4, 5)] <- c(i-2, i-1, i, i+1, i+2)
     }
     if(i > 5 & i < (length(wX)-5)){
       if(d1wY[i] > (1.5*mean(d1wY[c((i-5):(i+5))]))){
-        cat('\n','Potential artefact',  ', plot(', (wX[i-1]-100), ':', (wX[i-1]+300), ', deriv1[', (wX[i-1]-100), ':', (wX[i-1]+300), '], type = "l") ,', 'wave', i, '+/- 2 removed because of a very tall peak')   # Another check which can only be carried out on waves that have 5 either side of them, is to check if the ith wave is greater than 1.5 x the mean of peaks i-5 to i+5
+        cat('\n','Potential artefact',  ', plot(', (wX[i-1]-100), ':', (wX[i-1]+300), ', deriv1[',                                              # 2. the ith wave height exceeds another local threshold (derived from i-5 to i+5)  
+          (wX[i-1]-100), ':', (wX[i-1]+300), '], type = "l") ,', 'wave', i, '+/- 2 removed because of a very tall peak')                        
         artefacts[length(artefacts) + c(1, 2, 3, 4, 5)] <- c(i-2, i-1, i, i+1, i+2)
       }
     }
   }       
-  # Find W y_values on original trace
-  wY <- predict(sp, wX)  
-  # Create dataframe 
-  Ws <- data.frame(wX, wY, d1wY)
-  if(length(artefacts) > 0){
+  
+  ############# Output: #############
+  
+  wY <- predict(sp, wX)                                    # Find W y_values on original trace
+  Ws <- data.frame(wX, wY, d1wY)                           # Create output dataframe 
+  if(length(artefacts) > 0){                               # Remove any further artefacts identified
     Ws <- Ws[-artefacts, ]
   }
-  Ws <- Ws[-1, ]
+  Ws <- Ws[-1, ]                                           # Remove the first and last waves
   Ws <-Ws[-nrow(Ws), ]
   
-  colnames(Ws) <- c("wX", "wY", "wYD1")
+  colnames(Ws) <- c("wX", "wY", "wYD1")                    # Outputs as described above
   return(Ws)
 }
 
-find_u_v <- function(dat, wx, wy, d1, d1p, spline, spline_o, plot = FALSE){
-  # Find half the height of w (on derivative y-axis)
-  wHalfHeight <- predict(d1p, wx)/2   # should change this to w$w_poly_peaks_deriv1_yval
-  # Find u and v:
-  halfHeightX <- c()
+
+find_u_v <- function(wx, wy, d1, d1p, spline, plot = FALSE){
+  ########################################################################################################################################
+  # FindUV identifies the points on the systolic upstroke that correspond to the two half maximum values on the corresponding first  
+  # derivative peak. The first, before w, is denoted U. The second, after w, is denoted V. 
+  
+  # Inputs: 
+  # wx (A vector of x-coordinates corresponding to w points on the PPG time series)
+  # wy (A vector of y-coordinates corresponding to w points on the PPG time series)
+  # d1 (The first derivative time series, discrete form)
+  # d1p (The first derivative time series, polynomial spline form)
+  # spline (The original PPG time series, polynomial spline form)
+  # plot (Logical, will plot the first derivative time series with U and V values as points if set to true)
+  
+  # Outputs:
+  # uX (A vector of x-xoordinates corresponding to U points on the PPG time series)
+  # uY (A vector of y-xoordinates corresponding to U points      "       "        )
+  # vX (A vector of x-xoordinates corresponding to V points      "       "        )
+  # vY (A vector of y-xoordinates corresponding to V points      "       "        )
+  ########################################################################################################################################
+                                        
+  wHalfHeight <- predict(d1p, wx)/2                                                           # For each w point, identify the half maximum on first derivative
+  halfHeightX <- c()                                                                          
   halfHeightY <- c()
-  for(i in 1:length(wHalfHeight)){    #length(wHalfHeight)
-    d1PeakSub <- CubicInterpSplineAsPiecePoly((round(wx[i])-5):(round(wx[i])+5), d1[(round(wx[i])-5):(round(wx[i])+5)], "natural")   # Making a smaller spline for just the peak
-    preHalfHeights <- solve(d1PeakSub, b = wHalfHeight[i])   # finding the points on the small spline where the heights are half the peak
-    # If only one half height detected, extend window for finding half heights:
-    if(length(preHalfHeights) < 2){
-      d1PeakSub <- CubicInterpSplineAsPiecePoly((round(wx[i])-10):(round(wx[i])+10), d1[(round(wx[i])-10):(round(wx[i])+10)], "natural")   # Making a smaller spline for just the peak
+  for(i in 1:length(wHalfHeight)){                                                            # For each 1st derivative peak, create a polynomial spline of the peak only
+    d1PeakSub <- CubicInterpSplineAsPiecePoly((round(wx[i])-5):(round(wx[i])+5),
+                 d1[(round(wx[i])-5):(round(wx[i])+5)], "natural")                            
+    preHalfHeights <- solve(d1PeakSub, b = wHalfHeight[i])                                    # Identify the x-coordinates of the new spline when the y-value = the half maximum
+    
+    if(length(preHalfHeights) < 2){                                                           # If only one coordinate is found, extend the length of the spline, 
+      d1PeakSub <- CubicInterpSplineAsPiecePoly((round(wx[i])-10):(round(wx[i])+10),          # and search again
+                   d1[(round(wx[i])-10):(round(wx[i])+10)], "natural")                        
       preHalfHeights <- solve(d1PeakSub, b = wHalfHeight[i]) 
     }
-    # If more than one half height detected:
-    if(length(preHalfHeights) > 2){
-      # Find the distance between each detected half height, compare their xvals to the peak, and keep only the two that have the most similar distance to the peak... 
-      a <- preHalfHeights - wx[i]
-      b <- c()
-      for(j in 1:(length(a)-1)){
+    
+    if(length(preHalfHeights) > 2){                                                           # More than one x-coordinate is sometimes found if the gradient of the upstroke 
+      a <- preHalfHeights - wx[i]                                                             # is particularly variable
+      b <- c()                                                                                # In such cases, find the time (x-axis) difference between each detected half height and w
+      for(j in 1:(length(a)-1)){                                                              # Select the two values with the most similar difference before and after w
         b[j] <- a[j] - a[j+1]
       } 
       b[length(b) + 1] <- a[1] - a[length(a)]
@@ -349,33 +401,29 @@ find_u_v <- function(dat, wx, wy, d1, d1p, spline, spline_o, plot = FALSE){
         preHalfHeights <- c(preHalfHeights[c], preHalfHeights[c+1])
       }
     }
-    halfHeightX[c((2*(i)-1), (2*(i)))] <- preHalfHeights     # assigning half heights to a vector
-    halfHeightY[c((2*(i)-1), (2*(i)))] <- predict(d1PeakSub, halfHeightX[c((2*(i)-1), (2*(i)))])  # finding the y_values from those half heights on the smaller spline
+    halfHeightX[c((2*(i)-1), (2*(i)))] <- preHalfHeights                                      # Add the two values per peak to a vector of all in the time series
+    halfHeightY[c((2*(i)-1), (2*(i)))] <- predict(d1PeakSub,                                  # And identify the corresponding y-coordinates for the (first derivative) times series 
+                                          halfHeightX[c((2*(i)-1), (2*(i)))])  
   }
   
-  # Plot u's and v's on deriv1_poly
-  if(plot){
+  if(plot){                                                                                   # Check results
     plot(d1p)
     points(halfHeightX, halfHeightY, pch = 19)
   }
   
-  # Find u and v 
-  uX <- halfHeightX[seq_along(halfHeightX) %%2 != 0] 
+  uX <- halfHeightX[seq_along(halfHeightX) %%2 != 0]                                          # Split the time series values into vectors for U and V
   vX <- halfHeightX[seq_along(halfHeightX) %%2 == 0]
   
-  
-  # Find u and v y-values for spline_poly
-  uY <- c()
+  uY <- c()                                                                                   # Find the y-coordinates for U and V on the original PPG time series
   for(i in 1:length(uX)){
     uY[i] <- predict(spline, uX[i])
   }
-  
-  vY <- c()
+  vY <- c()                                                                 
   for(i in 1:length(vX)){
     vY[i] <- predict(spline, vX[i])
   }
   
-  df <- data.frame(uX, uY, vX, vY)
+  df <- data.frame(uX, uY, vX, vY)                                                            # Organize outputs (see summary box above)
   return(df)
 }
 
@@ -410,7 +458,7 @@ preclean_wuv <- function(w, uv, o, samp, sp, q = FALSE){
   for(i in 1:length(w$wX)){
     vDist[i] <- (w$wX[i] - uv$uX[i]) / (uv$vX[i] - uv$uX[i])*100
   }
-  #plot(w$wX, vDist, type = "l")
+  # plot(w$wX, vDist, type = "l")
   
   # Make a vector of abnormal pdtv (allowing any values between 30 and 70): 
   sdpdtv <- sd(vDist)
@@ -450,8 +498,9 @@ preclean_wuv <- function(w, uv, o, samp, sp, q = FALSE){
     }
     w <- w[-pdtvWaves, ]
     uv <- uv[-pdtvWaves, ]
+    o <- o[-pdtvWaves]       # o vector also has to be corrected for the removed wave... 
   }
-  return(list(w, uv))
+  return(list(w, uv, o))
 }
 
 
@@ -515,12 +564,12 @@ clean_wuv <- function(wuv, sp, inx, o, samp, bc, q = FALSE){
       }
     }
     if(length(falseU) > 0){
-      o2 <- o[-falseU]
+      o2 <- o2[-falseU]    # line 519
       wuv <- wuv[-falseU, ]
     }
   }
   
-  # Find v-u differences:
+  # Find v-u differences (on y-axis):
   diffVU <- wuv$vY - wuv$uY
   
   # undetected artefacts can lead to repeats in half heights (if the deriv peak is too wide), which will lead to 
@@ -534,7 +583,7 @@ clean_wuv <- function(wuv, sp, inx, o, samp, bc, q = FALSE){
   
   # Make a vector of waves with abnormally small scale factors and remove them:
   falseScale <- which(diffVU < (median(diffVU) - 5*(std(diffVU))))   # changed 4* to 5*
-  if(length(falseScale) > 1){
+  if(length(falseScale) > 0){
     cat("/n", length(falseScale), "/", nrow(wuv), "waves removed due to scale factors of 0 (u and v incorrectly identified)")
     if(q == TRUE){
       plotyyy <- 0
@@ -565,8 +614,8 @@ clean_wuv <- function(wuv, sp, inx, o, samp, bc, q = FALSE){
   
   ## Find o points again:
   oY <- predict(sp, inx[o])
-  #plot(splinePolyBC)
-  #points(inflexX[o], o_yval, pch = 19)
+  # plot(splinePolyBC)
+  # points(inflexX[o], oY, pch = 19)
   
   # Find o-w difference:
   owDiff <- c()
@@ -592,17 +641,19 @@ clean_wuv <- function(wuv, sp, inx, o, samp, bc, q = FALSE){
   diffVU <- diffVU[-length(diffVU)]  
   
   # Make a vector of abnormal IBIs (the waves at the end of a sequence / before an artefact): 
-  #plot(ibi)
-  #points(which(ibi > 1.3*median(ibi)), ibi[which(ibi > 1.3*median(ibi))], pch = 19, col = "red")
+  # plot(ibi)
+  # points(which(ibi > 1.25*median(ibi)), ibi[which(ibi > 1.25*median(ibi))], pch = 19, col = "red")
   endWaves <- c()
   for(i in 2:(length(ibi)-1)){
-    if(ibi[i] > 1.3*median(ibi) & ibi[i] > 2*ibi[i-1]){
+    # ibi should be greater than the median ibi by a factor of 1.25, and greater than at least one of the values either side of it to be included:
+    if(ibi[i] > 1.3*median(ibi) & ( ibi[i] > 2*ibi[i-1] | ibi[i] > 2*ibi[i+1] ) ){  
       endWaves[i] <- i 
     }
   }
   
+  
   # Remove end_waves from all vectors:
-  if(length(endWaves) > 1){
+  if(length(endWaves) > 0){
     endWaves <- endWaves[!is.na(endWaves)]
     cat("\n", length(endWaves), "/", nrow(wuv), "waves removed due to the end of the wave (next o point) not being corrected for baseline")
     if(q == TRUE){
@@ -630,7 +681,7 @@ clean_wuv <- function(wuv, sp, inx, o, samp, bc, q = FALSE){
         if(plotyy != "yes" & plotyy != "no"){cat("\n", "please enter 'yes' or 'no'")}
       }
     }
-    if(length(endWaves) > 1){
+    if(length(endWaves) > 0){
       o2 <- o2[-endWaves]
       wuv <- wuv[-endWaves, ]
       diffVU <- diffVU[-endWaves] 
@@ -642,28 +693,118 @@ clean_wuv <- function(wuv, sp, inx, o, samp, bc, q = FALSE){
 }
 
 
-sep_beats <- function(odiff, bc, samp, wuv, wvlen, inx, o, ibi, scale = TRUE, q = FALSE, subset = FALSE){   
+sep_beats <- function(odiff, bc, samp, wuv, wvlen, inx, o, ibi, scale = TRUE, q = FALSE, subset = FALSE, boundaries = NULL){   
+  
+  # Optional subsetting of Iso Waves:
+  if(subset == T){
+    #Find the Iso specific part of the data
+    ab_ibi <- which(ibi > mean(ibi) + (4*sd(ibi)) | ibi < mean(ibi) - (4*sd(ibi))) #excluding ibi points 4 sds above mean
+    ibi[ab_ibi] <- NA 
+    ibi <- ibi[!is.na(ibi)]
+    meds <- rollmedian(ibi, k = 19) #rolling median
+    basemed <- mean(meds[1:50]) #baseline defined as the average of the first 50 rolling median points... I'm not sure if this is sensible
+    halfs <- (basemed - min(meds))/2 #half diff between minimum and baseline
+    post <- min(meds) + halfs   # the half way point (the y axis point that represents the half height)
+    # Sometimes the minimum is incorrect (due to outlier ibi values):
+    # Suggest first finding the minimum of meds and then finding a minimum ibi local to that (+/- 10 beats):
+    meds_roi <- (which(meds == min(meds))[1] - 10) : (which(meds == min(meds))[1] + 10)
+    # If no discernable minimum in the time series, it is possible a value far from the middle would be included, which would introduce negative values to meds_roi
+    if( sum(which(meds_roi < 1)) > 0  | sum(which(meds_roi > length(ibi))) > 0 ){
+      message("Warning: No discernable minimum in 2mg trace")
+      Sys.sleep(10)
+      meds_roi <- (round(length(ibi)/2) - 10) : (round(length(ibi)/2) + 10)
+    }
+    indx <- meds_roi[which(ibi[meds_roi] == min(ibi[meds_roi]))]    # indx is taken as the minimum
+    # Check again that minimum is not too near to beginning / end of trace:
+    if(indx < 15 | indx > (length(ibi) - 15)){
+      message("Warning: No discernable minimum in 2mg trace")
+      Sys.sleep(10)
+      meds_roi <- (round(length(ibi)/2) - 10) : (round(length(ibi)/2) + 10)
+    }
+    pre_indx <- which(abs(ibi[1:indx] - post) < 0.5) # finds the values that are closest to the half point
+    # If no values within 0.5 of the half-way point, extend the range to 1.5 and so on:
+    a <- 0.5
+    while(length(pre_indx) < 1){
+      a <- a + 1
+      pre_indx <- which(abs(ibi[1:indx] - post) < a)
+    }
+    in2 <- which(abs(pre_indx - indx) == min(abs(pre_indx - indx))) # take the one closest to the minimum
+    pre_indx <- pre_indx[in2]
+    # Find the closest to the half point from the points after the minimum
+    post_indx <- indx + which(abs(ibi[indx:length(ibi)] - post) < 0.5)
+    a <- 0.5
+    while(length(post_indx) < 1){
+      a <- a + 0.25
+      post_indx <- indx + which(abs(ibi[indx:length(ibi)] - post) < a)
+    }
+    while(post_indx[1] < indx + 15){
+      post_indx <- post_indx[-1]
+    }
+    post_indx <- post_indx[1]
+    rm(meds, basemed, halfs, post, indx, in2)
+    ppg_pre <- (which((ppg[,1]) == beat[,1][pre_indx - 1]))    # Before infusion
+    ppg_post <- which((ppg[,1]) == beat[,1][post_indx + 1])    # After infusion wears off
+    # Sometimes beat[, 1] will not contain the values specified to subset, in which case... 
+    if(length(ppg_pre) < 1 | length(ppg_post) < 1){
+      message("Subsetting failed: review of time series suggested")
+      Sys.sleep(10)
+      ppg_pre <- which((ppg[,1]) == beat[1,1])
+      ppg_post <- which((ppg[,1]) == beat[nrow(beat),1])
+    }
+    
+    plot(ibi, main = paste(c("2mg, ", ppg[ppg_pre, 1], "seconds", "to", ppg[ppg_post, 1], "seconds"), collapse = " "))
+    points(pre_indx:post_indx, ibi[pre_indx:post_indx], col='red')
+    
+    # You might have to re-derive pre and post indx from ppg pre and post
+    subs <- which(wuv$wX > ppg_pre & wuv$wX < ppg_post)
+    cat(length(subs), "beats in subset (pre-cleaning)")
+    Sys.sleep(2)
+    
+    # Subset:
+    wuv <- wuv[subs, ]
+  }
+  
+  if(subset == "rep"){
+    
+    # Subset according to previous time series:
+    subs <- which(wuv$wX > boundaries[1])
+    subs_pre <- subs[1:boundaries[2]]
+    # There's a chance there aren't enough beats remaining in the placebo time series, in which case take as many as possible:
+    tmp <- sum(is.na(subs_pre))
+    if(tmp > 0){
+      subs <- subs[1:(length(subs_pre)-tmp)]
+      boundaries[2] <- length(subs)
+    }else{
+      subs <- subs[1:boundaries[2]]
+    }
+    
+    # Plot
+    plot(ibi, main = paste(c("0mg, ", boundaries[2], "beats from", ppg[boundaries[1], 1], "seconds"), collapse = " "))
+    points(subs, ibi[subs], col = "red")
+    Sys.sleep(2)
+    
+    # Subset:
+    wuv <- wuv[subs, ]
+  }
+  
   
   # Redefine baseline corrected data:
   sourcedata <- bc[1:length(undetrended)]
   
   # Define a dataframe to contain individual waves (first column is the x-axis (in seconds) - currently set for bioradio data):
-  pulse <- data.frame(seq((-141/(samp*10)), ((wvlen*10 -9)-142)/(samp*10), by = 1/(samp*10)))   
+  pulse <- data.frame(seq((-141/(samp*10)), ((wvlen*15 -9)-142)/(samp*10), by = 1/(samp*10)))   
   
   afterO <- list()
   beforeO <- list()
   extra_long_wave <- c()
-  for(i in 1:(length(wuv$wX))){  
-    
-    # Make a polynomial spline of rounded u - 15 : rounded u + waveLen - 10:   # Now row 141 in xxxx = 0, therefore u = 0 
-    splPolySub <- CubicInterpSplineAsPiecePoly((round(wuv$uX[i])-15):(round(wuv$uX[i]) + (wvlen-10)), sourcedata[(round(wuv$uX[i])-15):(round(wuv$uX[i]) + (wvlen-10))], "natural")
-    
+  for(i in 1:length(wuv$wX)){  
+
+    splPolySub <- CubicInterpSplineAsPiecePoly((round(wuv$uX[i])-15):(round(wuv$uX[i]) + (wvlen+10)), sourcedata[(round(wuv$uX[i])-15):(round(wuv$uX[i]) + (wvlen+10))], "natural")
     # Turn into discrete form
-    splSub <- predict(splPolySub, c(seq((wuv$uX[i]-14), (wuv$uX[i]+(wvlen-15)), 0.1)))  
-    
+    splSub <- predict(splPolySub, c(seq((wuv$uX[i]-14), (wuv$uX[i]+(wvlen+5)), 0.1)))
     # Make into dataframe:
     splSub <-  as.data.frame(splSub)
-    splSub <- cbind(splSub, c(seq((wuv$uX[i]-14), (wuv$uX[i]+(wvlen-15)), 0.1)))
+    splSub <- cbind(splSub, c(seq((wuv$uX[i]-14), (wuv$uX[i]+(wvlen+5)), 0.1)))
     colnames(splSub) <- c('y', 'x')  
     # Scale so that v-u = 1
     if(scale == TRUE){
@@ -680,9 +821,9 @@ sep_beats <- function(odiff, bc, samp, wuv, wvlen, inx, o, ibi, scale = TRUE, q 
       halfCross <- halfCross[which(abs(halfCross - wuv$wX[i]) == min(abs(halfCross - wuv$wX[i])))]    
       
       # Convert to discrete form again: (need to redefine splSub)
-      splSub2 <- predict(splPolySub, c(seq((halfCross-14), (halfCross+(wvlen-15)), 0.1)))  
+      splSub2 <- predict(splPolySub, c(seq((halfCross-14), (halfCross+(wvlen+5)), 0.1)))  
       splSub2 <-  as.data.frame(splSub2)
-      splSub2 <- cbind(splSub2, c(seq((halfCross-14), (halfCross+(wvlen-15)), 0.1)))  
+      splSub2 <- cbind(splSub2, c(seq((halfCross-14), (halfCross+(wvlen+5)), 0.1)))  
       colnames(splSub2) <- c('y', 'x') 
       
       # Scale again
@@ -697,24 +838,19 @@ sep_beats <- function(odiff, bc, samp, wuv, wvlen, inx, o, ibi, scale = TRUE, q 
     # Find next_o
     afterO[[i]] <- which(splSub2$x > inx[o][min(which(inx[o] > wuv$wX[i]))])
     
-    # Occasionally can get some unusually long waves that have been baseline corrected i.e two systolic peaks merged, these will return integer(o) for the above line - the below checks if o-o difference is unusally large for a wave
-    if( (inx[o][min(which(inx[o] > wuv$wX[i]))]) -  (inx[o][max(which(inx[o] < wuv$wX[i]))]) > (median(ibi)*1.3)){
-      extra_long_wave[length(extra_long_wave) + 1] <- i
-    }
-    
     # Find values before the o of the wave itself 
     beforeO[[i]] <- which(splSub2$x < inx[o][max(which(inx[o] < wuv$wX[i]))])
     
     # Correct such that x column and wave column are correctly aligned
     splSub3 <- c()
-    for(i in 1:nrow(splSub2)){
-      splSub3[i+1] <- splSub2$y[i]
+    for(j in 1:nrow(splSub2)){
+      splSub3[j+1] <- splSub2$y[j]
     }
     
     # If splSub3 and nrow(pulse) are the same length, you need only adjust afterO
     if(length(splSub3) == nrow(pulse)){
       if(length(afterO[[i]]) > 0){
-        diff2 <- length(splSub3) - max(afterO[[i]])
+        diff2 <- abs(length(splSub3) - max(afterO[[i]]))
         for(j in 1:diff2){
           afterO[[i]] <- c(afterO[[i]], (max(afterO[[i]]) + 1))
         }
@@ -736,17 +872,18 @@ sep_beats <- function(odiff, bc, samp, wuv, wvlen, inx, o, ibi, scale = TRUE, q 
       }
     }
     
+    
     if(length(splSub3) < nrow(pulse)){
-      diff <- nrow(pulse) - length(splSub3)
-      splSub3 <- c(splSub3, rep(NA, diff))
+      diff <- nrow(pulse) - length(splSub3)  # diff = how much longer pulse is than splSub3...
+      splSub3 <- c(splSub3, rep(NA, diff))   # The extra rows in pulse are thus made up by NAs
       if(length(afterO[[i]]) > 0){
-        diff2 <- length(splSub3) - max(afterO[[i]])
+        diff2 <- length(splSub3) - max(afterO[[i]])   # This = how many elements at the end of splSub3 are after O.
+        # This for loop adds values to after_o to make up the difference
         for(j in 1:diff2){
           afterO[[i]] <- c(afterO[[i]], (max(afterO[[i]]) + 1))
         }
       }
     }
-    
     
     # Add column to dataframe
     pulse <- cbind(pulse, splSub3)
@@ -766,26 +903,27 @@ sep_beats <- function(odiff, bc, samp, wuv, wvlen, inx, o, ibi, scale = TRUE, q 
   for(i in 2:(ncol(pulse))){
     pulse[, i][beforeO[[(i-1)]][-1]] <- NA  
   }
-  
+
   # Remove any extra long waves (i.e where a distance of 2 Os has been counted as one wave):
   # find average length of waves (without NAs) in pulse
   wavelengths <- c()
   for(i in 2:ncol(pulse)){
     wavelengths[i] <- length(pulse[, i][!is.na(pulse[, i])])  
   }
+  wavelengths <- wavelengths[!is.na(wavelengths)]
   
-  # Make sure the extra long waves are not similar length to the waves either side of them. 
-  if(length(extra_long_wave[!is.na(extra_long_wave)]) > 0){
-    # Correct for if the first wave is extra long:
-    if(extra_long_wave[1] == 1){extra_long_wave <- extra_long_wave[-1]}
-    for(i in 1:length(extra_long_wave)){    
-      if(wavelengths[extra_long_wave[i]] < 1.8*wavelengths[extra_long_wave[i]-1]){
-        extra_long_wave[i] <- NA
-      }
+  
+  ########## Cleaning: #########
+  
+  extra_long_wave <- c()
+  for(i in 2:length(wavelengths)){
+    if(wavelengths[i] > (mean(wavelengths) + sd(wavelengths)) & wavelengths[i] > 1.8*(wavelengths[i-1]) ){
+      extra_long_wave[i] <- i
     }
+  }
     extra_long_wave <- extra_long_wave[!is.na(extra_long_wave)]
     if(length(extra_long_wave) > 0){
-      rejected_waves <- rejected_waves
+      #rejected_waves <- rejected_waves
       cat("\n", length(extra_long_wave), "/", (ncol(pulse)-1), "waves removed for being abnormally long")
       if(q == TRUE){
         plotyyy <- 0
@@ -805,11 +943,92 @@ sep_beats <- function(odiff, bc, samp, wuv, wvlen, inx, o, ibi, scale = TRUE, q 
           if(plotyy != "yes" & plotyy != "no"){cat("\n", "please enter 'yes' or 'no'")}
         }
       }
-      wuv <- wuv[-(extra_long_wave[!is.na(extra_long_wave)]), ]
+      wuv <- wuv[-(extra_long_wave[!is.na(extra_long_wave)]-1), ]
       pulse <- pulse[, -(extra_long_wave[!is.na(extra_long_wave)])]  
     }
-  }
   
+
+  
+  extra_short_waves <- c()
+  for(i in 2:length(wavelengths)){
+    if(wavelengths[i] < mean(wavelengths[-1]) - 3*sd(wavelengths[-1])){
+      extra_short_waves[i] <- i
+    }
+  }
+  extra_short_waves <- extra_short_waves[!is.na(extra_short_waves)]
+  if(length(extra_short_waves) > 0){
+    cat("\n", length(extra_short_waves), "/", (ncol(pulse)-1), "waves removed for being abnormally short in duration")
+    if(q == TRUE){
+      plotyyy <- 0
+      while(plotyyy == 0){
+        plotyy <- readline(prompt = "Would you like to view? (enter yes or no)")
+        if(plotyy == "yes"){
+          for(i in 1:length(extra_short_waves)){
+            plot((wuv$wX[extra_short_waves[i]]-samp*2):(wuv$wX[extra_short_waves[i]]+samp*2), bc[(wuv$wX[extra_short_waves[i]]-samp*2):(wuv$wX[extra_short_waves[i]]+samp*2)], type = "l")
+            points(wuv$wX[extra_short_waves[i]], wuv$wY[extra_short_waves[i]], pch =19, col = 'red')
+            points()
+          }
+          plotyyy <- 1
+        }
+        if(plotyy == "no"){
+          cat("\n", "ok") 
+          plotyyy <- 1
+        }
+        if(plotyy != "yes" & plotyy != "no"){cat("\n", "please enter 'yes' or 'no'")}
+      }
+    }
+    wuv <- wuv[-(extra_short_waves-1), ]
+    pulse <- pulse[, -(extra_short_waves)]  
+  }
+
+  
+  double_segments <- c()
+  double_peaks_wave <- list()
+  for(i in 2:ncol(pulse)){
+    # Make a spline to identify inflection points:
+    wave <- pulse[, i][!is.na(pulse[, i])]
+    sfunction <- splinefun(1:length(wave), wave, method = "natural")
+    spline1 <- sfunction(seq(1, length(wave)), deriv = 0)
+    splinePoly <- CubicInterpSplineAsPiecePoly(1:length(wave), spline1, "natural") 
+    inflexX <- solve(splinePoly, b = 0, deriv = 1)
+    inflexY <- predict(splinePoly, inflexX)
+    peaks <- which(inflexY > mean(inflexY) + 1.7*sd(inflexY))
+    
+    # plot(splinePoly)
+    # points(inflexX, inflexY)
+    
+    # If there are more than one inflection points above threshold and the x-axis distance between the first and last is greater than 100, assume a double segment
+    if(length(peaks) > 0){
+      if( length(peaks) > 1 & ((inflexX[peaks][length(inflexX[peaks])] - inflexX[peaks[1]]) > 100) ){
+        double_segments[i] <- i 
+        double_peaks_wave[[i]] <- wave
+      }
+    }
+  }
+  double_segments <- double_segments[!is.na(double_segments)]
+  if(length(double_peaks_wave) > 1){double_peaks_wave <- double_peaks_wave[-(which(sapply(double_peaks_wave, is.null)))]}        
+  if(length(double_segments) > 0){
+    cat("\n", length(double_segments), "/", (ncol(pulse)-1), "waves removed for containing two systolic peaks")
+    if(q == TRUE){
+      plotyyy <- 0
+      while(plotyyy == 0){
+        plotyy <- readline(prompt = "Would you like to view? (enter yes or no)")
+        if(plotyy == "yes"){
+          for(i in 1:length(double_segments)){
+            plot(1:length(double_peaks_wave[[i]]), double_peaks_wave[[i]], t = "l")
+          }
+          plotyyy <- 1
+        }
+        if(plotyy == "no"){
+          cat("\n", "ok") 
+          plotyyy <- 1
+        }
+        if(plotyy != "yes" & plotyy != "no"){cat("\n", "please enter 'yes' or 'no'")}
+      }
+    }
+    wuv <- wuv[-(double_segments-1), ]
+    pulse <- pulse[, -(double_segments)]  
+  }
   
   
   # Remove tall waves:
@@ -847,25 +1066,18 @@ sep_beats <- function(odiff, bc, samp, wuv, wvlen, inx, o, ibi, scale = TRUE, q 
           if(plotyy != "yes" & plotyy != "no"){cat("\n", "please enter 'yes' or 'no'")}
         }
       }
-      wuv <- wuv[-c(tall_waves), ]
+      wuv <- wuv[-c(tall_waves-1), ]
       pulse <- pulse[, -c(tall_waves)]
     }
   }
   
-  # Find average wave:
-  average_wave <- find_average(p = pulse, ao = afterO)
-  
-  # Find the SD wave:
-  sd_wave <- find_sd(p = pulse, ao = afterO)
-  
-  # More cleaning:
-  
+
   # Waves that enter a second systolic upstroke
   systolic_endings <- c()
   for(i in 2:ncol(pulse)){
     wave <- pulse[, i] 
     wave <- wave[!is.na(wave)]
-    if(wave[length(wave)] > 0.25){          
+    if( wave[length(wave)] > 0.25 | (length(wave) > mean(wavelengths) & (max(wave[round(0.75*length(wave)):length(wave)]) > 0.8)) ){            # Adding additional criterion here: if the wave is above average length and the last quarter has a value above 0.8, consider it also a second systolic peak
       systolic_endings[i] <- i
     }   
   }
@@ -889,9 +1101,12 @@ sep_beats <- function(odiff, bc, samp, wuv, wvlen, inx, o, ibi, scale = TRUE, q 
         if(plotyy != "yes" & plotyy != "no"){cat("\n", "please enter 'yes' or 'no'")}
       }
     }
-    wuv <- wuv[-systolic_endings, ]
+    wuv <- wuv[-(systolic_endings-1), ]
     pulse <- pulse[, -systolic_endings]
   }
+  
+  # Find average wave:
+  average_wave <- find_average(p = pulse, ao = afterO)
   
   # Waves that fall significantly below O:
   drops_below_o <- c()
@@ -930,6 +1145,9 @@ sep_beats <- function(odiff, bc, samp, wuv, wvlen, inx, o, ibi, scale = TRUE, q 
   # Recalculate average after removing the most aberrant waves:
   average_wave <- find_average(p = pulse, ao = afterO)
   
+  # Find the SD wave:
+  sd_wave <- find_sd(p = pulse, ao = afterO)
+  
   # Remove waves that have a high SD of residuals:
   resid_sd <- c()
   for(i in 2:ncol(pulse)){
@@ -938,7 +1156,7 @@ sep_beats <- function(odiff, bc, samp, wuv, wvlen, inx, o, ibi, scale = TRUE, q 
   }
   resid_sd <- sqrt(resid_sd)
   resid_sd <- resid_sd[-1] # remove the NA
-  thld <- mean(resid_sd) + sd(resid_sd)*2   # threshold could be adjusted
+  thld <- mean(resid_sd) + sd(resid_sd)*4   # threshold could be adjusted (has been increased from 2)
   hrsd_waves <- which(resid_sd > thld) + 1  
   if(length(hrsd_waves) > 0){
     cat("\n", length(hrsd_waves), "/", (ncol(pulse)-1), "waves removed for having high residual SD")
@@ -1007,40 +1225,15 @@ sep_beats <- function(odiff, bc, samp, wuv, wvlen, inx, o, ibi, scale = TRUE, q 
   # Final recalculation of average wave:
   average_wave <- find_average(p = pulse, ao = afterO) 
   
-  # Optional subsetting of Iso Waves:
-  if(subset == T){
-    #Find the Iso specific part of the data
-    ab_ibi <- which(ibi > mean(ibi) + (4*sd(ibi)) | ibi < mean(ibi) - (4*sd(ibi))) #excluding ibi points 4 sds above mean
-    ibi[ab_ibi] <- NA 
-    ibi <- ibi[!is.na(ibi)]
-    meds <- rollmedian(ibi, k = 19) #rolling median
-    basemed <- mean(meds[1:50]) #baseline defined as the average of the first 50 rolling median points... I'm not sure if this is sensible
-    halfs <- (basemed - min(meds))/2 #half diff between minimum and baseline
-    post <- min(meds) + halfs 
-    indx <- which(ibi == min(ibi)) 
-    pre_indx <- which(abs(ibi[1:indx] - post) < 0.5) #finds the values that are closest to the half point
-    in2 <- which(abs(pre_indx - indx) == min(abs(pre_indx - indx))) #take the one closest to the minimum
-    pre_indx <- pre_indx[in2]
-    post_indx <-  indx + (which(abs(ibi[indx:length(ibi)] - post) == min(abs(ibi[indx:length(ibi)] - post))))
-    plot(ibi)
-    points(pre_indx:post_indx, ibi[pre_indx:post_indx], col='red') #plot check
-    rm(meds, basemed, halfs, post, indx, in2)
-    ppg_pre <- (which((ppg[,1]) == beat[,1][pre_indx - 1]))    # Before infusion
-    ppg_post <- which((ppg[,1]) == beat[,1][post_indx + 1])    # After infusion wears off
-    
-    # You might have to re-derive pre and post indx from ppg pre and post
-    subs <- which(wuv$wX > ppg_pre & wuv$wX < ppg_post)
-    
-    # Subset:
-    wuv <- wuv[subs, ]
-    afterO <- afterO[subs]
-    pulse <- pulse[, c(1, subs + 1)]
-    
-    # Refind average wave:
-    average_wave <- find_average(p = pulse, ao = afterO)  
-  }
+  # print beats carried over:
+  cat(nrow(wuv), "beats carried over for 2mg subsetting (post-cleaning)")
   
-  dat <- list(average_wave, pulse, wuv)
+  # Save rejected waves:
+  rejects <- list(extra_long_wave, extra_short_waves, double_segments, systolic_endings, drops_below_o, hrsd_waves, outlier_waves)
+  
+  dat <- list(average_wave, pulse, wuv, rejects)
+  if(subset == T){dat <- list(average_wave, pulse, wuv, rejects, c(ppg_pre, nrow(wuv)))}
+  
   return(dat)
 }
 
@@ -1136,8 +1329,17 @@ find_average <- function(p, ao){
   start <- median(first)-2
   avWav[1:start] <- NA
   
+  # From the last value moving backwards, if it's below the value of the first avWave value, remove it... 
+  avWave <- as.vector(avWav)
   
-  return(as.vector(avWav))
+  avWave_tmp <- avWave[!is.na(avWave)]
+  
+  while(avWave_tmp[length(avWave_tmp)] < avWave_tmp[1]){
+    avWave_tmp <- avWave_tmp[-length(avWave_tmp)]
+    avWave[length(avWave_tmp) + which(!is.na(avWave))[1]] <- NA
+  }
+ 
+  return(avWave)
 }
 
 
@@ -1193,7 +1395,7 @@ find_sd <- function(p, ao){
 
 
 
-diast_pk <- function(avw, sr, scale = F){
+diast_pk <- function(avw, sr, scale = F, dias_param = NULL){
   # Find the diastolic peak on the average wave to inform OSND finding (also some adjusment of x-values for removal of NA values):
   avw <- avw[!is.na(avw)]
   
@@ -1207,6 +1409,9 @@ diast_pk <- function(avw, sr, scale = F){
   avInflexX <- solve(avWavePoly, b = 0, deriv = 1)
   avInflexY <- predict(avWavePoly, avInflexX)
   
+  # plot(avWavePoly)
+  # points(avInflexX, avInflexY) 
+  
   # Specify limitations for where the diastolic peak can first be found i.e between 120:230 on x-axis, and below 1 on y-axis:
   #peaks <- order(avInflexY[which(avInflexX < 215 & avInflexX > 120 & avInflexY < 1)], decreasing = TRUE)  
   #diastPk <- avInflexX[which(avInflexX < 215 & avInflexX > 120 & avInflexY < 1)][peaks[1]]
@@ -1214,10 +1419,85 @@ diast_pk <- function(avw, sr, scale = F){
   # OR:
   # Find any peaks (above 0):
   peaks_above_0 <- which(avInflexY > 0)
-  peaks <- order(avInflexY[peaks_above_0], decreasing = TRUE)
-  peaks <- peaks_above_0[peaks]
-  diastPk <- avInflexX[peaks[2]]  
   
+  # If a fitted wave is being assessed, find out what the dias_param corresponds to:
+  if(!is.null(dias_param)){
+    # peaks_above_0[1] can either be O or S - make sure it is being assigned to S:
+    if( avInflexY[peaks_above_0[1]] <  mean(avw) ){
+      peaks_above_0 <- peaks_above_0[-1]
+    }
+    dias_param <- dias_param + avInflexX[peaks_above_0[1]]
+    diastPk <-  avInflexX[peaks_above_0[which( abs(avInflexX[peaks_above_0] - dias_param) == min(abs(avInflexX[peaks_above_0] - dias_param)))]] 
+    peaks <- peaks_above_0
+    fitted <- 1
+  }else{
+    fitted <- 0
+  }
+  
+  if(fitted != 1){
+    # Order peaks above 0 in descending order
+    peaks <- order(avInflexY[peaks_above_0], decreasing = TRUE)
+    # This ensures peaks refers to the correct avInflexX points
+    peaks <- peaks_above_0[peaks]
+    # But reducing them all as required so that there is no unnamed amount of non-peaks at the beginning of the wave, might be neater
+    # So make the first peak 1:
+    dif <- peaks[1] - 1
+    peaks <- peaks - dif
+    # Correct avInflexX / avInflexY:
+    if(dif > 0){
+      avInflexX <- avInflexX[-c(1:dif)]
+      avInflexY <- avInflexY[-c(1:dif)] 
+    }
+    # Remove 0 or negative values if they have resulted from the above subtraction:
+    if(sum(peaks < 1) > 0){
+      peaks <- peaks[-which(peaks < 1)]   
+    }
+    
+    # Take the second highest inflection point as the diastolic peak (unless diastolic is taller than systolic, then then take the highest)
+    if(peaks[1] != 1 & length(peaks) > 1){diastPk <- avInflexX[peaks[1]]}else{diastPk <- avInflexX[peaks[2]]}
+    # unless it is unreasonably high i.e a diastolic to systolic peak ratio of > 0.75 (the threshold for unreasonably high must be dependent on how close the peak is to S on the x-axis (sd_time) - lower threshold for closer)   
+    if(!is.na(diastPk) & diastPk == avInflexX[peaks[2]]){
+      ai. <- avInflexY[peaks[2]] / avInflexY[peaks[1]]
+      sd_time <- avInflexX[peaks[2]] - avInflexX[peaks[1]]
+      # We move forward through the peaks until finding one that is not unreasonably high (or unreasonably low):
+      while( (ai. > 0.45 & sd_time < 75) | ai. > 0.7 | ai. < 0.05 ){   # these tresholds are difficult to get right
+        # Assign the previous Dpeak as old, and remove it from the peaks list
+        old <- peaks[2]
+        peaks <- peaks[-2]
+        # Replace the presumed D peak with one that later in time
+        # Is the new 2nd highest peak earlier in time? If so we skip it and assign the 3rd value as the dpeak, if not, we assign it as the dpeak. 
+        # But if there is no second highest peak now (i.e only systolic remains), se default value:
+        if(is.na(peaks[2])){
+          diastPk <- 5*sr
+          ai. <- 0.5
+          sd_time <- 100
+        }else{
+          if(peaks[2] < old){
+            peaks <- peaks[-2]
+            if(is.na(peaks[2])){
+              diastPk <- 5*sr
+              ai. <- 0.5
+              sd_time <- 100
+            }else{
+              diastPk <- avInflexX[peaks[2]] 
+              ai. <-  avInflexY[peaks[2]] / avInflexY[peaks[1]]
+              sd_time <- avInflexX[peaks[2]] - avInflexX[peaks[1]]
+            }
+          }else{
+            diastPk <- avInflexX[peaks[2]] 
+            ai. <- avInflexY[peaks[2]] / avInflexY[peaks[1]]
+            sd_time <- avInflexX[peaks[2]] - avInflexX[peaks[1]]
+          }
+        }
+        # If no valid peaks remain, choose the default estimation:
+        if(is.na(ai.)){
+          diastPk <- 5*sr
+          ai. <- 0.5
+          sd_time <- 100
+        }
+      }
+    }
+  }
   
   # diastPk will be NA for class 3 waveforms, in which case set a default value
   if(is.na(diastPk) | diastPk < avInflexX[peaks[1]]){
@@ -1238,9 +1518,14 @@ osnd_of_average <- function(aw, dp, diff, sr, plot = TRUE){
   d1Wav <- sfunction(1:length(aw), deriv = 1)
   d1WavPoly <- CubicInterpSplineAsPiecePoly(1:length(aw), d1Wav, "natural") 
   
+  # plot(avWavPoly)
+  
   # Find inflexion points on d1WavPoly
   d1InflxX <- solve(d1WavPoly, b = 0, deriv = 1)
   d1InflxY <- predict(d1WavPoly, d1InflxX)
+  
+  # plot(d1WavPoly)
+  # points(d1InflxX, d1InflxY)
   
   # Find OSND
   wavInflxX <- solve(avWavPoly, b = 0, deriv = 1)
@@ -1253,44 +1538,63 @@ osnd_of_average <- function(aw, dp, diff, sr, plot = TRUE){
   # In this case, taking the mean value of the notch range boundaries gives a reasonable approximation
   if(length(notchRange) < 1 | (length(notchRange) == 1 & d1InflxY[notchRange][1] < -0.02)){
     new.n <- ((3.104572*sr) + dp)/2
-    # In case new.n is greater than the number of datapoints, set D to last inflection point on derivative (assuming the wave is very short)
-    if(new.n > length(aw)){
+    # In case new.n is greater than the number of datapoints (or very close to the end), set D to last inflection point on derivative (assuming the wave is very short)
+    if(new.n > length(aw) | length(aw) - new.n < (5*(length(aw)/100)) ){
       new.n <- d1InflxX[length(d1InflxX)]
     }
   }else{
-    a. <- which(d1InflxY[notchRange] == max(d1InflxY[notchRange]))
-    # In cases where the renal peak is higher on 1st deriv than the notch peak, make sure the notch peak is limited by x-axis
-    while(d1InflxX[notchRange[a.]] < sr*3){   # was 115 instead of sr*3
-      b. <- 2
-      a. <- order(d1InflxY[notchRange], decreasing = TRUE)[b.]
-      b. <- 3
+    if(length(notchRange) != 1){
+      a. <- which(d1InflxY[notchRange] == max(d1InflxY[notchRange]))
+      # In cases where the renal peak is higher on 1st deriv than the notch peak, make sure the notch peak is limited by x-axis
+      while(d1InflxX[notchRange[a.]] < sr*3){   # was 115 instead of sr*3
+        b. <- 2
+        a. <- order(d1InflxY[notchRange], decreasing = TRUE)[b.]
+        b. <- 3
+      }
+      # Make sure the 1st peak is not the notch:
+      if(which(d1InflxY == max(d1InflxY)) == notchRange[a.]){
+        if(length(notchRange[which(notchRange > notchRange[a.])]) > 0){
+          notchRange <- notchRange[which(notchRange > notchRange[a.])] 
+        }
+      }
+      new.n <- d1InflxX[notchRange[a.]]
+    }else{
+      new.n <- d1InflxX[notchRange[1]]
     }
-    # Make sure the 1st peak is not the notch:
-    if(which(d1InflxY == max(d1InflxY)) == notchRange[a.]){
-      notchRange <- notchRange[which(notchRange > notchRange[a.])]
-    }
-    new.n <- d1InflxX[notchRange[a.]]
   }
   new.ny <- predict(avWavPoly, new.n)
-  #plot(d1WavPoly)
-  #points(new.n, predict(d1WavPoly, new.n))
+  # plot(d1WavPoly)
+  # points(new.n, predict(d1WavPoly, new.n))
   
+  
+  # If there are no inflection points before new.n, assume it is incorrect and move to the next inflection point that has a lower y-value than it:
+  if(sum(which(wavInflxX < new.n)) < 1){ 
+    new.n <- wavInflxX[min(which(wavInflxX > new.n & wavInflxY < new.ny))]
+    new.ny <- predict(avWavPoly, new.n)
+    } 
+ 
   
   # After having found the notch on all waves, you can see if there are inflexion points either side:
   # If inflexion point before is lower and inflexion point after is higher (on y axis), this must mean a second peak aka canonical wave
   # Thus if this criterion is fulfilled you can create N and D separately 
-  if(length(wavInflxX) > 1 & wavInflxY[max(which(wavInflxX < new.n))] < new.ny){
-    new.n <- wavInflxX[max(which(wavInflxX < new.n))]
-    new.ny <-  predict(avWavPoly, new.n)
-    d. <- wavInflxX[min(which(wavInflxX > new.n))]
-    d.y <- predict(avWavPoly, d.)
-    # If no inflexion point after the notch, take instead the closest value to 0 on the 1st deriv wave after it (the next inflexion point on deriv1)
-    if(is.na(d.)){
-      d. <- d1InflxX[notchRange[a.+1]]
-      d.y <- predict(avWavPoly, d.)
-    }
-    switch <- 1
-  }
+
+  
+    if(length(wavInflxX) > 1 & wavInflxY[max(which(wavInflxX < new.n))] < new.ny){
+      new.n <- wavInflxX[max(which(wavInflxX < new.n))]
+      new.ny <-  predict(avWavPoly, new.n)
+      
+      # Take the inflection point after the notch as the d peak. If there is no inflection point after the notch, take instead the next inflection point on deriv1
+      if(sum(wavInflxX > new.n) > 0){
+        d. <- wavInflxX[min(which(wavInflxX > new.n))]
+        d.y <- predict(avWavPoly, d.)
+      }else{
+        d. <- d1InflxX[min(which(d1InflxX > new.n))]
+        d.y <- predict(avWavPoly, d.)
+      }
+      switch <- 1
+   }
+
+
   
   if(plot == TRUE){
     plot(avWavPoly)
@@ -1302,9 +1606,11 @@ osnd_of_average <- function(aw, dp, diff, sr, plot = TRUE){
   }
   
   
-  
   # Find W: the max inflection point on first deriv:
   w. <- d1InflxX[which( d1InflxY ==  max(d1InflxY) & d1InflxX[which(d1InflxY ==  max(d1InflxY))] < new.n)]
+  if(length(w.) < 1){
+    w. <- 1
+  }
   w.y <- predict(avWavPoly, w.)
   if(plot ==TRUE){points(w., w.y)}
   
@@ -1327,7 +1633,13 @@ osnd_of_average <- function(aw, dp, diff, sr, plot = TRUE){
     a <- halfHeights - w.
     postW <- which(a > 0)
     preW <- which(a < 0)
-    halfHeights <- c(  min(halfHeights[postW]),  max(halfHeights[preW]))
+    # If no points are identified before W (e.g if the wave is too steep to begin with, take the first value as you)
+    if(length(preW) < 1){
+      print("No valid U found, first value taken as proxy")
+      halfHeights <- c(1, min(halfHeights[postW]))
+    }else{
+      halfHeights <- c(max(halfHeights[preW]), min(halfHeights[postW])) 
+    }
   }
   
   u <- halfHeights[1]
@@ -1513,3 +1825,9 @@ feature_extract <- function(oa, p, pw){
   features <- data.frame(s_vals, n_vals, d_vals, np_ratio, ppt, max_amp, auc, auc_s, l, ipa_ratio, pn_time, nt_ratio, ai, aai, ct)
   return(features)
 }
+
+
+
+# References:
+# Elgendi et al, 2018: Toward generating more diagnostic features from photoplethysmogram waveforms  
+
