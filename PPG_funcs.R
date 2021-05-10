@@ -429,25 +429,44 @@ find_u_v <- function(wx, wy, d1, d1p, spline, plot = FALSE){
 
 
 find_o <- function(wx, inx, iny, d1p, sp){
-  o <- c()
+  ########################################################################################################################################
+  # FindO identifies the origin of the systolic peak for each beat. In the absence of a clear inflection point at the origin, O points are
+  # derived from inflection points in the first derivative. 
+  
+  # Inputs: 
+  # wx (A vector of x-coordinates corresponding to w points on the PPG time series)
+  # inx (A vector of all inflection point x-coordinates in the PPG time series)
+  # iny (A vector of all inflection point y-coordinates in the PPG time series)
+  # d1p (The first derivative time series, polynomial spline form)
+  # sp (The original PPG time series, polynomial spline form)
+  
+  # Outputs:
+  # o (vector of O points)
+  # inx (vector of updated inflection point x-coordinates)
+  # iny (vector of updated inflection point y-coordinates)
+  ########################################################################################################################################
+  
+  o <- c()                                                                                    # Create vector to store O values
   for(i in 1:length(wx)){
-    o[i] <- max(which(inx < wx[i]))
+    o[i] <- max(which(inx < wx[i]))                                                           # Identify O points as the those inflection points that 
+  }                                                                                           # immediately precede w points. 
+
+  inflexD1 <- solve(d1p, b = 0, deriv = 1)                                                    # Find inflection points on the first derivative
+  inflexD1y <- predict(d1p, inflexD1)                                                         
+  o2 <- c()                                                                                   # For each beat, find the inflection point before w that is 
+  for(i in 1:length(wx)){                                                                     # also below 0 (points above 0 tend to be spurious)
+    o2[i] <- max(which(inflexD1 < wx[i] & inflexD1y < 0))
   }
-  # Adjust for early O points:
-  # First find O based on inflection point on first deriv:
-  inflexD1 <- solve(d1p, b = 0, deriv = 1)
-  o2 <- c()
-  for(i in 1:length(wx)){
-    o2[i] <- max(which(inflexD1 < wx[i]))
+  
+  for(i in 1:length(wx)){                                                                     # For each beat, replace the originally identified O with 
+    if((inx[o][i] - inflexD1[o2][i]) < 0){                                                    # the O derived from the first derivative if the latter 
+      inx[o][i] <- inflexD1[o2][i]                                                            # is closer to w in time (this occurs when there is no 
+      iny[o][i] <- predict(sp, inx[o][i])                                                     # inflection point at the origin of the original PPG signal)
+      }
   }
-  # Use the O derived from 1st deriv if its y-val is above 0: 
-  for(i in 1:length(wx)){
-    if((inx[o][i] - inflexD1[o2][i]) < 0){
-      inx[o][i] <- inflexD1[o2][i]
-      iny[o][i] <- predict(sp, inx[o][i]) 
-    }
-  }
-  return(o)
+  
+  tmp <- list(inx, iny, o)                                                                    # return the o points, as well as the inflection points 
+  return(tmp)                                                                                 # which have been repositioned due to the above replacement
 }
 
 
