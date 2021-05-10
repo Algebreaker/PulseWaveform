@@ -91,7 +91,10 @@ for(run in 1:length(Participants)){
           inflexY <- predict(splinePoly, inflexX)
           w <- find_w(d1p = deriv1Poly, deriv1 = deriv1, sp = splinePoly, sr = samplingRate)
           uv <- find_u_v(wx = w$wX, wy = w$wY, d1 = deriv1, d1p = deriv1Poly, spline = splinePoly, plot=F)
-          o_orig <- find_o(wx = w$wX, inx = inflexX, iny = inflexY, d1p = deriv1Poly, sp = splinePoly)     
+          tmp <- find_o(wx = w$wX, inx = inflexX, iny = inflexY, d1p = deriv1Poly, sp = splinePoly)  
+          inflexX <- tmp[[1]]
+          inflexY <- tmp[[2]]
+          o_orig <- tmp[[3]]  
           tmp <- preclean_wuv(w=w, uv=uv, o=o_orig, samp = samplingRate, sp = spline1, q = F)   
           w <- tmp[[1]]
           uv <- tmp[[2]]
@@ -113,7 +116,7 @@ for(run in 1:length(Participants)){
           oDiff <- tmp[[3]]
           rm(tmp, w, uv)
           waveLen <- round(median(oDiff)+15) 
-          ppg[, 2] <- baseCoror 
+          ppg[, 2] <- baseCor
           tmp <- sep_beats(odiff = oDiff, bc = baseCor, samp = samplingRate, wuv = wuv, wvlen = waveLen, ibi=ibi, o=o_orig, inx = inflexX, scale = T, q = F, subset, boundaries) 
           pulse <- tmp[[2]]
           avWave <- tmp[[1]]
