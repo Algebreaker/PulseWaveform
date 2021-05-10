@@ -6,8 +6,6 @@ library(tidyverse)
 library(splines2)
 library(pracma)
 library(SplinesUtils) 
-library(spectral)
-library(DescTools)
 library(zoo)
 
 source("~/Desktop/Scripts/PPG_funcs.R")
