@@ -8,7 +8,7 @@ output: md_document
 
 ## PPG Model 2
 
-This is a ReadMe for the photopletysmography (PPG) analysis published in []. It is supposed to both provide an overview of the workings of the code, any issues we encountered and some further explanations that did not make it into the paper. The basic assumption is that the signal is decaying towards a baseline and that the three relevant peaks can be modelled more accurately/consistently *?* by discounting the decay element first. 
+This is a ReadMe for the photopletysmography (PPG) analysis published in []. It is supposed to both provide an overview of the workings of the code, any issues we encountered and some further explanations that did not make it into the paper. The basic assumption is that the signal is decaying towards a baseline and that the three relevant peaks can be modelled more consistently by discounting the decay element first. 
 
 # Prerequisites
 The script makes use of the following packages:  
@@ -18,16 +18,13 @@ The script makes use of the following packages:
 - library(spectral)
 - library(zoo)
 
-# Installation
-Please install by typing `devtools::install_github(“whatever”)` into the command line.
-
 # ISOFitting
 This is the main script from which the other functions are called. First the working directory needs to be changed so the other functions can be called and the sampling rate need to be adjusted, i.e. `samplingRate <- 40`. The `beats_in` and `batch_number` parameters determine how many beats the parameters are estimated over and how many batches are generated for analysis and optimisation. The code uses a chi-square goodness of fit test to improve model fit and will do so by minimising chi-square over all the beats within a batch. The default values are 10 for both.
-If you would like to select a specific subsection of your dataset rather than analyse all beats change the parameter `all_beats <- TRUE` to `FALSE`. *not sure where you then specify the subset though?*  
+If you would like to select a specific subsection of your dataset rather than analyse all beats change the parameter `all_beats <- TRUE` to `FALSE`.
 Then the path of the to-be-read-in files needs to specified. 
 
 
-In the first instance we are trying to estimate the various detrending algorithms that are often applied to the raw data by the hardware: As a first step in the preprocessing pipeline the factor value is adjusted to reverse-engineer an assumed positive gradient at the tail-end of each beat. *We somehow need to make sure that this is not confused with the pressure wave decay?* The values are changed until they reach a plausible-looking threshold for each individual beat: 
+In the first instance we are trying to estimate the various detrending algorithms that are often applied to the raw data by the hardware: As a first step in the preprocessing pipeline the factor value is adjusted to reverse-engineer an assumed positive gradient at the tail-end of each beat. The values are changed until they reach a plausible-looking threshold for each individual beat: 
 ![](factorvalue.png)
 
 
@@ -38,25 +35,25 @@ Then the main fun starts!
 We interpolate a cubic spline of the provided data points 
 `sfunction <- splinefun(1:length(undetrended), undetrended, method = "natural")`
 and take its first derivative
-`deriv1 <- sfunction(seq(1, length(undetrended)), deriv = 1)`. *I can't remember why we use the "aspiecepoly" as well?*  
+`deriv1 <- sfunction(seq(1, length(undetrended)), deriv = 1)`. 
 Then the maximum of the first derivative, called the W point(s) are found:  
 `w <- find_w(d1p = deriv1Poly, deriv1 = deriv1, sp = splinePoly, sr = samplingRate)`
 ![](Wpoint.png)  
 Beat segmentation is based on the correct identification of the W points.  
-Next U, V and O are detected. *We should probably have a little figure like the one above earlier on?*
+Next U, V and O are detected.
 Based on the O points we remove a baseline in order to filter out low frequency modulation of the signal without altering the morphology of individual waveforms. 
 ![](baseline.png)  
  
 The `sep_beats` function then takes care of some rudimentary cleaning procedures - plotting options of the outliers can be added by setting `q = TRUE`:   
 - long waves (where a distance of more than two waves (Os) was counted as one) are removed  provided the waves to either side of them are not similarly long (if so there is a plotting option to make a manual decision)
-- abnormally high amplitude *this is currently not being run, check again after debugging*
+- abnormally high amplitude
 - waves that have a second systolic upstroke are removed  
 - waves that fall below the O-O threshold (currently hardcoded to 4?) are excluded  
-- waves that deviate more than 2 SDs from the average in their residuals *Haven't mentioned residuals here yet*  
+- waves that deviate more than 2 SDs from the average in their residuals
 - waves that deviate more than 5 standard deviatiosn from the average wave (calculated after all of the above are already excluded) are removed  
 - when `subset == T` is only necessary for the identification of a subset of data with an autonomic arousal manipulation (based on inter.beat intervals)  
 
-In the next step, in the `FindStartParams` function each beat is modelled as a composition of three peaks (S, D and N) with parameters determining the amplitude, timing and width of each within the dataframe `beat`: `STime`, `SAmplitude` `SWidth` and so forth. *Given we call it R1 peak in the paper we probably need to rename the parameter?* Initial parameters are estimated using the excess of each beat which is what is left once the assumed decay towards a variable baseline is factored out:     
+In the next step, in the `FindStartParams` function each beat is modelled as a composition of three peaks (S, D and N) with parameters determining the amplitude, timing and width of each within the dataframe `beat`: `STime`, `SAmplitude` `SWidth` and so forth. Initial parameters are estimated using the excess of each beat which is what is left once the assumed decay towards a variable baseline is factored out:     
 `excess[1] = data[1,2] - (baseline + config.rate*(yPrev-baseline))`
 
 The width of each peak is initialised at 0.25 i.e. `par[4] <- 0.25`. 
@@ -92,14 +89,6 @@ The within and across beat parameters are combined into a matrix, and then fed i
 This process is then iterated upon four times, to ensure a the simplex does not get stuck in local minima. 
 
 
-
-
-
-
-
-
-
-
 ## Penalties applied to the chi-sq value
 Penalties are applied to the chi-sq value if any of the below conditions are met: 
 
@@ -109,11 +98,11 @@ Penalties are applied to the chi-sq value if any of the below conditions are met
 - If the diastolic width is >0.45
 - If the renal peak timing strays too far from initial parameter estimation
 - If the S-peak deviates too far from the maxima of the beat
-- If the timing of the diastolic is â¦??
+- If the timing of the diastolic is < 0.2
 - If there is less than 0,1s between the peaks
 - If there is a large shift between baselines (Currently not applied!)
 - If the configuration rate is above 0.95
 - The renal peak is gradually penalised as the amplitude increase
 
 # Contributing 
-We would love to hear from people who would like to contribute or have ideas for developing out model further. While we do not aim to support it for future versions of R...
+We would love to hear from people who would like to contribute or have ideas for developing out model further. 
