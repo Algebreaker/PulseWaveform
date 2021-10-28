@@ -8,7 +8,8 @@ output: md_document
 
 ## PPG Model 2
 
-This is a ReadMe for the photopletysmography (PPG) analysis published in []. It is supposed to both provide an overview of the workings of the code, any issues we encountered and some further explanations that did not make it into the paper. The basic assumption is that the signal is decaying towards a baseline and that the three relevant peaks can be modelled more consistently by discounting the decay element first. 
+This is a ReadMe for the photopletysmography (PPG) analysis published in []. It is supposed to both provide an overview of the workings of the code, any issues we encountered and some further explanations that did not make it into the paper. The basic assumption is that the signal is decaying towards a baseline and that the three relevant peaks can be modelled more consistently by discounting the decay element first. General_Purpose_script can be used an adapted for independent datasets. The ISO_study scripts were used for our analyses. 
+
 
 # Prerequisites
 The script makes use of the following packages:  
